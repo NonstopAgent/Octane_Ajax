@@ -99,6 +99,13 @@ const AGENT_SEED = [
   },
 ] as const;
 
+/** Each agent's home room — used to return the floor to idle after a failed cycle. */
+const AGENT_HOME_ROOM: Record<string, string> = {
+  [AGENT_SLUGS.NOVA]: ROOM_SLUGS.RESEARCH_LAB,
+  [AGENT_SLUGS.FORGE]: ROOM_SLUGS.DESIGN_PRESS,
+  [AGENT_SLUGS.PIXEL]: ROOM_SLUGS.MEDIA_STUDIO,
+};
+
 /** Deterministic-ish fake ideas; scores differ so Forge has a clear winner. */
 function buildFakeProductIdeas(runId: string): FakeIdeaDraft[] {
   const suffix = runId.slice(0, 8);
@@ -279,8 +286,50 @@ async function completeTask(supabase: Supabase, taskId: string, output: Json) {
 }
 
 /**
+ * Best-effort recovery after a mid-cycle failure: returns the three agents
+ * to idle and logs a cycle_failed event so the factory floor doesn't show a
+ * stuck "working" agent. Each step is independently guarded — recovery never
+ * masks or replaces the original error.
+ */
+async function recoverFromCycleFailure(
+  supabase: Supabase,
+  userId: string,
+  cause: unknown,
+) {
+  for (const slug of [AGENT_SLUGS.NOVA, AGENT_SLUGS.FORGE, AGENT_SLUGS.PIXEL]) {
+    try {
+      await setAgentState(supabase, slug, {
+        status: "idle",
+        current_room: AGENT_HOME_ROOM[slug],
+        current_task_id: null,
+      });
+    } catch (recoveryErr) {
+      console.error(`[run-cycle recovery] could not idle ${slug}`, recoveryErr);
+    }
+  }
+
+  try {
+    await insertEvent(supabase, userId, {
+      event_type: "cycle_failed",
+      message:
+        "Ajax cycle failed mid-run. Agents returned to idle — run Reset factory if the floor looks inconsistent.",
+      metadata: {
+        error: cause instanceof Error ? cause.message : String(cause),
+      },
+    });
+  } catch (logErr) {
+    console.error("[run-cycle recovery] could not log cycle_failed", logErr);
+  }
+}
+
+/**
  * Runs one simulated business cycle: Nova → Forge → Review Gate (pause).
  * Does not auto-approve or invoke Pixel.
+ *
+ * Pre-flight guards run first and may throw CycleBlockedError (nothing has
+ * mutated yet). Once the cycle starts writing state, any failure triggers
+ * best-effort recovery so the floor returns to idle, then the original error
+ * is re-thrown for the API route to surface.
  */
 export async function runAjaxCycle(
   supabase: Supabase,
@@ -289,6 +338,19 @@ export async function runAjaxCycle(
   await assertAgentsExist(supabase);
   await assertNoPendingReview(supabase, userId);
 
+  try {
+    return await executeAjaxCycle(supabase, userId);
+  } catch (err) {
+    await recoverFromCycleFailure(supabase, userId, err);
+    throw err;
+  }
+}
+
+/** Mutating body of one Ajax cycle — wrapped by runAjaxCycle for recovery. */
+async function executeAjaxCycle(
+  supabase: Supabase,
+  userId: string,
+): Promise<AjaxCycleSummary> {
   const runId = crypto.randomUUID();
   const events: FactoryEvent[] = [];
   const tasks: ReturnType<typeof mapTaskFromDb>[] = [];

@@ -257,6 +257,16 @@ supabase/migrations/
 tests/                  # security + demo wiring smoke tests
 ```
 
+## Phase 2 Product Brain
+
+Ajax is designed to create **utility-first digital products** (planners, trackers, worksheets, and similar printables) rather than generic listing spam. **Product Brain** (`src/lib/ajax/product-brain/`) scores and filters product ideas before any LLM generation step:
+
+- Validates category eligibility and blocked claims (medical, legal, financial, trademark, guaranteed results, government impersonation)
+- Scores specificity, buyer clarity, usefulness, and competition/compliance risk
+- Returns a verdict: `approve_for_generation`, `needs_revision`, or `blocked`
+
+The human **Review Gate** remains mandatory in the pipeline. LLM-powered generation will plug in after this foundation is in place.
+
 ## Future integrations
 
 - **Etsy** — `lib/ajax/adapters/etsy.ts` draft/publish listings
