@@ -1,0 +1,19 @@
+# Minimal Supabase CLI config for Octane Ajax
+# See: https://supabase.com/docs/guides/cli/config
+
+project_id = "octane-ajax"
+
+[api]
+enabled = true
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[auth]
+enabled = true
+
+[realtime]
+enabled = true
