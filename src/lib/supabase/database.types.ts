@@ -128,6 +128,10 @@ export interface Database {
           trend_score: number;
           status: string;
           raw_payload: Json;
+          brain_score: Json;
+          brain_validation: Json;
+          brain_verdict: string | null;
+          brain_evaluated_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -141,6 +145,10 @@ export interface Database {
           trend_score?: number;
           status?: string;
           raw_payload?: Json;
+          brain_score?: Json;
+          brain_validation?: Json;
+          brain_verdict?: string | null;
+          brain_evaluated_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -154,11 +162,97 @@ export interface Database {
           trend_score?: number;
           status?: string;
           raw_payload?: Json;
+          brain_score?: Json;
+          brain_validation?: Json;
+          brain_verdict?: string | null;
+          brain_evaluated_at?: string | null;
           created_at?: string;
         };
         Relationships: [
           {
             foreignKeyName: "product_ideas_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_generations: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_idea_id: string;
+          product_listing_id: string | null;
+          structure: Json;
+          llm_provider: string | null;
+          llm_model: string | null;
+          prompt_version: string | null;
+          token_estimate_input: number | null;
+          token_estimate_output: number | null;
+          generation_status: string;
+          pdf_storage_path: string | null;
+          pdf_public_url: string | null;
+          compliance_flags: Json;
+          compliance_warnings: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string;
+          product_idea_id: string;
+          product_listing_id?: string | null;
+          structure?: Json;
+          llm_provider?: string | null;
+          llm_model?: string | null;
+          prompt_version?: string | null;
+          token_estimate_input?: number | null;
+          token_estimate_output?: number | null;
+          generation_status?: string;
+          pdf_storage_path?: string | null;
+          pdf_public_url?: string | null;
+          compliance_flags?: Json;
+          compliance_warnings?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          product_idea_id?: string;
+          product_listing_id?: string | null;
+          structure?: Json;
+          llm_provider?: string | null;
+          llm_model?: string | null;
+          prompt_version?: string | null;
+          token_estimate_input?: number | null;
+          token_estimate_output?: number | null;
+          generation_status?: string;
+          pdf_storage_path?: string | null;
+          pdf_public_url?: string | null;
+          compliance_flags?: Json;
+          compliance_warnings?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_generations_product_idea_id_fkey";
+            columns: ["product_idea_id"];
+            isOneToOne: false;
+            referencedRelation: "product_ideas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_generations_product_listing_id_fkey";
+            columns: ["product_listing_id"];
+            isOneToOne: false;
+            referencedRelation: "product_listings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "product_generations_user_id_fkey";
             columns: ["user_id"];
             isOneToOne: false;
             referencedRelation: "users";
@@ -445,6 +539,7 @@ export type TablesUpdate<T extends keyof Database["public"]["Tables"]> =
 export type AjaxAgent = Tables<"ajax_agents">;
 export type AjaxTask = Tables<"ajax_tasks">;
 export type ProductIdea = Tables<"product_ideas">;
+export type ProductGeneration = Tables<"product_generations">;
 export type ProductListing = Tables<"product_listings">;
 export type ReviewQueueItem = Tables<"review_queue">;
 export type AgentFeedback = Tables<"agent_feedback">;

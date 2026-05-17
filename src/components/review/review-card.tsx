@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { ReviewPhase2Section } from "@/components/review/review-phase2-section";
 import { getStatusLabel } from "@/lib/ajax/status";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ export function ReviewCard({
   onApprove,
   onReject,
 }: ReviewCardProps) {
-  const { listing, idea } = review;
+  const { listing, idea, phase2 } = review;
   const title = listing.title ?? idea?.title ?? "Untitled product";
   const description =
     listing.description ?? idea?.description ?? "No description provided.";
@@ -40,12 +41,27 @@ export function ReviewCard({
     <article className="review-card">
       <header className="flex flex-col gap-3 border-b border-[var(--border-dim)] pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <StatusBadge label="Pending review" tone="warning" />
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label="Pending review" tone="warning" />
+            {phase2.brain ? (
+              <StatusBadge
+                label={`Brain ${phase2.brain.score.totalScore}`}
+                tone="blue"
+              />
+            ) : null}
+            {phase2.generation?.complianceWarnings?.length ||
+            phase2.generation?.complianceFlags?.length ? (
+              <StatusBadge label="Compliance flags" tone="orange" />
+            ) : null}
+          </div>
           <h2 className="mt-2 text-xl font-bold text-[var(--foreground)]">
             {title}
           </h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             Queued {formatCreated(review.createdAt)}
+            {phase2.generation?.generationStatus
+              ? ` · Forge ${phase2.generation.generationStatus}`
+              : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -69,24 +85,26 @@ export function ReviewCard({
       </header>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[12rem_1fr]">
-        <div className="mockup-placeholder" aria-label="Mockup placeholder">
-          {listing.mockupUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={listing.mockupUrl}
-              alt=""
-              className="h-full w-full rounded-md object-cover"
-            />
-          ) : (
-            <>
-              <span className="mockup-placeholder-icon" aria-hidden>
-                ◫
-              </span>
-              <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
-                Mockup pending
-              </span>
-            </>
-          )}
+        <div className="space-y-3">
+          <div className="mockup-placeholder" aria-label="Listing mockup">
+            {listing.mockupUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={listing.mockupUrl}
+                alt=""
+                className="h-full w-full rounded-md object-cover"
+              />
+            ) : (
+              <>
+                <span className="mockup-placeholder-icon" aria-hidden>
+                  ◫
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  Mockup pending
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <dl className="review-meta-grid">
@@ -128,6 +146,8 @@ export function ReviewCard({
           />
         </dl>
       </div>
+
+      <ReviewPhase2Section phase2={phase2} idea={idea} />
     </article>
   );
 }

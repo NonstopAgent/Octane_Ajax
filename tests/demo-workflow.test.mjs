@@ -33,6 +33,15 @@ describe("demo workflow wiring", () => {
     assert.match(content, /review_gate|REVIEW_GATE|review gate/i);
   });
 
+  it("run-cycle remains on deterministic simulators (no LLM imports)", () => {
+    const route = readFileSync(
+      join(ROOT, "src/app/api/ajax/run-cycle/route.ts"),
+      "utf8",
+    );
+    assert.doesNotMatch(route, /from ["']@\/lib\/llm/);
+    assert.doesNotMatch(route, /completeJson/);
+  });
+
   it("approve hands off to pixel path", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/review/service.ts"),

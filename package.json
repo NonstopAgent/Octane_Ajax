@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test tests/security.test.mjs tests/demo-workflow.test.mjs tests/auth.test.mjs src/lib/ajax/constants.test.ts src/lib/ajax/product-brain/product-brain.test.ts",
+    "test": "node --import tsx --test tests/security.test.mjs tests/demo-workflow.test.mjs tests/auth.test.mjs src/lib/ajax/constants.test.ts src/lib/ajax/product-brain/product-brain.test.ts src/lib/llm/json.test.ts src/lib/product/pdf-generator.test.ts src/lib/product/mappers.test.ts",
     "check:security": "node --test tests/security.test.mjs",
     "check:demo": "node scripts/demo-readiness.mjs"
   },
@@ -15,8 +15,11 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "next": "16.2.6",
+    "openai": "^6.38.0",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

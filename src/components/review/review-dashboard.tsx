@@ -136,6 +136,9 @@ export function ReviewDashboard({
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             {reviews.length} unit{reviews.length === 1 ? "" : "s"} awaiting
             operator sign-off.
+            {countPhase2Alerts(reviews) > 0
+              ? ` · ${countPhase2Alerts(reviews)} with compliance or blocked-brain signals`
+              : ""}
           </p>
         </div>
       )}
@@ -182,6 +185,16 @@ export function ReviewDashboard({
       />
     </div>
   );
+}
+
+function countPhase2Alerts(reviews: PendingReviewDetail[]): number {
+  return reviews.filter((review) => {
+    const brainBlocked = review.phase2.brain?.verdict === "blocked";
+    const compliance =
+      (review.phase2.generation?.complianceWarnings.length ?? 0) > 0 ||
+      (review.phase2.generation?.complianceFlags.length ?? 0) > 0;
+    return brainBlocked || compliance;
+  }).length;
 }
 
 function Callout({

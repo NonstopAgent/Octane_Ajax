@@ -62,6 +62,25 @@ export const CONTENT_JOB_STATUSES = [
 
 export type ContentJobStatus = (typeof CONTENT_JOB_STATUSES)[number];
 
+export const PRODUCT_BRAIN_VERDICTS = [
+  "approve_for_generation",
+  "needs_revision",
+  "blocked",
+] as const;
+
+export type ProductBrainVerdictDb =
+  (typeof PRODUCT_BRAIN_VERDICTS)[number];
+
+export const GENERATION_STATUSES = [
+  "pending",
+  "queued",
+  "generating",
+  "ready",
+  "failed",
+] as const;
+
+export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
+
 export const FACTORY_ROOMS = {
   RESEARCH_LAB: "research_lab",
   DESIGN_PRESS: "design_press",
@@ -77,6 +96,7 @@ export const TABLES = {
   TASKS: "ajax_tasks",
   IDEAS: "product_ideas",
   LISTINGS: "product_listings",
+  GENERATIONS: "product_generations",
   REVIEW_QUEUE: "review_queue",
   FEEDBACK: "agent_feedback",
   EVENTS: "factory_events",

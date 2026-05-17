@@ -257,15 +257,28 @@ supabase/migrations/
 tests/                  # security + demo wiring smoke tests
 ```
 
-## Phase 2 Product Brain
+## Phase 2 architecture (foundation — not wired to Nova yet)
 
-Ajax is designed to create **utility-first digital products** (planners, trackers, worksheets, and similar printables) rather than generic listing spam. **Product Brain** (`src/lib/ajax/product-brain/`) scores and filters product ideas before any LLM generation step:
+Phase 2 adds deterministic foundations beside the existing demo simulators. **Nova, Forge, and Pixel still use the simulated pipeline** until a deliberate wiring step; `POST /api/ajax/run-cycle` does not call the LLM layer.
+
+| Lane | Location | Status |
+|------|----------|--------|
+| Product Brain | `src/lib/ajax/product-brain/` | Rules + scoring + verdicts (tested) |
+| Product data model | `src/lib/product/domain.ts`, `mappers.ts`, migration `20260517140000_phase2_product_generation.sql` | Brain columns on `product_ideas`, `product_generations` table, RLS |
+| LLM foundation | `src/lib/llm/` (`openai.ts`, `json.ts`, `cost.ts`) | Server-only OpenAI wrapper, `completeJson` + Zod, retries, cost stubs — **not** imported by run-cycle |
+| PDF prototype | `src/lib/product/pdf-generator.ts` | `pdf-lib` printable from `ProductDocument` — **not** connected to Forge/storage yet |
+| Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders (mock-friendly) |
+
+**Product Brain** scores and filters ideas before any future LLM generation:
 
 - Validates category eligibility and blocked claims (medical, legal, financial, trademark, guaranteed results, government impersonation)
 - Scores specificity, buyer clarity, usefulness, and competition/compliance risk
 - Returns a verdict: `approve_for_generation`, `needs_revision`, or `blocked`
+- Snapshots can persist on `product_ideas` (`brain_score`, `brain_validation`, `brain_verdict`, `brain_evaluated_at`) via `src/lib/product/mappers.ts`
 
-The human **Review Gate** remains mandatory in the pipeline. LLM-powered generation will plug in after this foundation is in place.
+**Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components and migrations for RLS).
+
+The human **Review Gate** remains mandatory — no live publishing without approval.
 
 ## Future integrations
 
