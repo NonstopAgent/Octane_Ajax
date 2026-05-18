@@ -4,6 +4,13 @@ import {
   mapEventFromDb,
   mapListingFromDb,
 } from "@/lib/ajax/mappers";
+import {
+  buildContentJobScheduleUpdate,
+  buildPixelPromoPackage,
+  parseStructure,
+  type PixelPromoMetadata,
+  type PixelPromoPackage,
+} from "@/lib/ajax/pixel-promo-package";
 import type { ContentJob, FactoryEvent, ProductListing } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
@@ -37,6 +44,28 @@ export class NoQueuedContentError extends Error {
   }
 }
 
+type QueuedGenerationRow = {
+  structure: unknown;
+  generation_status: string;
+  created_at?: string;
+};
+
+type QueuedIdeaRow = {
+  niche: string | null;
+  title: string | null;
+  description: string | null;
+  seo_keywords: string[] | null;
+};
+
+type QueuedListingRow = {
+  id: string;
+  title: string | null;
+  status: string;
+  description: string | null;
+  product_ideas: QueuedIdeaRow | QueuedIdeaRow[] | null;
+  product_generations: QueuedGenerationRow | QueuedGenerationRow[] | null;
+};
+
 type QueuedJobRow = {
   id: string;
   user_id: string;
@@ -45,16 +74,15 @@ type QueuedJobRow = {
   content_type: string;
   status: string;
   caption: string | null;
-  product_listings: {
-    id: string;
-    title: string | null;
-    status: string;
-  } | null;
+  product_listings: QueuedListingRow | null;
 };
+
+export type { PixelPromoMetadata, PixelPromoPackage };
 
 export type ProcessedPromoJob = {
   contentJob: ContentJob;
   listing: ProductListing;
+  marketing: PixelPromoMetadata;
 };
 
 export type RunPixelResult = {
@@ -65,28 +93,43 @@ export type RunPixelResult = {
   events: FactoryEvent[];
 };
 
-/** Demo marketing copy — replace with TikTok/YouTube adapters later. */
-function buildPromoPackage(listingTitle: string, jobId: string) {
-  const hashtags = [
-    "#OctaneAjax",
-    "#DemoShop",
-    "#SmallBusiness",
-    "#ProductDrop",
-    "#CreatorFinds",
-  ];
+function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
-  const caption = [
-    `✨ ${listingTitle} is live in the demo storefront.`,
-    "Tap through for the full slideshow — built autonomously by Pixel.",
-    "",
-    hashtags.join(" "),
-  ].join("\n");
+function pickGeneration(
+  rows: QueuedGenerationRow | QueuedGenerationRow[] | null | undefined,
+): QueuedGenerationRow | null {
+  const list = rows == null ? [] : Array.isArray(rows) ? rows : [rows];
+  if (list.length === 0) return null;
 
-  const assetUrl = `demo://octane-ajax/promo/${jobId}/slideshow.mp4`;
+  const ready = list.filter((g) => g.generation_status === "ready");
+  const pool = ready.length > 0 ? ready : list;
 
-  const scheduledFor = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  return pool.sort((a, b) => {
+    const aTime = a.created_at ?? "";
+    const bTime = b.created_at ?? "";
+    return bTime.localeCompare(aTime);
+  })[0];
+}
 
-  return { caption, hashtags, assetUrl, scheduledFor };
+function promoInputFromJob(job: QueuedJobRow): Parameters<typeof buildPixelPromoPackage>[0] {
+  const listing = job.product_listings;
+  const idea = firstOrSelf(listing?.product_ideas);
+  const generation = pickGeneration(listing?.product_generations);
+  const structure = parseStructure(generation?.structure);
+
+  return {
+    jobId: job.id,
+    listingTitle: listing?.title ?? idea?.title ?? "Approved product",
+    listingDescription: listing?.description ?? idea?.description ?? null,
+    niche: idea?.niche ?? null,
+    ideaTitle: idea?.title ?? null,
+    ideaDescription: idea?.description ?? null,
+    seoKeywords: idea?.seo_keywords ?? null,
+    structure,
+  };
 }
 
 async function insertEvent(
@@ -165,7 +208,19 @@ export async function runPixelMarketing(
       product_listings (
         id,
         title,
-        status
+        status,
+        description,
+        product_ideas (
+          niche,
+          title,
+          description,
+          seo_keywords
+        ),
+        product_generations (
+          structure,
+          generation_status,
+          created_at
+        )
       )
     `,
     )
@@ -200,18 +255,11 @@ export async function runPixelMarketing(
   await sleep(1500);
 
   for (const job of jobs) {
-    const listingTitle =
-      job.product_listings?.title ?? "Approved product";
-    const promo = buildPromoPackage(listingTitle, job.id);
+    const promo = buildPixelPromoPackage(promoInputFromJob(job));
 
     const { data: jobRow, error: jobError } = await supabase
       .from(TABLES.CONTENT_JOBS)
-      .update({
-        status: "scheduled",
-        caption: promo.caption,
-        asset_url: promo.assetUrl,
-        scheduled_for: promo.scheduledFor,
-      })
+      .update(buildContentJobScheduleUpdate(promo))
       .eq("id", job.id)
       .eq("user_id", userId)
       .select()
@@ -242,6 +290,7 @@ export async function runPixelMarketing(
     processed.push({
       contentJob: mapContentJobFromDb(jobRow),
       listing: mapListingFromDb(listingRow),
+      marketing: promo.metadata,
     });
 
     events.push(
@@ -253,9 +302,9 @@ export async function runPixelMarketing(
         metadata: {
           contentJobId: job.id,
           listingId: job.listing_id,
-          hashtags: promo.hashtags,
           scheduledFor: promo.scheduledFor,
           assetUrl: promo.assetUrl,
+          marketing: promo.metadata,
         },
       }),
     );

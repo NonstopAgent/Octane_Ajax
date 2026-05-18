@@ -92,6 +92,7 @@ Run both SQL files in **SQL Editor** (or use `supabase db push`):
 - `supabase/migrations/20260516130000_realtime_pipeline_tables.sql`
 - `supabase/migrations/20260517140000_phase2_product_generation.sql`
 - `supabase/migrations/20260518120000_product_pdfs_storage.sql`
+- `supabase/migrations/20260518140000_content_jobs_metadata.sql`
 
 ### 4. Enable email/password auth
 
@@ -121,11 +122,11 @@ Check **Settings** (`/settings`) for env status, signed-in email, and user id.
 | 1 | `/factory` | **Reset factory** |
 | 2 | `/factory` | **Run Ajax cycle** (Nova → Forge → stops at Review Gate) |
 | 3 | `/review` | Open pending listing |
-| 4 | `/review` | **Approve** |
-| 5 | `/factory` | **Run Pixel** |
+| 4 | `/review` | **Approve** — runs Pixel automatically and publishes to the **demo storefront** (not Etsy) |
+| 5 | `/store` | Confirm the listing appears (status `published`) |
 | 6 | `/factory` | Confirm metrics, machine log, and agent sprites updated |
 
-Optional: reject a listing to populate **Agents** memory, then approve another and run Pixel again.
+Optional: **Run Pixel** on `/factory` retries any still-queued jobs. Reject a listing to populate **Agents** memory, then approve another.
 
 **Sign out** from the header on any command page.
 
@@ -176,6 +177,7 @@ Apply both migrations in order:
 2. `supabase/migrations/20260516130000_realtime_pipeline_tables.sql` — Realtime for factory tables
 3. `supabase/migrations/20260517140000_phase2_product_generation.sql` — Product Brain columns, `product_generations`, RLS
 4. `supabase/migrations/20260518120000_product_pdfs_storage.sql` — private `product_pdfs` bucket + user-scoped storage policies
+5. `supabase/migrations/20260518140000_content_jobs_metadata.sql` — `content_jobs.metadata` jsonb for Pixel promo packages
 
 **CLI (recommended)**
 
@@ -214,11 +216,76 @@ End-to-end path (requires Supabase configured + signed in):
 1. **Reset factory** — `/factory` → **Reset factory** (`POST /api/ajax/reset-demo`) clears your user’s pipeline rows and idles agents.
 2. **Run Ajax cycle** — **Run Ajax cycle** (`POST /api/ajax/run-cycle`): Nova creates ideas → Forge creates a listing → pipeline **pauses at Review Gate** (409 if a review is already pending).
 3. **View pending review** — `/review` or factory metrics **QC pending**; listing appears in the review queue.
-4. **Approve listing** — **Approve** (`POST /api/ajax/review/approve`): listing approved, feedback stored, Pixel path unlocked.
-5. **Run Pixel** — `/factory` → **Run Pixel** (`POST /api/ajax/run-pixel`): content job scheduled, listing moves toward published.
-6. **See updated state** — factory floor, machine log, and metrics update via Realtime + snapshot (`GET /api/ajax/factory-snapshot`).
+4. **Approve listing** — **Approve** (`POST /api/ajax/review/approve`): listing `approved`, Pixel runs inline, content job `scheduled`, listing **`published` on the demo storefront** (not Etsy).
+5. **Optional retry** — `/factory` → **Run Pixel** (`POST /api/ajax/run-pixel`) only if a job is still `queued` (e.g. partial failure).
+6. **See updated state** — `/store`, factory floor, machine log, and metrics update via Realtime + snapshot (`GET /api/ajax/factory-snapshot`).
 
 Also try **Reject** on `/review` to feed **agent memory** (`/agents`).
+
+## Storefront prototype (demo)
+
+The internal storefront at **`/store`** (command layout, auth required) lists **approved** and **published** listings via `fetchStoreListings` in `src/lib/store/queries.ts`. Detail pages live at `/store/[listingId]`.
+
+| Surface | What it shows |
+|---------|----------------|
+| `/store` | Operator catalog — title, price, tags, brain snapshot, generation status |
+| Factory metrics | **Published** count from `fetchFactorySnapshot` (`src/lib/factory/queries.ts`) |
+| Dashboard | Same `publishedListings` telemetry |
+| Pixel copy | Promo captions reference the **demo storefront** (no external marketplace) |
+
+Listings reach the storefront only after human approval (`approved` or `published`). There is no public anonymous catalog or payment checkout in this repo yet.
+
+## Publish flow (listing lifecycle)
+
+Listing status transitions are defined in `src/lib/ajax/status.ts`:
+
+```
+draft → pending_review → approved → published
+              └→ rejected
+```
+
+| Step | Actor | DB effect |
+|------|--------|-----------|
+| Forge cycle | Simulator | Listing `pending_review`, review queue `pending` |
+| Human approve | Review service → Pixel simulator | Listing `approved` → job `scheduled` → listing **`published`** (demo storefront) |
+| Run Pixel (retry) | Pixel simulator | Re-processes any remaining `queued` jobs; same schedule + publish behavior |
+
+**Guards:** `run-cycle` does not invoke Pixel or publish (`simulator.ts` pauses at Review Gate). Rejected listings cannot reach `published`. Blocked Product Brain verdicts cannot be approved server-side.
+
+## Sellability checklist (Review Gate)
+
+Before approving, inspect the printable asset on `/review`. `buildSellabilityChecklist()` in `src/lib/review/sellability.ts` evaluates:
+
+| Check ID | Meaning |
+|----------|---------|
+| `min_six_pages` | At least 6 pages (aligned with `FORGE_MIN_PAGES`) |
+| `cover_page` / `instructions_page` / `worksheet_pages` / `summary_page` | Required page roles |
+| `ai_disclosure` | Disclosure text present |
+| `no_compliance_warnings` | No blocking compliance flags (AI disclosure excluded) |
+| `pdf_ready` | Generation `ready` with storage path (skipped in mock mode) |
+
+`isSellableStructure()` in `src/lib/product/structure-to-document.ts` is the lightweight page-count helper used in the PDF panel UI.
+
+## Pixel marketing package (demo)
+
+`POST /api/ajax/run-pixel` runs `runPixelMarketing` in `src/lib/ajax/pixel-simulator.ts`. Promo copy is built in `src/lib/ajax/pixel-promo-package.ts` (`buildPixelPromoPackage`). For each queued `content_jobs` row it:
+
+1. Builds a **promo package** — short/long captions, Pinterest fields, TikTok hooks, hashtags, `demo://` asset URL, `scheduled_for` (~48h)
+2. Updates the job to `scheduled` via `buildContentJobScheduleUpdate` (persists full promo package in `content_jobs.metadata` when migration `20260518140000_*` is applied; see `CONTENT_JOBS_HAS_METADATA_COLUMN`)
+3. Sets the linked listing to **`published`** (demo storefront only)
+4. Logs `content_scheduled` factory events with `marketing`, `assetUrl`, `scheduledFor` metadata
+
+No TikTok/Etsy APIs are called; swap `buildPixelPromoPackage` for LLM or platform adapters later.
+
+## Payment & Etsy (future)
+
+| Integration | Status | Notes |
+|-------------|--------|-------|
+| **Etsy** | Stub only | `src/lib/ajax/adapters/etsy.ts` — draft/publish simulated server-side; wire from API routes after Review Gate |
+| **Stripe** | Not in repo | No checkout keys or client SDK; add server-only checkout when storefront monetization is ready |
+| **Printify / TikTok** | Stubs | `src/lib/ajax/adapters/` — same server-only pattern |
+
+**Security:** client bundles must not import adapters, Stripe, OpenAI, or service-role Supabase (`tests/security.test.mjs`).
 
 ## Routes
 
@@ -231,6 +298,8 @@ Also try **Reject** on `/review` to feed **agent memory** (`/agents`).
 | `/agents` | Agent memory from approvals/rejections |
 | `/login` | Sign up / sign in (email + password) |
 | `/settings` | Env, session status, next steps |
+| `/store` | Internal storefront — approved & published listings |
+| `/store/[listingId]` | Storefront listing detail |
 
 ## Scripts
 
@@ -239,7 +308,7 @@ Also try **Reject** on `/review` to feed **agent memory** (`/agents`).
 | `npm run dev` | Development server |
 | `npm run build` | Production build + TypeScript |
 | `npm run lint` | ESLint |
-| `npm run test` | Security smoke + domain + demo wiring tests |
+| `npm run test` | Security, publish/storefront wiring, Product Brain, Forge/Nova, PDF, sellability, factory queries |
 | `npm run check:security` | Client secret scan + RLS migration check |
 | `npm run check:demo` | Live Supabase schema probe (`.env.local`); optional `DEMO_TEST_*` for auth + RLS |
 
@@ -263,7 +332,7 @@ src/
     review/             # review service
     supabase/           # client, server, types, schema
 supabase/migrations/
-tests/                  # security + demo wiring smoke tests
+tests/                  # security, demo workflow, pixel marketing, storefront wiring
 ```
 
 ## Nova ideation: LLM mode vs fallback demo mode
@@ -348,7 +417,8 @@ The human **Review Gate** remains mandatory — no live publishing without appro
 - **TikTok** — short-form content posting
 - **Image generator** — mockups via OpenAI/Gemini/etc.
 - **LLM agents** — replace deterministic simulators; inject `agent-memory` prompt bundles
-- **Storefront** — public published catalog view
+- **Storefront** — public `/store` catalog (see [Storefront prototype](#storefront-prototype-demo))
+- **Stripe checkout** — server-only payment links on published listings (see [Payment & Etsy](#payment--etsy-future))
 
 ## Learn more
 

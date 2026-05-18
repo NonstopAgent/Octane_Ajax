@@ -5,6 +5,7 @@ import {
 import { ReviewBrainPanel } from "@/components/review/review-brain-panel";
 import { ReviewCompliancePanel } from "@/components/review/review-compliance-panel";
 import { ReviewPdfPanel } from "@/components/review/review-pdf-panel";
+import { ReviewSellabilityPanel } from "@/components/review/review-sellability-panel";
 import { ReviewStructurePreview } from "@/components/review/review-structure-preview";
 import { hasComplianceRisk } from "@/lib/review/display";
 import type { ReviewPhase2Context } from "@/lib/review/types";
@@ -51,6 +52,18 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
     generation ||
     mockMode ||
     Boolean(idea);
+
+  const pdfMockMode = mockMode && !generation?.pdf.storagePath;
+  const sellabilityInput = {
+    structure: structure ?? null,
+    aiDisclosure,
+    complianceWarnings,
+    complianceFlags,
+    generationStatus: generation?.generationStatus ?? "pending",
+    pdfStoragePath: generation?.pdf.storagePath,
+    mockMode: pdfMockMode,
+  } as const;
+  const showSellability = showPdf || Boolean(generation) || Boolean(structure);
 
   const hasAnyPanel =
     brain || hasCompliance || Boolean(aiDisclosure) || showStructure || showPdf;
@@ -134,10 +147,14 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
                   publicUrl: null,
                 }
               }
-              generationStatus={generation?.generationStatus ?? "pending"}
+              generationStatus={sellabilityInput.generationStatus}
               structure={structure ?? null}
-              mockMode={mockMode && !generation?.pdf.storagePath}
+              mockMode={pdfMockMode}
             />
+          ) : null}
+
+          {showSellability ? (
+            <ReviewSellabilityPanel {...sellabilityInput} />
           ) : null}
         </div>
       </div>

@@ -1,6 +1,5 @@
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
-import { isSellableStructure } from "@/lib/product/structure-to-document";
 import {
   buildProductPdfDownloadHref,
   getReviewPdfUiState,
@@ -64,7 +63,6 @@ export function ReviewPdfPanel({
 
   const pageCount = structure?.pages.length ?? structure?.pageCount ?? 0;
   const format = structure?.format;
-  const sellable = structure ? isSellableStructure(structure) : null;
 
   return (
     <section
@@ -151,23 +149,6 @@ export function ReviewPdfPanel({
         )}
       </div>
 
-      <details className="mt-3 rounded-md border border-[var(--border-dim)] bg-black/20 px-3 py-2">
-        <summary className="cursor-pointer text-xs font-medium text-[var(--text-muted)]">
-          Sellability checklist (placeholder)
-        </summary>
-        <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-[var(--text-muted)]">
-          <li>
-            {sellable === null
-              ? "Page count unknown until Forge structure loads"
-              : sellable
-                ? `${pageCount} pages — meets 6+ page guidance`
-                : `${pageCount} pages — below 6-page sellable target`}
-          </li>
-          <li>Cover, instructions, worksheets, and summary present</li>
-          <li>Tables, checklists, or fillable fields on worksheet pages</li>
-          <li>Human review required before any future store publish</li>
-        </ul>
-      </details>
     </section>
   );
 }

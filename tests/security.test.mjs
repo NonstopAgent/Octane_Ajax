@@ -23,10 +23,19 @@ const FORBIDDEN_IN_CLIENT = [
   /from ["']@\/lib\/product\/pdf-generator/,
   /from ["']@\/lib\/product\/pdf-storage/,
   /from ["']@\/lib\/product\/pdf-service/,
+  /from ["']@\/lib\/ajax\/adapters/,
+  /createDemoEtsyAdapter/,
+  /etsyAdapter/,
   /ETSY_CLIENT_SECRET/,
+  /ETSY_CLIENT_ID/,
   /PRINTIFY_API_TOKEN/,
   /TIKTOK_CLIENT_SECRET/,
   /IMAGE_GENERATOR_API_KEY/,
+  /STRIPE_SECRET/,
+  /STRIPE_PUBLISHABLE/,
+  /STRIPE_WEBHOOK/,
+  /process\.env\.STRIPE/,
+  /from ["']stripe/,
 ];
 
 function walk(dir, files = []) {
@@ -145,6 +154,40 @@ describe("migrations RLS", () => {
       /create policy "product_generations_select_own"/i,
       "product_generations must have owner-scoped select policy",
     );
+  });
+});
+
+describe("supabase browser barrel", () => {
+  it("does not export service role client from client entrypoints", () => {
+    const client = readFileSync(join(ROOT, "lib/supabase/client.ts"), "utf8");
+    const index = readFileSync(join(ROOT, "lib/supabase/index.ts"), "utf8");
+
+    assert.doesNotMatch(client, /createServiceClient/);
+    assert.doesNotMatch(client, /SERVICE_ROLE/);
+    assert.doesNotMatch(index, /createServiceClient/);
+    assert.match(index, /createBrowserClient|createClient/);
+  });
+});
+
+describe("marketplace adapters stay server-side", () => {
+  it("does not import Etsy adapter from run-pixel or pixel simulator", () => {
+    const pixel = readFileSync(
+      join(ROOT, "lib/ajax/pixel-simulator.ts"),
+      "utf8",
+    );
+    const runPixel = readFileSync(
+      join(ROOT, "app/api/ajax/run-pixel/route.ts"),
+      "utf8",
+    );
+
+    for (const pattern of [
+      /from ["']@\/lib\/ajax\/adapters/,
+      /createDemoEtsyAdapter/,
+      /etsyAdapter/,
+    ]) {
+      assert.doesNotMatch(pixel, pattern);
+      assert.doesNotMatch(runPixel, pattern);
+    }
   });
 });
 

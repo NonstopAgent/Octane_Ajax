@@ -50,12 +50,14 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(simulator, /from ["']@\/lib\/llm/);
   });
 
-  it("approve hands off to pixel path", () => {
+  it("approve runs pixel then publishes to demo storefront", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/review/service.ts"),
       "utf8",
     );
-    assert.match(content, /approve|approved/i);
+    assert.match(content, /status:\s*"approved"/);
+    assert.match(content, /runPixelMarketing/);
+    assert.doesNotMatch(content, /etsyAdapter|publishListing/i);
   });
 
   it("rejects approving blocked brain verdict server-side", () => {
@@ -109,5 +111,35 @@ describe("demo workflow wiring", () => {
       "utf8",
     );
     assert.match(content, /content_jobs|CONTENT|scheduled/i);
+  });
+
+  it("listing lifecycle transitions are defined in status module", () => {
+    const content = readFileSync(
+      join(ROOT, "src/lib/ajax/status.ts"),
+      "utf8",
+    );
+    assert.match(content, /LISTING_STATUS_TRANSITIONS/);
+    assert.match(content, /approved:\s*\["published"\]/);
+    assert.match(content, /pending_review:\s*\["approved",\s*"rejected"\]/);
+  });
+
+  it("approve queues Pixel before publish", () => {
+    const review = readFileSync(
+      join(ROOT, "src/lib/review/service.ts"),
+      "utf8",
+    );
+    assert.match(review, /status:\s*"approved"/);
+    assert.match(review, /CONTENT_JOBS/);
+    assert.match(review, /status:\s*"queued"/);
+    assert.doesNotMatch(review, /status:\s*"published"/);
+  });
+
+  it("run-pixel route delegates to pixel simulator publish", () => {
+    const route = readFileSync(
+      join(ROOT, "src/app/api/ajax/run-pixel/route.ts"),
+      "utf8",
+    );
+    assert.match(route, /runPixelMarketing/);
+    assert.doesNotMatch(route, /createServiceClient/);
   });
 });

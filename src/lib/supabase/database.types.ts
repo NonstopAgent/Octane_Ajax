@@ -476,6 +476,7 @@ export interface Database {
           asset_url: string | null;
           caption: string | null;
           scheduled_for: string | null;
+          metadata: Json;
           created_at: string;
         };
         Insert: {
@@ -488,6 +489,7 @@ export interface Database {
           asset_url?: string | null;
           caption?: string | null;
           scheduled_for?: string | null;
+          metadata?: Json;
           created_at?: string;
         };
         Update: {
@@ -500,6 +502,7 @@ export interface Database {
           asset_url?: string | null;
           caption?: string | null;
           scheduled_for?: string | null;
+          metadata?: Json;
           created_at?: string;
         };
         Relationships: [

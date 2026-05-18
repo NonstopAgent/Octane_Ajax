@@ -13,7 +13,8 @@ const EVENT_TYPE_MESSAGES: Record<string, (event: FactoryEvent) => string> = {
   idea_created: () => "Nova generated a new product idea.",
   listing_created: () => "Forge created a product listing.",
   review_requested: () => "Listing sent to the Review Gate — your turn.",
-  review_approved: () => "Listing approved. Pixel is picking it up.",
+  review_approved: () =>
+    "Listing approved. Pixel schedules demo content and publishes to the demo storefront.",
   review_rejected: () => "Listing rejected. Feedback saved for agents.",
   content_scheduled: () => "Pixel scheduled marketing content.",
   cycle_started: () => "Ajax cycle started. Factory online.",

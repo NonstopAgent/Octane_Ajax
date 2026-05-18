@@ -17,8 +17,8 @@ export async function fetchFactorySnapshot(
     eventsResult,
     ideasResult,
     reviewsResult,
-    listingsResult,
     jobsResult,
+    listingsResult,
   ] = await Promise.all([
     supabase.from(TABLES.AGENTS).select("*").order("slug"),
     supabase

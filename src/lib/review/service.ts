@@ -4,6 +4,11 @@ import {
   mapListingFromDb,
   mapReviewFromDb,
 } from "@/lib/ajax/mappers";
+import {
+  NoQueuedContentError,
+  PixelSimulatorError,
+  runPixelMarketing,
+} from "@/lib/ajax/pixel-simulator";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
@@ -136,7 +141,8 @@ export type ApproveReviewResult = {
 };
 
 /**
- * Approve a pending listing — unlocks Pixel content pipeline (demo).
+ * Approve a pending listing: `approved` → Pixel schedules content → `published`
+ * (demo storefront). Does not publish to Etsy or other external channels.
  */
 export async function approveReview(
   supabase: Supabase,
@@ -216,20 +222,6 @@ export async function approveReview(
     throw new ReviewError("Failed to queue content job for Pixel.", 500, jobError);
   }
 
-  await setAgentState(
-    supabase,
-    AGENT_SLUGS.FORGE,
-    "idle",
-    ROOM_SLUGS.DESIGN_PRESS,
-  );
-
-  await setAgentState(
-    supabase,
-    AGENT_SLUGS.PIXEL,
-    "working",
-    ROOM_SLUGS.MEDIA_STUDIO,
-  );
-
   await insertEvent(supabase, userId, {
     event_type: "content_queued",
     agent_slug: AGENT_SLUGS.PIXEL,
@@ -238,12 +230,40 @@ export async function approveReview(
     metadata: { listingId, contentJobId: jobRow.id },
   });
 
+  let pixelResult;
+  try {
+    pixelResult = await runPixelMarketing(supabase, userId);
+  } catch (err) {
+    if (err instanceof NoQueuedContentError || err instanceof PixelSimulatorError) {
+      throw new ReviewError(
+        err instanceof NoQueuedContentError
+          ? "Listing approved but Pixel found no queued content."
+          : err.message,
+        500,
+        err,
+      );
+    }
+    throw err;
+  }
+
+  await setAgentState(
+    supabase,
+    AGENT_SLUGS.FORGE,
+    "idle",
+    ROOM_SLUGS.DESIGN_PRESS,
+  );
+
+  const processed =
+    pixelResult.jobs.find((j) => j.contentJob.id === jobRow.id) ??
+    pixelResult.jobs.find((j) => j.listing.id === listingId) ??
+    pixelResult.jobs[0];
+
   return {
     ok: true,
     review: mapReviewFromDb(reviewRow),
-    listing: mapListingFromDb(listingRow),
-    contentJob: mapContentJobFromDb(jobRow),
-    message: "Listing approved. Pixel is preparing demo content.",
+    listing: processed?.listing ?? mapListingFromDb(listingRow),
+    contentJob: processed?.contentJob ?? mapContentJobFromDb(jobRow),
+    message: pixelResult.message,
   };
 }
 

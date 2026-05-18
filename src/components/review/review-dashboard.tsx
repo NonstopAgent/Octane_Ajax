@@ -118,7 +118,7 @@ export function ReviewDashboard({
         badge="Quality control"
         badgeTone="warning"
         title="Review Gate"
-        description={`${REVIEW_GATE_MICROCOPY} — approve Forge listings to release Pixel, or reject with feedback for agent memory.`}
+        description={`${REVIEW_GATE_MICROCOPY} — approving runs Pixel and publishes to the demo storefront (not Etsy). Reject with feedback for agent memory.`}
         aside={
           <ButtonLink href="/factory" variant="secondary">
             Back to factory
