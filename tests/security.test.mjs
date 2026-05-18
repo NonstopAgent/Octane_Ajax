@@ -21,6 +21,8 @@ const FORBIDDEN_IN_CLIENT = [
   /createOpenAiClient/,
   /from ["']@\/lib\/llm/,
   /from ["']@\/lib\/product\/pdf-generator/,
+  /from ["']@\/lib\/product\/pdf-storage/,
+  /from ["']@\/lib\/product\/pdf-service/,
   /ETSY_CLIENT_SECRET/,
   /PRINTIFY_API_TOKEN/,
   /TIKTOK_CLIENT_SECRET/,
@@ -113,6 +115,21 @@ describe("migrations RLS", () => {
     );
   });
 
+  it("scopes product_pdfs storage to authenticated owners (milestone 2)", () => {
+    const migration = readMigration(
+      "20260518120000_product_pdfs_storage.sql",
+    );
+    assert.match(migration, /product_pdfs/i);
+    assert.match(migration, /allowed_mime_types/i);
+    assert.match(migration, /10485760/);
+    assert.match(migration, /product_pdfs_select_own/i);
+    assert.match(
+      migration,
+      /storage\.foldername\(name\)\)\[1\].*auth\.uid\(\)/i,
+    );
+    assert.doesNotMatch(migration, /public\s*=\s*true/i);
+  });
+
   it("enables RLS on product_generations (phase 2 migration)", () => {
     const migration = readMigration(
       "20260517140000_phase2_product_generation.sql",
@@ -149,5 +166,9 @@ describe("run-cycle LLM wiring guard", () => {
 
     assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
     assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
+    assert.match(simulator, /from ["']@\/lib\/product\/pdf-service/);
+    assert.doesNotMatch(simulator, /from ["']@\/lib\/product\/pdf-generator/);
+    assert.match(simulator, /review_gate|cycle_paused/i);
+    assert.match(simulator, /pdf_generation_failed/);
   });
 });

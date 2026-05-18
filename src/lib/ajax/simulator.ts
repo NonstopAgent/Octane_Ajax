@@ -9,6 +9,7 @@ import {
   runNovaIdeation,
 } from "@/lib/ajax/nova";
 import { mapGenerationToDbInsert } from "@/lib/product/mappers";
+import { generateAndStoreProductPdf } from "@/lib/product/pdf-service";
 import {
   mapEventFromDb,
   mapIdeaFromDb,
@@ -500,6 +501,39 @@ async function executeAjaxCycle(
     throw new SimulatorError(
       "Failed to create product generation.",
       generationError,
+    );
+  }
+
+  const aiDisclosure =
+    typeof forgeResult.productStructure.metadata?.aiDisclosure === "string"
+      ? forgeResult.productStructure.metadata.aiDisclosure
+      : forgeResult.aiDisclosure;
+
+  const pdfResult = await generateAndStoreProductPdf({
+    supabase,
+    userId,
+    generationId: generationRow.id,
+    structure: forgeResult.productStructure,
+    listingTitle: forgeResult.listingTitle,
+    listingDescription: forgeResult.listingDescription,
+    footerNote: aiDisclosure,
+    audience: forgePick.targetBuyer,
+  });
+
+  if (!pdfResult.ok) {
+    events.push(
+      await insertEvent(supabase, userId, {
+        event_type: "pdf_generation_failed",
+        agent_slug: AGENT_SLUGS.FORGE,
+        room: ROOM_SLUGS.DESIGN_PRESS,
+        message: "PDF generation failed — listing remains at Review Gate for human review.",
+        metadata: {
+          generationId: generationRow.id,
+          listingId: listingRow.id,
+          error: pdfResult.error,
+          runId,
+        },
+      }),
     );
   }
 

@@ -91,6 +91,7 @@ Run both SQL files in **SQL Editor** (or use `supabase db push`):
 - `supabase/migrations/20260516120000_init_octane_ajax_schema.sql`
 - `supabase/migrations/20260516130000_realtime_pipeline_tables.sql`
 - `supabase/migrations/20260517140000_phase2_product_generation.sql`
+- `supabase/migrations/20260518120000_product_pdfs_storage.sql`
 
 ### 4. Enable email/password auth
 
@@ -165,6 +166,7 @@ This always checks env vars and all 8 pipeline tables. Without `DEMO_TEST_EMAIL`
 | Reject | POST | `/api/ajax/review/reject` |
 | Run Pixel | POST | `/api/ajax/run-pixel` |
 | Snapshot refresh / Realtime | GET | `/api/ajax/factory-snapshot` |
+| Download PDF (Review) | GET | `/api/ajax/product-generations/:id/pdf-download` |
 
 ## Supabase migrations
 
@@ -173,6 +175,7 @@ Apply both migrations in order:
 1. `supabase/migrations/20260516120000_init_octane_ajax_schema.sql` — tables, **RLS enabled on all tables**, policies, seed Nova/Forge/Pixel
 2. `supabase/migrations/20260516130000_realtime_pipeline_tables.sql` — Realtime for factory tables
 3. `supabase/migrations/20260517140000_phase2_product_generation.sql` — Product Brain columns, `product_generations`, RLS
+4. `supabase/migrations/20260518120000_product_pdfs_storage.sql` — private `product_pdfs` bucket + user-scoped storage policies
 
 **CLI (recommended)**
 
@@ -293,14 +296,20 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 **Persisted artifacts**
 
 - `product_listings` — title, description, price (`pending_review`, platform `demo`)
-- `product_generations` — `structure` (pages with `userInstructions`), `compliance_flags` / `compliance_warnings`, LLM metadata, `generation_status` (`pending` until PDF is wired)
+- `product_generations` — `structure` (pages with `userInstructions`), `compliance_flags` / `compliance_warnings`, LLM metadata, `generation_status` (`pending` → `generating` → `ready` or `failed`), `pdf_storage_path`
 - `ajax_tasks.output` — `seoTags`, `generationId`, `forgeMode`, `aiDisclosure`, etc.
 
 **AI disclosure** (required in listing copy and stored on the generation):
 
 > AI tools assisted in drafting and structuring this digital product. The seller reviewed and customized the final product.
 
-**Not wired yet:** PDF rendering to storage (`pdf-generator.ts` exists but Forge does not upload files). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory.
+**PDF flow (Milestone 2):** After Forge persists `product_generations`, `pdf-service` maps structure → `pdf-generator` → uploads to private Supabase Storage bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) to redirect to a short-lived signed URL. If upload fails, the cycle still pauses at Review Gate (`generation_status: failed`, factory event `pdf_generation_failed`). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
+
+### Product PDF storage setup
+
+1. Apply migration `20260518120000_product_pdfs_storage.sql` (SQL Editor or `supabase db push`).
+2. If bucket creation fails in SQL, run `node scripts/setup-product-pdfs-bucket.mjs` with `SUPABASE_SERVICE_ROLE_KEY` set, then re-apply the migration for RLS policies.
+3. Optional: set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` for server PDF uploads (signed URLs and uploads use the service client in `pdf-storage.ts`).
 
 ## Phase 2 architecture
 
@@ -312,7 +321,7 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 | LLM foundation | `src/lib/llm/` | Server-only OpenAI wrapper — used by Nova and Forge services |
 | Forge generation | `src/lib/ajax/forge/` | LLM when configured + Zod; deterministic fallback |
 | Pixel | `src/lib/ajax/pixel-simulator.ts` | Simulated media (no LLM) |
-| PDF prototype | `src/lib/product/pdf-generator.ts` | `pdf-lib` printable — not connected to Forge/storage yet |
+| PDF pipeline | `src/lib/product/pdf-generator.ts`, `pdf-service.ts`, `pdf-storage.ts` | Forge cycle generates + uploads; Review downloads via signed URL |
 | Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders |
 
 **Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components; `simulator.ts` imports Nova and Forge, not `@/lib/llm` directly).

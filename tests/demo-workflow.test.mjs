@@ -14,6 +14,7 @@ describe("demo workflow wiring", () => {
     "src/app/api/ajax/review/approve/route.ts",
     "src/app/api/ajax/run-pixel/route.ts",
     "src/app/api/ajax/factory-snapshot/route.ts",
+    "src/app/api/ajax/product-generations/[id]/pdf-download/route.ts",
   ];
 
   for (const route of routes) {
@@ -88,6 +89,18 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(forge, /code: "ai_disclosure"/);
     assert.match(display, /AI_DISCLOSURE_FLAG_CODE/);
     assert.match(display, /filterComplianceFlags/);
+  });
+
+  it("simulator wires PDF service without bypassing review gate", () => {
+    const simulator = readFileSync(
+      join(ROOT, "src/lib/ajax/simulator.ts"),
+      "utf8",
+    );
+    assert.match(simulator, /generateAndStoreProductPdf/);
+    assert.match(simulator, /pdf_generation_failed/);
+    assert.match(simulator, /cycle_paused/);
+    assert.match(simulator, /pending_review/);
+    assert.doesNotMatch(simulator, /runPixel|pixel-simulator/i);
   });
 
   it("pixel simulator schedules content", () => {

@@ -127,6 +127,7 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
 
           {showPdf ? (
             <ReviewPdfPanel
+              generationId={generation?.id ?? null}
               pdf={
                 generation?.pdf ?? {
                   storagePath: null,
@@ -134,7 +135,7 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
                 }
               }
               generationStatus={generation?.generationStatus ?? "pending"}
-              mockMode={mockMode && !generation?.pdf.publicUrl}
+              mockMode={mockMode && !generation?.pdf.storagePath}
             />
           ) : null}
         </div>

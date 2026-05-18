@@ -44,7 +44,7 @@ export function buildForgeFallbackResult(
       `Designed for: ${idea.targetBuyer}`,
       "",
       "What's included:",
-      "- Printable PDF-ready pages (demo structure — PDF generation not wired yet)",
+      "- Printable PDF-ready pages generated during the Ajax cycle",
       "- Clear sections you can fill in or check off",
       "",
       idea.reasoning,

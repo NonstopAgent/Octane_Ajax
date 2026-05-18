@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AI_DISCLOSURE_FLAG_CODE,
+  buildProductPdfDownloadHref,
   collectComplianceMessages,
   filterComplianceFlags,
   getReviewApproveUi,
+  getReviewPdfUiState,
   hasComplianceRisk,
 } from "@/lib/review/display";
 import type { ComplianceFlag } from "@/lib/product/domain";
@@ -70,5 +72,29 @@ describe("review display helpers", () => {
     assert.equal(ui.tone, "approve");
     assert.equal(ui.disabled, false);
     assert.equal(ui.cautionMessage, null);
+  });
+
+  it("exposes download UI only when PDF is ready with a storage path", () => {
+    assert.equal(
+      getReviewPdfUiState({
+        generationStatus: "ready",
+        storagePath: "user-id/gen-id.pdf",
+      }),
+      "download",
+    );
+    assert.equal(
+      getReviewPdfUiState({
+        generationStatus: "ready",
+        storagePath: null,
+      }),
+      "placeholder",
+    );
+  });
+
+  it("builds server download route for generation id", () => {
+    assert.match(
+      buildProductPdfDownloadHref("abc"),
+      /product-generations\/abc\/pdf-download/,
+    );
   });
 });

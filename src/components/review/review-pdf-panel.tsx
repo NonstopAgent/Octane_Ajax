@@ -1,6 +1,10 @@
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders } from "@/lib/product/domain";
 import {
+  buildProductPdfDownloadHref,
+  getReviewPdfUiState,
+} from "@/lib/review/display";
+import {
   pdfPreviewIcon,
   pdfPreviewSlot,
   reviewQcPanel,
@@ -8,6 +12,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type ReviewPdfPanelProps = {
+  generationId: string | null;
   pdf: PdfAssetPlaceholders;
   generationStatus: GenerationStatus;
   mockMode?: boolean;
@@ -38,13 +43,21 @@ function statusTone(
 }
 
 export function ReviewPdfPanel({
+  generationId,
   pdf,
   generationStatus,
   mockMode = false,
 }: ReviewPdfPanelProps) {
-  const hasUrl = Boolean(pdf.publicUrl?.trim());
-  const hasPath = Boolean(pdf.storagePath?.trim());
-  const downloadable = hasUrl && !mockMode;
+  const uiState = getReviewPdfUiState({
+    generationStatus,
+    storagePath: pdf.storagePath,
+    mockMode,
+  });
+
+  const downloadHref =
+    generationId && uiState === "download"
+      ? buildProductPdfDownloadHref(generationId)
+      : null;
 
   return (
     <section
@@ -65,7 +78,7 @@ export function ReviewPdfPanel({
       </div>
 
       <div className={pdfPreviewSlot}>
-        {downloadable ? (
+        {downloadHref ? (
           <>
             <span className={pdfPreviewIcon} aria-hidden>
               ⎙
@@ -74,13 +87,26 @@ export function ReviewPdfPanel({
               PDF ready for inspection
             </p>
             <a
-              href={pdf.publicUrl!}
+              href={downloadHref}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center justify-center rounded-md border border-[var(--accent-blue)]/50 bg-[var(--accent-blue)]/10 px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/20"
             >
-              Open PDF preview
+              Download PDF
             </a>
+          </>
+        ) : uiState === "failed" ? (
+          <>
+            <span className={pdfPreviewIcon} aria-hidden>
+              ⚠
+            </span>
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              PDF generation failed
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Listing remains at Review Gate. Inspect structure and compliance,
+              then run another cycle after fixes.
+            </p>
           </>
         ) : (
           <>
@@ -88,18 +114,16 @@ export function ReviewPdfPanel({
               ◧
             </span>
             <p className="text-sm font-medium text-[var(--foreground)]">
-              {mockMode || generationStatus === "pending"
+              {mockMode
                 ? "PDF placeholder — generation not run yet"
-                : hasPath
-                  ? "PDF stored — public URL pending"
-                  : "PDF asset queued for Forge"}
+                : generationStatus === "generating" || generationStatus === "queued"
+                  ? "PDF is generating…"
+                  : "PDF asset pending"}
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               {mockMode
                 ? "Demo cycle has no printable file. Approve only after you have verified copy and structure."
-                : generationStatus === "failed"
-                  ? "Regenerate from the factory floor after fixing structure or compliance issues."
-                  : "Download will appear here when generation completes."}
+                : "Download will appear here when generation completes."}
             </p>
           </>
         )}
