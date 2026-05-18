@@ -30,22 +30,12 @@ function buildComplianceArtifacts(notes: string[]): {
   warnings: string[];
 } {
   const warnings = notes.map((n) => n.trim()).filter(Boolean);
-  const flags: ComplianceFlag[] = [
-    {
-      code: "ai_disclosure",
-      message: AI_DISCLOSURE_TEXT,
-      severity: "info",
-      source: "forge",
-    },
-  ];
-  for (const warning of warnings) {
-    flags.push({
-      code: "review_note",
-      message: warning,
-      severity: "warning",
-      source: "forge",
-    });
-  }
+  const flags: ComplianceFlag[] = warnings.map((warning) => ({
+    code: "review_note",
+    message: warning,
+    severity: "warning",
+    source: "forge",
+  }));
   return { flags, warnings };
 }
 

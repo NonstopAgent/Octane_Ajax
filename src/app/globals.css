@@ -563,6 +563,12 @@ body {
   color: #6ee7b7;
 }
 
+.factory-control-approve-caution {
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.22) 0%, rgba(180, 83, 9, 0.18) 100%);
+  color: #fcd34d;
+}
+
 .factory-control-reject {
   border: 1px solid rgba(248, 113, 113, 0.4);
   background: rgba(127, 29, 29, 0.35);

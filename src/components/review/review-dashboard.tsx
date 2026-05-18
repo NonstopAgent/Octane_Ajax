@@ -9,6 +9,7 @@ import {
   type ToastState,
   type ToastTone,
 } from "@/components/factory/toast-banner";
+import { hasComplianceRisk } from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import { CommandHeader } from "@/components/layout/command-header";
 import { REVIEW_GATE_MICROCOPY } from "@/lib/ajax/constants";
@@ -137,7 +138,7 @@ export function ReviewDashboard({
             {reviews.length} unit{reviews.length === 1 ? "" : "s"} awaiting
             operator sign-off.
             {countPhase2Alerts(reviews) > 0
-              ? ` · ${countPhase2Alerts(reviews)} with compliance or blocked-brain signals`
+              ? ` · ${countPhase2Alerts(reviews)} with brain caution or compliance signals`
               : ""}
           </p>
         </div>
@@ -189,11 +190,14 @@ export function ReviewDashboard({
 
 function countPhase2Alerts(reviews: PendingReviewDetail[]): number {
   return reviews.filter((review) => {
-    const brainBlocked = review.phase2.brain?.verdict === "blocked";
-    const compliance =
-      (review.phase2.generation?.complianceWarnings.length ?? 0) > 0 ||
-      (review.phase2.generation?.complianceFlags.length ?? 0) > 0;
-    return brainBlocked || compliance;
+    const verdict = review.phase2.brain?.verdict;
+    if (verdict === "blocked" || verdict === "needs_revision") return true;
+    const generation = review.phase2.generation;
+    if (!generation) return false;
+    return hasComplianceRisk({
+      warnings: generation.complianceWarnings,
+      flags: generation.complianceFlags,
+    });
   }).length;
 }
 

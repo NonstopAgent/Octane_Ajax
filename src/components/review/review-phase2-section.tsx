@@ -6,6 +6,7 @@ import { ReviewBrainPanel } from "@/components/review/review-brain-panel";
 import { ReviewCompliancePanel } from "@/components/review/review-compliance-panel";
 import { ReviewPdfPanel } from "@/components/review/review-pdf-panel";
 import { ReviewStructurePreview } from "@/components/review/review-structure-preview";
+import { hasComplianceRisk } from "@/lib/review/display";
 import type { ReviewPhase2Context } from "@/lib/review/types";
 import type { ProductIdea } from "@/lib/ajax/types";
 
@@ -36,10 +37,10 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
     typeof generation?.structure.metadata?.aiDisclosure === "string"
       ? generation.structure.metadata.aiDisclosure
       : null;
-  const hasCompliance =
-    complianceWarnings.length > 0 ||
-    complianceFlags.length > 0 ||
-    Boolean(aiDisclosure);
+  const hasCompliance = hasComplianceRisk({
+    warnings: complianceWarnings,
+    flags: complianceFlags,
+  });
 
   const structure = generation?.structure;
   const showStructure =
@@ -51,7 +52,8 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
     mockMode ||
     Boolean(idea);
 
-  const hasAnyPanel = brain || hasCompliance || showStructure || showPdf;
+  const hasAnyPanel =
+    brain || hasCompliance || Boolean(aiDisclosure) || showStructure || showPdf;
 
   if (!hasAnyPanel) {
     return (
@@ -85,29 +87,28 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
             </div>
           )}
 
+          {aiDisclosure ? (
+            <div className={reviewQcPanelMuted}>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+                AI disclosure
+              </p>
+              <p className="mt-2 text-sm text-[var(--foreground)]">
+                {aiDisclosure}
+              </p>
+            </div>
+          ) : null}
+
           {hasCompliance ? (
-            <>
-              {aiDisclosure ? (
-                <div className={reviewQcPanelMuted}>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-                    AI disclosure
-                  </p>
-                  <p className="mt-2 text-sm text-[var(--foreground)]">
-                    {aiDisclosure}
-                  </p>
-                </div>
-              ) : null}
-              <ReviewCompliancePanel
-                warnings={complianceWarnings}
-                flags={complianceFlags}
-              />
-            </>
+            <ReviewCompliancePanel
+              warnings={complianceWarnings}
+              flags={complianceFlags}
+            />
           ) : generation ? (
             <div className={reviewQcPanelMuted}>
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 Compliance
               </p>
-              <Phase2EmptyHint label="No compliance warnings flagged for this generation." />
+              <Phase2EmptyHint label="No compliance warnings detected." />
             </div>
           ) : null}
         </div>

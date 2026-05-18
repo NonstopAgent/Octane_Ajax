@@ -186,13 +186,18 @@ describe("runForgeGeneration", () => {
 });
 
 describe("Forge compliance mapping", () => {
-  it("includes AI disclosure flag and compliance notes", async () => {
+  it("maps compliance notes without treating AI disclosure as a warning flag", async () => {
     const idea = await sampleEvaluatedIdea();
     const result = buildForgeFallbackResult(idea);
     const { flags, warnings } = forgeResultToCompliance(result);
 
-    assert.ok(flags.some((f) => f.code === "ai_disclosure"));
+    assert.ok(result.aiDisclosure.includes(AI_DISCLOSURE_TEXT));
+    assert.equal(
+      flags.some((f) => f.code === "ai_disclosure"),
+      false,
+    );
     assert.ok(warnings.length > 0);
+    assert.ok(flags.some((f) => f.code === "review_note"));
   });
 });
 

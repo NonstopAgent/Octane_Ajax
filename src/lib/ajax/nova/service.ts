@@ -165,15 +165,26 @@ export async function runNovaIdeation(
   };
 }
 
-/** Prefer approved ideas, then highest brain/trend score among eligible rows. */
+/** Prefer approved ideas; safe needs_revision only if none approved; never blocked. */
 export function pickForgeIdeaCandidate<
-  T extends { verdict: NovaEvaluatedIdea["verdict"]; trendScore: number },
+  T extends {
+    verdict: NovaEvaluatedIdea["verdict"];
+    trendScore: number;
+    validation: NovaEvaluatedIdea["validation"];
+  },
 >(ideas: T[]): T {
-  const approved = ideas.filter((i) => i.verdict === "approve_for_generation");
+  const eligible = ideas.filter((i) => i.verdict !== "blocked");
+  const approved = eligible.filter(
+    (i) => i.verdict === "approve_for_generation",
+  );
   const pool =
     approved.length > 0
       ? approved
-      : ideas.filter((i) => i.verdict === "needs_revision");
+      : eligible.filter(
+          (i) =>
+            i.verdict === "needs_revision" &&
+            i.validation.riskLevel === "safe",
+        );
 
   if (pool.length === 0) {
     throw new Error("No Forge-eligible ideas after Product Brain filtering.");

@@ -57,6 +57,39 @@ describe("demo workflow wiring", () => {
     assert.match(content, /approve|approved/i);
   });
 
+  it("rejects approving blocked brain verdict server-side", () => {
+    const content = readFileSync(
+      join(ROOT, "src/lib/review/service.ts"),
+      "utf8",
+    );
+    assert.match(content, /brain_verdict/);
+    assert.match(content, /Blocked products cannot be approved/);
+  });
+
+  it("forge selection prefers approved ideas and safe needs_revision", () => {
+    const nova = readFileSync(
+      join(ROOT, "src/lib/ajax/nova/service.ts"),
+      "utf8",
+    );
+    assert.match(nova, /approve_for_generation/);
+    assert.match(nova, /validation\.riskLevel === "safe"/);
+    assert.match(nova, /verdict !== "blocked"/);
+  });
+
+  it("keeps AI disclosure out of compliance warnings", () => {
+    const forge = readFileSync(
+      join(ROOT, "src/lib/ajax/forge/service.ts"),
+      "utf8",
+    );
+    const display = readFileSync(
+      join(ROOT, "src/lib/review/display.ts"),
+      "utf8",
+    );
+    assert.doesNotMatch(forge, /code: "ai_disclosure"/);
+    assert.match(display, /AI_DISCLOSURE_FLAG_CODE/);
+    assert.match(display, /filterComplianceFlags/);
+  });
+
   it("pixel simulator schedules content", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/ajax/pixel-simulator.ts"),

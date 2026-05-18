@@ -32,6 +32,9 @@ type PendingReviewRow = {
     user_id: string;
     title: string | null;
     status: string;
+    product_ideas: {
+      brain_verdict: string | null;
+    } | null;
   } | null;
 };
 
@@ -52,7 +55,10 @@ async function loadPendingReview(
         id,
         user_id,
         title,
-        status
+        status,
+        product_ideas (
+          brain_verdict
+        )
       )
     `,
     )
@@ -138,6 +144,11 @@ export async function approveReview(
   reviewId: string,
 ): Promise<ApproveReviewResult> {
   const pending = await loadPendingReview(supabase, userId, reviewId);
+  const brainVerdict = pending.product_listings?.product_ideas?.brain_verdict;
+  if (brainVerdict === "blocked") {
+    throw new ReviewError("Blocked products cannot be approved.", 403);
+  }
+
   const listingId = pending.listing_id;
   const now = new Date().toISOString();
 

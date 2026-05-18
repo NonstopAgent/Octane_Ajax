@@ -3,6 +3,10 @@
 import type { ReactNode } from "react";
 import { ReviewPhase2Section } from "@/components/review/review-phase2-section";
 import { getStatusLabel } from "@/lib/ajax/status";
+import {
+  getReviewApproveUi,
+  hasComplianceRisk,
+} from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -30,6 +34,7 @@ export function ReviewCard({
   onReject,
 }: ReviewCardProps) {
   const { listing, idea, phase2 } = review;
+  const approveUi = getReviewApproveUi(phase2.brain?.verdict);
   const title = listing.title ?? idea?.title ?? "Untitled product";
   const description =
     listing.description ?? idea?.description ?? "No description provided.";
@@ -49,9 +54,18 @@ export function ReviewCard({
                 tone="blue"
               />
             ) : null}
-            {phase2.generation?.complianceWarnings?.length ||
-            phase2.generation?.complianceFlags?.length ? (
+            {phase2.generation &&
+            hasComplianceRisk({
+              warnings: phase2.generation.complianceWarnings,
+              flags: phase2.generation.complianceFlags,
+            }) ? (
               <StatusBadge label="Compliance flags" tone="orange" />
+            ) : null}
+            {phase2.brain?.verdict === "needs_revision" ? (
+              <StatusBadge label="Needs revision" tone="warning" />
+            ) : null}
+            {phase2.brain?.verdict === "blocked" ? (
+              <StatusBadge label="Blocked" tone="orange" />
             ) : null}
           </div>
           <h2 className="mt-2 text-xl font-bold text-[var(--foreground)]">
@@ -75,14 +89,37 @@ export function ReviewCard({
           </Button>
           <Button
             variant="primary"
-            className="factory-control factory-control-approve h-10"
-            disabled={busy}
+            className={`factory-control h-10 ${
+              approveUi.tone === "caution"
+                ? "factory-control-approve-caution"
+                : "factory-control-approve"
+            }`}
+            disabled={busy || approveUi.disabled}
+            title={approveUi.disabledReason ?? undefined}
             onClick={onApprove}
           >
-            {busy ? "Processing…" : "Approve"}
+            {busy ? "Processing…" : approveUi.label}
           </Button>
         </div>
       </header>
+
+      {approveUi.cautionMessage ? (
+        <div
+          className="mt-4 rounded-md border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+          role="status"
+        >
+          {approveUi.cautionMessage}
+        </div>
+      ) : null}
+
+      {approveUi.disabledReason ? (
+        <div
+          className="mt-4 rounded-md border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100"
+          role="alert"
+        >
+          {approveUi.disabledReason}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[12rem_1fr]">
         <div className="space-y-3">

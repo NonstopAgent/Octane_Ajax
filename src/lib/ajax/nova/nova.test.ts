@@ -175,15 +175,20 @@ describe("Product Brain persistence mapping", () => {
 });
 
 describe("Forge idea selection", () => {
+  const safeValidation = { riskLevel: "safe" as const, violations: [] };
+  const cautionValidation = { riskLevel: "caution" as const, violations: ["vague"] };
+
   it("prefers approve_for_generation over needs_revision", () => {
     const chosen = pickForgeIdeaCandidate([
       {
         verdict: "needs_revision",
         trendScore: 99,
+        validation: safeValidation,
       },
       {
         verdict: "approve_for_generation",
         trendScore: 10,
+        validation: safeValidation,
       },
     ]);
 
@@ -192,11 +197,59 @@ describe("Forge idea selection", () => {
 
   it("picks highest trend score within the same verdict tier", () => {
     const chosen = pickForgeIdeaCandidate([
-      { verdict: "needs_revision", trendScore: 40 },
-      { verdict: "needs_revision", trendScore: 75 },
+      {
+        verdict: "needs_revision",
+        trendScore: 40,
+        validation: safeValidation,
+      },
+      {
+        verdict: "needs_revision",
+        trendScore: 75,
+        validation: safeValidation,
+      },
     ]);
 
     assert.equal(chosen.trendScore, 75);
+  });
+
+  it("allows safe needs_revision only when no approved ideas exist", () => {
+    const chosen = pickForgeIdeaCandidate([
+      {
+        verdict: "needs_revision",
+        trendScore: 80,
+        validation: safeValidation,
+      },
+    ]);
+
+    assert.equal(chosen.verdict, "needs_revision");
+  });
+
+  it("rejects needs_revision when risk level is not safe", () => {
+    assert.throws(
+      () =>
+        pickForgeIdeaCandidate([
+          {
+            verdict: "needs_revision",
+            trendScore: 99,
+            validation: cautionValidation,
+          },
+        ]),
+      /No Forge-eligible ideas/,
+    );
+  });
+
+  it("never selects blocked ideas", () => {
+    assert.throws(
+      () =>
+        pickForgeIdeaCandidate([
+          {
+            verdict: "blocked",
+            trendScore: 99,
+            validation: safeValidation,
+          },
+        ]),
+      /No Forge-eligible ideas/,
+    );
   });
 });
 

@@ -62,6 +62,63 @@ export function scoreBarPercent(value: number, invert?: boolean): number {
   return invert ? 100 - clamped : clamped;
 }
 
+export const AI_DISCLOSURE_FLAG_CODE = "ai_disclosure";
+
+/** Compliance flags only — AI disclosure is shown in its own panel. */
+export function filterComplianceFlags(flags: ComplianceFlag[]): ComplianceFlag[] {
+  return flags.filter((flag) => flag.code !== AI_DISCLOSURE_FLAG_CODE);
+}
+
+export function hasComplianceRisk(input: {
+  warnings: string[];
+  flags: ComplianceFlag[];
+}): boolean {
+  const trimmedWarnings = input.warnings.map((w) => w.trim()).filter(Boolean);
+  const riskFlags = filterComplianceFlags(input.flags);
+  return trimmedWarnings.length > 0 || riskFlags.length > 0;
+}
+
+export type ReviewApproveUi = {
+  label: string;
+  disabled: boolean;
+  disabledReason: string | null;
+  cautionMessage: string | null;
+  tone: "approve" | "caution";
+};
+
+export function getReviewApproveUi(
+  brainVerdict: ProductBrainVerdict | null | undefined,
+): ReviewApproveUi {
+  if (brainVerdict === "blocked") {
+    return {
+      label: "Approve",
+      disabled: true,
+      disabledReason: "Blocked products cannot be approved.",
+      cautionMessage: null,
+      tone: "approve",
+    };
+  }
+
+  if (brainVerdict === "needs_revision") {
+    return {
+      label: "Approve with Caution",
+      disabled: false,
+      disabledReason: null,
+      cautionMessage:
+        "This product passed safety checks but needs operator review before approval.",
+      tone: "caution",
+    };
+  }
+
+  return {
+    label: "Approve",
+    disabled: false,
+    disabledReason: null,
+    cautionMessage: null,
+    tone: "approve",
+  };
+}
+
 export function collectComplianceMessages(input: {
   warnings: string[];
   flags: ComplianceFlag[];
@@ -74,7 +131,7 @@ export function collectComplianceMessages(input: {
     if (trimmed) items.push({ message: trimmed, severity: "warning" });
   }
 
-  for (const flag of input.flags) {
+  for (const flag of filterComplianceFlags(input.flags)) {
     const trimmed = flag.message.trim();
     if (trimmed) {
       items.push({ message: trimmed, severity: flag.severity });
