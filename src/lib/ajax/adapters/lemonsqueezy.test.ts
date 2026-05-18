@@ -26,7 +26,7 @@ describe("lemonsqueezy adapter", () => {
 
   it("createProduct fetches store id then posts JSON:API with store relationship", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       const urlStr = String(url);
       calls.push({ url: urlStr, init: init ?? {} });
       if (urlStr.endsWith("/v1/stores")) {
@@ -80,7 +80,7 @@ describe("lemonsqueezy adapter", () => {
 
   it("getDefaultVariant GETs filter by product_id", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({
         data: [{ type: "variants", id: "99" }],
@@ -100,7 +100,7 @@ describe("lemonsqueezy adapter", () => {
 
   it("setVariantPrice PATCHes price in cents", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({
         data: { type: "variants", id: "99", attributes: { price: 1299 } },
@@ -125,7 +125,7 @@ describe("lemonsqueezy adapter", () => {
 
   it("uploadFile multipart posts to /v1/files with Bearer only", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({ data: { type: "files", id: "1" } });
     };
@@ -152,7 +152,7 @@ describe("lemonsqueezy adapter", () => {
 
   it("publishProduct PATCHes status published and reads buy_url", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({
         data: {

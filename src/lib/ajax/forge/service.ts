@@ -18,10 +18,20 @@ import {
 } from "@/lib/ajax/forge/types";
 import { completeJson } from "@/lib/llm/json";
 import { isOpenAiConfigured } from "@/lib/llm/openai";
+import type { LlmRunMetadata } from "@/lib/product/domain";
+
+export const FORGE_LLM_PROVIDER = "openai" as const;
+
 export type ForgeGenerationOptions = {
   client?: OpenAI;
   forceFallback?: boolean;
 };
+
+export function guardrailedPrice(suggestedPrice: number): number {
+  if (suggestedPrice < 4.99) return 4.99;
+  if (suggestedPrice > 19.99) return 14.99;
+  return suggestedPrice;
+}
 
 function mapLlmResponseToResult(
   data: ReturnType<typeof ForgeLlmResponseSchema.parse>,
@@ -49,12 +59,13 @@ function mapLlmResponseToResult(
     listingTitle: data.listingTitle.trim(),
     listingDescription: ensureAiDisclosureInCopy(data.listingDescription),
     seoTags: data.seoTags.map((t) => t.trim()),
-    suggestedPrice: data.suggestedPrice,
+    suggestedPrice: guardrailedPrice(data.suggestedPrice),
     productStructure: structure,
     complianceNotes,
     aiDisclosure,
     coverImagePrompt: data.coverImagePrompt.trim(),
     revisionNotes: data.revisionNotes.map((n) => n.trim()).filter(Boolean),
+    llmProvider: FORGE_LLM_PROVIDER,
     llmModel: model,
     promptVersion: FORGE_PROMPT_VERSION,
     tokenEstimateInput: usage?.promptTokens,
@@ -127,4 +138,27 @@ export function forgeResultToCompliance(_result: ForgeGenerationResult): {
   warnings: [];
 } {
   return { flags: [], warnings: [] };
+}
+
+/** Maps a Forge run to `product_generations` LLM columns (populated only for real LLM runs). */
+export function forgeResultToGenerationLlm(
+  result: ForgeGenerationResult,
+): LlmRunMetadata {
+  if (result.mode !== "llm") {
+    return {
+      provider: null,
+      model: null,
+      promptVersion: null,
+      tokenEstimateInput: null,
+      tokenEstimateOutput: null,
+    };
+  }
+
+  return {
+    provider: result.llmProvider ?? FORGE_LLM_PROVIDER,
+    model: result.llmModel ?? null,
+    promptVersion: result.promptVersion ?? FORGE_PROMPT_VERSION,
+    tokenEstimateInput: result.tokenEstimateInput ?? null,
+    tokenEstimateOutput: result.tokenEstimateOutput ?? null,
+  };
 }

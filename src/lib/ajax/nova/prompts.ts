@@ -26,6 +26,8 @@ ${BLOCKED_GUIDANCE}
 
 Only suggest utility-first digital downloads. Each idea must name a specific person, a specific problem, and a structured printable format with clear usefulness.
 
+Etsy printable pricing guidance: single trackers $4.99–$7.99, planners $7.99–$12.99, kits $12.99–$16.99; new shops should price toward the lower end of each band.
+
 You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify.`;
 
 export const NOVA_IDEATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:

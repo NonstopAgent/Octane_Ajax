@@ -1,6 +1,7 @@
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import {
   forgeResultToCompliance,
+  forgeResultToGenerationLlm,
   runForgeGeneration,
 } from "@/lib/ajax/forge";
 import {
@@ -658,13 +659,7 @@ async function executeForgeStep(
     productIdeaId: selectedRow.id,
     productListingId: listingRow.id,
     structure: forgeResult.productStructure,
-    llm: {
-      provider: forgeResult.mode === "llm" ? "openai" : null,
-      model: forgeResult.llmModel ?? null,
-      promptVersion: forgeResult.promptVersion,
-      tokenEstimateInput: forgeResult.tokenEstimateInput ?? null,
-      tokenEstimateOutput: forgeResult.tokenEstimateOutput ?? null,
-    },
+    llm: forgeResultToGenerationLlm(forgeResult),
     generationStatus: "queued",
     pdf: { storagePath: null, publicUrl: null },
     mockupStoragePath: null,

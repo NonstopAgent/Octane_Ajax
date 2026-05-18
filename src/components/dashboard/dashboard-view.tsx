@@ -2,22 +2,138 @@
 
 import Link from "next/link";
 import { AgentSprite } from "@/components/factory/agent-sprite";
-import { EventFeed } from "@/components/factory/event-feed";
-import { MetricsStrip } from "@/components/factory/metrics-strip";
 import { CommandHeader } from "@/components/layout/command-header";
-import { PIPELINE_STAGES } from "@/lib/ajax/constants";
-import type { FactorySnapshot } from "@/lib/factory/types";
+import { getAgentDisplayName } from "@/lib/ajax/constants";
+import { getFactoryEventMessage } from "@/lib/ajax/helpers";
+import type { PipelineFunnel } from "@/lib/factory/revenue-queries";
+import type { RevenueDashboardData } from "@/lib/factory/revenue-types";
 import type { AgentSlug } from "@/lib/ajax/types";
+import type { FactoryEvent } from "@/lib/ajax/types";
 import { ButtonLink } from "@/components/ui/button";
 
 type DashboardViewProps = {
-  snapshot: FactorySnapshot;
+  dashboard: RevenueDashboardData;
   isAuthenticated: boolean;
   configReady: boolean;
 };
 
+const FACTORY_AGENTS: AgentSlug[] = ["nova", "forge", "pixel"];
+
+const THIS_WEEK_METRICS = [
+  { key: "productsGenerated" as const, label: "Products Generated" },
+  { key: "passedQualityGate" as const, label: "Passed Quality Gate" },
+  { key: "approved" as const, label: "Approved" },
+  { key: "liveOnEtsy" as const, label: "Live on Etsy" },
+];
+
+const FUNNEL_STAGES: { key: keyof PipelineFunnel; label: string }[] = [
+  { key: "ideas", label: "Ideas" },
+  { key: "passed", label: "Passed" },
+  { key: "approved", label: "Approved" },
+  { key: "published", label: "Published" },
+];
+
+function formatTimeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "unknown";
+
+  const seconds = Math.floor((Date.now() - then) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function formatEventType(eventType: string): string {
+  return eventType.replace(/_/g, ".");
+}
+
+function RecentActivityTimeline({ events }: { events: FactoryEvent[] }) {
+  return (
+    <section className="factory-panel">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+        Recent activity
+      </h2>
+      <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+        Last 8 factory events
+      </p>
+      <ul className="mt-4 space-y-3">
+        {events.length === 0 && (
+          <li className="text-sm text-[var(--text-muted)]">
+            No events yet. Run a cycle from the factory floor.
+          </li>
+        )}
+        {events.map((event) => (
+          <li
+            key={event.id}
+            className="border-l-2 border-[var(--accent-blue)]/40 pl-3"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wide text-[var(--accent-orange)]">
+                {formatEventType(event.eventType)}
+              </span>
+              <span className="text-[10px] text-[var(--text-muted)]">
+                {formatTimeAgo(event.createdAt)}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-[var(--foreground)]">
+              {getFactoryEventMessage(event)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PipelineFunnelBar({ funnel }: { funnel: PipelineFunnel }) {
+  const max = Math.max(...FUNNEL_STAGES.map((s) => funnel[s.key]), 1);
+
+  return (
+    <section className="factory-panel" aria-label="Pipeline funnel">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+        Pipeline funnel
+      </h2>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
+        {FUNNEL_STAGES.map((stage, index) => {
+          const value = funnel[stage.key];
+          const widthPct = Math.max(8, Math.round((value / max) * 100));
+          return (
+            <div key={stage.key} className="flex min-w-0 flex-1 flex-col">
+              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                <span>{stage.label}</span>
+                <span className="font-mono text-[var(--foreground)]">{value}</span>
+              </div>
+              <div
+                className="h-8 rounded-sm bg-[var(--accent-blue)]/25"
+                title={`${stage.label}: ${value}`}
+              >
+                <div
+                  className="flex h-full items-center justify-center rounded-sm bg-[var(--accent-blue)] font-mono text-xs font-bold text-black"
+                  style={{ width: `${widthPct}%`, minWidth: value > 0 ? "2rem" : 0 }}
+                >
+                  {value > 0 ? value : null}
+                </div>
+              </div>
+              {index < FUNNEL_STAGES.length - 1 && (
+                <span className="mt-2 hidden text-center text-[var(--text-muted)] sm:block">
+                  →
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function DashboardView({
-  snapshot,
+  dashboard,
   isAuthenticated,
   configReady,
 }: DashboardViewProps) {
@@ -47,93 +163,76 @@ export function DashboardView({
   }
 
   const agentsBySlug = Object.fromEntries(
-    snapshot.agents.map((a) => [a.slug, a]),
+    dashboard.agents.map((a) => [a.slug, a]),
   );
 
   return (
     <div className="space-y-6">
       <CommandHeader
-        badge="Command center"
-        title="Autonomous factory overview"
-        description="Telemetry from Nova, Forge, Pixel, and the human review gate — one glance at pipeline health."
+        badge="Revenue dashboard"
+        title="Pipeline & revenue overview"
+        description="This week’s factory output, quality gate pass-through, and live Etsy listings — plus agent status and recent activity."
         aside={
-          <div className="flex flex-wrap gap-2">
-            <ButtonLink href="/factory" variant="primary">
-              Open factory floor
-            </ButtonLink>
-            <ButtonLink href="/review" variant="secondary">
-              Quality control
-            </ButtonLink>
-          </div>
+          <ButtonLink href="/factory" variant="primary">
+            Open factory floor
+          </ButtonLink>
         }
-        sysline="SYS.AJAX.CMD :: TELEMETRY"
+        sysline="SYS.AJAX.REV :: TELEMETRY"
       />
 
-      <MetricsStrip metrics={snapshot.metrics} />
+      <section className="factory-panel panel-glow-blue">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+          Factory status
+        </h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {FACTORY_AGENTS.map((slug) => {
+            const agent = agentsBySlug[slug];
+            return (
+              <div
+                key={slug}
+                className="flex flex-col items-center rounded-md border border-[var(--border-dim)] bg-black/25 p-4"
+              >
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  {getAgentDisplayName(slug)}
+                </p>
+                {agent ? (
+                  <AgentSprite slug={slug} status={agent.status} />
+                ) : (
+                  <p className="text-xs text-[var(--text-muted)]">Offline</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-      <div className="pipeline-ribbon factory-panel py-3">
-        {PIPELINE_STAGES.map((stage, i) => (
-          <span key={stage.id} className="inline-flex items-center gap-1">
-            {i > 0 && <span className="arrow">→</span>}
-            <span>{stage.room}</span>
-          </span>
-        ))}
-      </div>
+      <section aria-label="This week metrics">
+        <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+          This week
+        </p>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {THIS_WEEK_METRICS.map((item) => (
+            <div key={item.key} className="factory-metric command-metric">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                {item.label}
+              </p>
+              <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--foreground)]">
+                {dashboard.thisWeek[item.key]}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="factory-panel panel-glow-blue lg:col-span-2">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-            Agent units
-          </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {(["nova", "forge", "pixel"] as AgentSlug[]).map((slug) => {
-              const agent = agentsBySlug[slug];
-              return (
-                <div
-                  key={slug}
-                  className="flex flex-col items-center rounded-md border border-[var(--border-dim)] bg-black/25 p-4"
-                >
-                  {agent ? (
-                    <AgentSprite slug={slug} status={agent.status} />
-                  ) : (
-                    <p className="text-xs text-[var(--text-muted)]">Offline</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-4 text-center text-xs text-[var(--text-muted)]">
-            <Link href="/agents" className="text-[var(--accent-blue)] hover:underline">
-              View agent memory →
-            </Link>
-          </p>
-        </section>
+      <PipelineFunnelBar funnel={dashboard.funnel} />
 
-        <section className="factory-panel">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-            Quick dispatch
-          </h2>
-          <ul className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-            <li>
-              QC pending:{" "}
-              <span className="font-mono text-[var(--accent-orange)]">
-                {snapshot.metrics.pendingReviews}
-              </span>
-            </li>
-            <li>
-              Published:{" "}
-              <span className="font-mono text-[var(--accent-blue)]">
-                {snapshot.metrics.publishedListings}
-              </span>
-            </li>
-          </ul>
-          <ButtonLink href="/factory" variant="primary" className="mt-4 w-full">
-            Run from factory floor
-          </ButtonLink>
-        </section>
-      </div>
+      <RecentActivityTimeline events={dashboard.recentEvents} />
 
-      <EventFeed events={snapshot.events.slice(0, 12)} />
+      <p className="text-center text-xs text-[var(--text-muted)]">
+        <Link href="/factory" className="text-[var(--accent-blue)] hover:underline">
+          Open factory floor →
+        </Link>
+      </p>
     </div>
   );
 }

@@ -192,8 +192,10 @@ export type ForgeGenerationResult = {
   aiDisclosure: string;
   coverImagePrompt: string;
   revisionNotes: string[];
+  /** Set when {@link ForgeGenerationMode} is `llm` (e.g. `openai`). */
+  llmProvider?: string;
   llmModel?: string;
-  promptVersion: string;
+  promptVersion?: string;
   tokenEstimateInput?: number;
   tokenEstimateOutput?: number;
 };

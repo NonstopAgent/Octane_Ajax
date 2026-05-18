@@ -16,10 +16,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("etsy adapter", () => {
   it("createDraftListing posts urlencoded body with Etsy headers", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({ listing_id: 999001, url: "https://www.etsy.com/listing/999001" });
-    };
+    }) as typeof fetch;
 
     const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
     const result = await adapter.createDraftListing({
@@ -50,10 +50,10 @@ describe("etsy adapter", () => {
 
   it("uploadListingImage multipart posts JPEG to images endpoint", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({ listing_image_id: 555001 });
-    };
+    }) as typeof fetch;
 
     const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
     const result = await adapter.uploadListingImage(
@@ -77,10 +77,10 @@ describe("etsy adapter", () => {
 
   it("uploadListingFile multipart posts PDF to files endpoint", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return new Response("", { status: 200 });
-    };
+    }) as typeof fetch;
 
     const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
     await adapter.uploadListingFile(

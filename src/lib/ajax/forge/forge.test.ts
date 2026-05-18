@@ -3,16 +3,21 @@ import { describe, it } from "node:test";
 import type OpenAI from "openai";
 import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
 import {
+  FORGE_LLM_PROVIDER,
   forgeResultToCompliance,
+  forgeResultToGenerationLlm,
+  guardrailedPrice,
   runForgeGeneration,
 } from "@/lib/ajax/forge/service";
 import {
   AI_DISCLOSURE_TEXT,
   FORGE_MIN_PAGES,
+  FORGE_PROMPT_VERSION,
   ForgeLlmResponseSchema,
   ForgeProductStructureSchema,
   ensureAiDisclosureInCopy,
 } from "@/lib/ajax/forge/types";
+import { mapGenerationToDbInsert } from "@/lib/product/mappers";
 import { runNovaIdeation } from "@/lib/ajax/nova/service";
 
 function sellableForgePages() {
@@ -201,6 +206,20 @@ describe("Forge LLM schema", () => {
   });
 });
 
+describe("guardrailedPrice", () => {
+  it("floors prices below $4.99", () => {
+    assert.equal(guardrailedPrice(2.5), 4.99);
+  });
+
+  it("caps prices above $19.99 at $14.99", () => {
+    assert.equal(guardrailedPrice(24.99), 14.99);
+  });
+
+  it("passes through prices in range", () => {
+    assert.equal(guardrailedPrice(6.99), 6.99);
+  });
+});
+
 describe("runForgeGeneration", () => {
   it("uses mocked LLM output when a client is injected", async () => {
     const client = createMockOpenAiClient(JSON.stringify(validForgePayload));
@@ -216,6 +235,40 @@ describe("runForgeGeneration", () => {
     assert.equal(result.aiDisclosure, AI_DISCLOSURE_TEXT);
     assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
     assert.ok(result.productStructure.pages[0]?.userInstructions);
+    assert.equal(result.suggestedPrice, 6.99);
+    assert.equal(result.llmProvider, FORGE_LLM_PROVIDER);
+    assert.equal(result.llmModel, "gpt-4o-mini");
+    assert.equal(result.promptVersion, FORGE_PROMPT_VERSION);
+    assert.equal(result.tokenEstimateInput, 500);
+    assert.equal(result.tokenEstimateOutput, 900);
+  });
+
+  it("guardrails LLM suggested prices above $19.99", async () => {
+    const client = createMockOpenAiClient(
+      JSON.stringify({ ...validForgePayload, suggestedPrice: 24.99 }),
+    );
+    const idea = await sampleEvaluatedIdea();
+    const result = await runForgeGeneration(
+      { runId: "forge-price-cap", idea },
+      { client },
+    );
+
+    assert.equal(result.mode, "llm");
+    assert.equal(result.suggestedPrice, 14.99);
+  });
+
+  it("guardrails LLM suggested prices below $4.99", async () => {
+    const client = createMockOpenAiClient(
+      JSON.stringify({ ...validForgePayload, suggestedPrice: 2.99 }),
+    );
+    const idea = await sampleEvaluatedIdea();
+    const result = await runForgeGeneration(
+      { runId: "forge-price-floor", idea },
+      { client },
+    );
+
+    assert.equal(result.mode, "llm");
+    assert.equal(result.suggestedPrice, 4.99);
   });
 
   it("falls back deterministically when forceFallback is set", async () => {
@@ -226,9 +279,12 @@ describe("runForgeGeneration", () => {
     );
 
     assert.equal(result.mode, "fallback");
-    assert.equal(result.suggestedPrice, 24.99);
+    assert.equal(result.suggestedPrice, 9.99);
     assert.equal(result.seoTags.length, 13);
     assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
+    assert.equal(result.llmProvider, undefined);
+    assert.equal(result.llmModel, undefined);
+    assert.equal(result.promptVersion, undefined);
   });
 
   it("falls back when OPENAI_API_KEY is missing", async () => {
@@ -248,6 +304,69 @@ describe("runForgeGeneration", () => {
         process.env.OPENAI_API_KEY = previous;
       }
     }
+  });
+});
+
+describe("forgeResultToGenerationLlm", () => {
+  it("maps LLM runs to product_generations LLM columns", async () => {
+    const client = createMockOpenAiClient(JSON.stringify(validForgePayload));
+    const idea = await sampleEvaluatedIdea();
+    const result = await runForgeGeneration(
+      { runId: "forge-llm-db", idea },
+      { client },
+    );
+
+    const llm = forgeResultToGenerationLlm(result);
+    assert.equal(llm.provider, "openai");
+    assert.equal(llm.model, "gpt-4o-mini");
+    assert.equal(llm.promptVersion, FORGE_PROMPT_VERSION);
+
+    const insert = mapGenerationToDbInsert({
+      productIdeaId: "idea-1",
+      productListingId: "listing-1",
+      structure: result.productStructure,
+      llm,
+      generationStatus: "queued",
+      pdf: { storagePath: null, publicUrl: null },
+      mockupStoragePath: null,
+      complianceFlags: [],
+      complianceWarnings: [],
+    });
+
+    assert.equal(insert.llm_provider, "openai");
+    assert.equal(insert.llm_model, "gpt-4o-mini");
+    assert.equal(insert.prompt_version, FORGE_PROMPT_VERSION);
+    assert.equal(insert.token_estimate_input, 500);
+    assert.equal(insert.token_estimate_output, 900);
+  });
+
+  it("leaves LLM columns null for fallback runs", async () => {
+    const idea = await sampleEvaluatedIdea();
+    const result = await runForgeGeneration(
+      { runId: "forge-fallback-db", idea },
+      { forceFallback: true },
+    );
+
+    const llm = forgeResultToGenerationLlm(result);
+    assert.equal(llm.provider, null);
+    assert.equal(llm.model, null);
+    assert.equal(llm.promptVersion, null);
+
+    const insert = mapGenerationToDbInsert({
+      productIdeaId: "idea-1",
+      productListingId: "listing-1",
+      structure: result.productStructure,
+      llm,
+      generationStatus: "queued",
+      pdf: { storagePath: null, publicUrl: null },
+      mockupStoragePath: null,
+      complianceFlags: [],
+      complianceWarnings: [],
+    });
+
+    assert.equal(insert.llm_provider, null);
+    assert.equal(insert.llm_model, null);
+    assert.equal(insert.prompt_version, null);
   });
 });
 

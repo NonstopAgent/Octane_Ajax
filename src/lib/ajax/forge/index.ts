@@ -20,7 +20,9 @@ export {
 export { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
 
 export {
+  FORGE_LLM_PROVIDER,
   forgeResultToCompliance,
+  forgeResultToGenerationLlm,
   runForgeGeneration,
   type ForgeGenerationOptions,
 } from "@/lib/ajax/forge/service";

@@ -22,7 +22,7 @@ describe("gumroad adapter", () => {
 
   it("createProduct posts form body with Bearer auth", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({
         success: true,
@@ -31,7 +31,7 @@ describe("gumroad adapter", () => {
           short_url: "https://shop.gumroad.com/l/planner",
         },
       });
-    };
+    }) as typeof fetch;
 
     const adapter = createGumroadAdapter({
       accessToken: "test-token",
@@ -60,10 +60,10 @@ describe("gumroad adapter", () => {
 
   it("uploadProductFile multipart posts to product files endpoint", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({ success: true });
-    };
+    }) as typeof fetch;
 
     const adapter = createGumroadAdapter({
       accessToken: "test-token",
@@ -86,7 +86,7 @@ describe("gumroad adapter", () => {
 
   it("publishProduct PUTs published=true", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), init: init ?? {} });
       return jsonResponse({ success: true, product: { id: "prod_abc" } });
     };

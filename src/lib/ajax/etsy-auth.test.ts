@@ -62,7 +62,7 @@ describe("etsy-auth", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const calls: { url: string; body: string }[] = [];
-    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(url), body: String(init?.body ?? "") });
       return new Response(
         JSON.stringify({

@@ -6,9 +6,7 @@ import {
   type ForgeGenerationResult,
   type ForgeLlmProductStructure,
 } from "@/lib/ajax/forge/types";
-import { FORGE_PROMPT_VERSION } from "@/lib/ajax/forge/prompts";
-
-const FALLBACK_PRICE = 24.99;
+const FALLBACK_PRICE = 9.99;
 
 function padSeoTags(keywords: string[], concept: string): string[] {
   const base = [
@@ -286,6 +284,5 @@ export function buildForgeFallbackResult(
     aiDisclosure: AI_DISCLOSURE_TEXT,
     coverImagePrompt: String(structure.metadata?.coverImagePrompt ?? ""),
     revisionNotes: ["Deterministic Forge fallback (no LLM)."],
-    promptVersion: FORGE_PROMPT_VERSION,
   };
 }

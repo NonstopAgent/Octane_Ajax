@@ -1,18 +1,25 @@
 import { DashboardView } from "@/components/dashboard/dashboard-view";
-import { fetchFactorySnapshot } from "@/lib/factory/queries";
-import type { FactorySnapshot } from "@/lib/factory/types";
+import {
+  fetchDashboardAgents,
+  fetchRecentDashboardEvents,
+  getPipelineFunnel,
+  getPublishedListingCount,
+  getWeeklyApprovedListingCount,
+  getWeeklyGenerationCount,
+} from "@/lib/factory/revenue-queries";
+import type { RevenueDashboardData } from "@/lib/factory/revenue-types";
 import { createClient } from "@/lib/supabase/server";
 
-const EMPTY_SNAPSHOT: FactorySnapshot = {
+const EMPTY_DASHBOARD: RevenueDashboardData = {
   agents: [],
-  tasksById: {},
-  events: [],
-  metrics: {
-    productIdeas: 0,
-    pendingReviews: 0,
-    scheduledContent: 0,
-    publishedListings: 0,
+  funnel: { ideas: 0, passed: 0, approved: 0, published: 0 },
+  thisWeek: {
+    productsGenerated: 0,
+    passedQualityGate: 0,
+    approved: 0,
+    liveOnEtsy: 0,
   },
+  recentEvents: [],
 };
 
 function configReady() {
@@ -25,7 +32,7 @@ function configReady() {
 export default async function DashboardPage() {
   const ready = configReady();
   let isAuthenticated = false;
-  let snapshot = EMPTY_SNAPSHOT;
+  let dashboard = EMPTY_DASHBOARD;
 
   if (ready) {
     try {
@@ -35,7 +42,33 @@ export default async function DashboardPage() {
       } = await supabase.auth.getUser();
       if (user) {
         isAuthenticated = true;
-        snapshot = await fetchFactorySnapshot(supabase, user.id);
+        const [
+          agents,
+          funnel,
+          productsGenerated,
+          approved,
+          liveOnEtsy,
+          recentEvents,
+        ] = await Promise.all([
+          fetchDashboardAgents(supabase),
+          getPipelineFunnel(supabase, user.id),
+          getWeeklyGenerationCount(supabase, user.id),
+          getWeeklyApprovedListingCount(supabase, user.id),
+          getPublishedListingCount(supabase, user.id),
+          fetchRecentDashboardEvents(supabase, user.id, 8),
+        ]);
+
+        dashboard = {
+          agents,
+          funnel,
+          thisWeek: {
+            productsGenerated,
+            passedQualityGate: funnel.passed,
+            approved,
+            liveOnEtsy,
+          },
+          recentEvents,
+        };
       }
     } catch (err) {
       console.error("[dashboard] load failed", err);
@@ -44,7 +77,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardView
-      snapshot={snapshot}
+      dashboard={dashboard}
       isAuthenticated={isAuthenticated}
       configReady={ready}
     />
