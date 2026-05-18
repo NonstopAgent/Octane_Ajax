@@ -17,6 +17,7 @@ import {
   PixelSimulatorError,
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
+import { publishListingToGumroadOnApprove } from "@/lib/review/gumroad-on-approve";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
@@ -294,6 +295,18 @@ export async function approveReview(
     metadata: { listingId, contentJobId: jobRow.id },
   });
 
+  let listingAfterGumroad = mapListingFromDb(listingRow);
+  const gumroadPublish = await publishListingToGumroadOnApprove({
+    supabase,
+    userId,
+    listingId,
+    listing: listingAfterGumroad,
+    generation,
+  });
+  if (gumroadPublish) {
+    listingAfterGumroad = gumroadPublish.listing;
+  }
+
   let pixelResult;
   try {
     pixelResult = await runPixelMarketing(supabase, userId);
@@ -322,10 +335,18 @@ export async function approveReview(
     pixelResult.jobs.find((j) => j.listing.id === listingId) ??
     pixelResult.jobs[0];
 
+  const pixelListing = processed?.listing;
+  const listing =
+    pixelListing &&
+    pixelListing.status === "published" &&
+    listingAfterGumroad.gumroadUrl
+      ? { ...pixelListing, gumroadUrl: listingAfterGumroad.gumroadUrl, gumroadProductId: listingAfterGumroad.gumroadProductId }
+      : (pixelListing ?? listingAfterGumroad);
+
   return {
     ok: true,
     review: mapReviewFromDb(reviewRow),
-    listing: processed?.listing ?? mapListingFromDb(listingRow),
+    listing,
     contentJob: processed?.contentJob ?? mapContentJobFromDb(jobRow),
     message: pixelResult.message,
   };

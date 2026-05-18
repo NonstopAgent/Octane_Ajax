@@ -10,7 +10,7 @@ import {
   type LlmTokenUsage,
 } from "@/lib/llm/types";
 
-const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_MAX_RETRIES = 1; // 2 attempts total — keeps Nova (30 s) and Forge (60 s) well within Vercel limits
 const MAX_BACKOFF_MS = 10_000;
 const BASE_BACKOFF_MS = 500;
 

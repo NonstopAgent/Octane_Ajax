@@ -93,6 +93,17 @@ export function ReviewDashboard({
 
       showToast("success", data.message ?? "Listing approved.");
       setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      const approvedListing = data.listing as ProductListing | undefined;
+      if (approvedListing) {
+        setPublishReady((prev) => {
+          const without = prev.filter((l) => l.id !== approvedListing.id);
+          if (approvedListing.gumroadUrl) return without;
+          return [
+            { ...approvedListing, status: approvedListing.status ?? "approved" },
+            ...without,
+          ];
+        });
+      }
     } catch {
       showToast("error", "Network error during approval.");
     } finally {
@@ -155,7 +166,7 @@ export function ReviewDashboard({
         badge="Quality control"
         badgeTone="warning"
         title="Review Gate"
-        description={`${REVIEW_GATE_MICROCOPY} — approving runs Pixel for demo marketing. Add a Gumroad URL below to publish on the public /store (not Etsy). Reject with feedback for agent memory.`}
+        description={`${REVIEW_GATE_MICROCOPY} — approving runs Gumroad auto-publish when configured, then Pixel for demo marketing. Published listings with a Gumroad link appear on /store. Reject with feedback for agent memory.`}
         aside={
           <ButtonLink href="/factory" variant="secondary">
             Back to factory

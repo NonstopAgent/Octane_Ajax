@@ -272,6 +272,7 @@ export interface Database {
           platform: string;
           external_listing_id: string | null;
           gumroad_url: string | null;
+          gumroad_product_id: string | null;
           status: string;
           created_at: string;
         };
@@ -286,6 +287,7 @@ export interface Database {
           platform?: string;
           external_listing_id?: string | null;
           gumroad_url?: string | null;
+          gumroad_product_id?: string | null;
           status?: string;
           created_at?: string;
         };
@@ -300,6 +302,7 @@ export interface Database {
           platform?: string;
           external_listing_id?: string | null;
           gumroad_url?: string | null;
+          gumroad_product_id?: string | null;
           status?: string;
           created_at?: string;
         };

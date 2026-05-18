@@ -1,20 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import type { ProductListing } from "@/lib/ajax/types";
 import { getStatusLabel } from "@/lib/ajax/status";
 import { formatStorePrice } from "@/lib/store/display";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type ReviewExternalLinksPanelProps = {
   listings: ProductListing[];
-  onPublished: (listingId: string) => void;
+  onPublished?: (listingId: string) => void;
 };
 
 export function ReviewExternalLinksPanel({
   listings,
-  onPublished,
 }: ReviewExternalLinksPanelProps) {
   if (listings.length === 0) return null;
 
@@ -25,23 +22,20 @@ export function ReviewExternalLinksPanel({
           id="external-links-heading"
           className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]"
         >
-          External links — publish to store
+          External links — Gumroad
         </h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          After Review Gate approval, paste your Gumroad product URL to publish on
-          the public <span className="text-[var(--foreground)]">/store</span>{" "}
-          catalog. Pixel may still run for demo marketing; Gumroad is the
-          buyer checkout path.
+          Listings with a Gumroad checkout URL appear on the public{" "}
+          <span className="text-[var(--foreground)]">/store</span> catalog.
+          When Gumroad auto-publish is configured on the server, approval
+          creates the product for you.
         </p>
       </div>
 
       <ul className="space-y-4">
         {listings.map((listing) => (
           <li key={listing.id}>
-            <GumroadPublishCard
-              listing={listing}
-              onPublished={() => onPublished(listing.id)}
-            />
+            <GumroadListingCard listing={listing} />
           </li>
         ))}
       </ul>
@@ -49,41 +43,9 @@ export function ReviewExternalLinksPanel({
   );
 }
 
-function GumroadPublishCard({
-  listing,
-  onPublished,
-}: {
-  listing: ProductListing;
-  onPublished: () => void;
-}) {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+function GumroadListingCard({ listing }: { listing: ProductListing }) {
   const title = listing.title ?? "Untitled product";
-
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/ajax/listings/${listing.id}/publish`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gumroadUrl: url }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Publish failed.");
-        return;
-      }
-      onPublished();
-    } catch {
-      setError("Network error while publishing.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const gumroadUrl = listing.gumroadUrl?.trim();
 
   return (
     <article className="factory-panel">
@@ -102,36 +64,38 @@ function GumroadPublishCard({
         </p>
       </header>
 
-      <label className="mt-4 block">
+      {gumroadUrl ? (
+        <GumroadPublishedBlock gumroadUrl={gumroadUrl} />
+      ) : (
+        <p className="mt-4 text-sm text-[var(--text-muted)]">
+          No Gumroad URL yet. Auto-publish runs on approval when configured;
+          otherwise create the product in Gumroad and update from the operator
+          store.
+        </p>
+      )}
+    </article>
+  );
+}
+
+function GumroadPublishedBlock({ gumroadUrl }: { gumroadUrl: string }) {
+  return (
+    <div className="mt-4 space-y-3">
+      <div>
         <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
           Gumroad product URL
         </span>
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://yourname.gumroad.com/l/product-slug"
-          className="mt-1 w-full rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent-blue)] focus:outline-none"
-          disabled={busy}
-        />
-      </label>
-
-      {error ? (
-        <p className="mt-2 text-sm text-red-300" role="alert">
-          {error}
+        <p className="mt-1 break-all rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)]">
+          {gumroadUrl}
         </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Button
-          variant="primary"
-          className="factory-control factory-control-approve h-10"
-          disabled={busy || !url.trim()}
-          onClick={save}
-        >
-          {busy ? "Saving…" : "Save & publish to store"}
-        </Button>
       </div>
-    </article>
+      <a
+        href={gumroadUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--accent-blue)] px-4 text-sm font-medium text-[var(--accent-blue)] transition hover:bg-[var(--accent-blue)]/10"
+      >
+        View on Gumroad
+      </a>
+    </div>
   );
 }

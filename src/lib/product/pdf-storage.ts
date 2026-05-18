@@ -48,6 +48,21 @@ export async function uploadProductPdf(
   }
 }
 
+export async function downloadProductPdf(storagePath: string): Promise<Buffer> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage
+    .from(PRODUCT_PDFS_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) {
+    throw new Error(
+      `PDF download failed: ${error?.message ?? "missing file data"}`,
+    );
+  }
+
+  return Buffer.from(await data.arrayBuffer());
+}
+
 export async function createProductPdfSignedUrl(
   storagePath: string,
   expiresInSeconds = 300,

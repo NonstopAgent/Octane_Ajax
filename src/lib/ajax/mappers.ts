@@ -90,6 +90,7 @@ export function mapListingFromDb(row: DbListing): ProductListing {
     platform: row.platform,
     externalListingId: row.external_listing_id,
     gumroadUrl: row.gumroad_url ?? null,
+    gumroadProductId: row.gumroad_product_id ?? null,
     status: row.status as ListingStatus,
     createdAt: row.created_at,
   };

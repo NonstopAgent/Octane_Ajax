@@ -102,14 +102,15 @@ describe("demo workflow wiring", () => {
     assert.match(forgeBlock, /cycle_paused/);
   });
 
-  it("approve runs pixel then publishes to demo storefront", () => {
+  it("approve runs gumroad auto-publish then pixel for demo storefront", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/review/service.ts"),
       "utf8",
     );
     assert.match(content, /status:\s*"approved"/);
+    assert.match(content, /publishListingToGumroadOnApprove/);
     assert.match(content, /runPixelMarketing/);
-    assert.doesNotMatch(content, /etsyAdapter|publishListing/i);
+    assert.doesNotMatch(content, /etsyAdapter|publishListingWithGumroad/i);
   });
 
   it("approve does not require PDF ready", () => {

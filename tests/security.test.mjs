@@ -29,6 +29,8 @@ const FORBIDDEN_IN_CLIENT = [
   /ETSY_CLIENT_SECRET/,
   /ETSY_CLIENT_ID/,
   /PRINTIFY_API_TOKEN/,
+  /GUMROAD_ACCESS_TOKEN/,
+  /process\.env\.GUMROAD/,
   /TIKTOK_CLIENT_SECRET/,
   /IMAGE_GENERATOR_API_KEY/,
   /STRIPE_SECRET/,
@@ -154,6 +156,12 @@ describe("migrations RLS", () => {
       /create policy "product_generations_select_own"/i,
       "product_generations must have owner-scoped select policy",
     );
+  });
+
+  it("stores gumroad_product_id on product_listings", () => {
+    const migration = readMigration("20260518150000_gumroad_product_id.sql");
+    assert.match(migration, /gumroad_product_id/i);
+    assert.match(migration, /add column if not exists/i);
   });
 
   it("allows public read of published listings only (gumroad store migration)", () => {
