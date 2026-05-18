@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ProductListing } from "@/lib/ajax/types";
 import { getStatusLabel } from "@/lib/ajax/status";
 import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
@@ -13,6 +14,7 @@ type ReviewExternalLinksPanelProps = {
 
 export function ReviewExternalLinksPanel({
   listings,
+  onPublished,
 }: ReviewExternalLinksPanelProps) {
   if (listings.length === 0) return null;
 
@@ -23,20 +25,20 @@ export function ReviewExternalLinksPanel({
           id="external-links-heading"
           className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]"
         >
-          External links — Gumroad
+          External links — store checkout
         </h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Listings with a Gumroad checkout URL appear on the public{" "}
+          Listings with a checkout URL appear on the public{" "}
           <span className="text-[var(--foreground)]">/store</span> catalog.
-          When Gumroad auto-publish is configured on the server, approval
-          creates the product for you.
+          When Lemon Squeezy is configured on the server, approval creates the
+          product for you.
         </p>
       </div>
 
       <ul className="space-y-4">
         {listings.map((listing) => (
           <li key={listing.id}>
-            <GumroadListingCard listing={listing} />
+            <GumroadListingCard listing={listing} onPublished={onPublished} />
           </li>
         ))}
       </ul>
@@ -44,9 +46,15 @@ export function ReviewExternalLinksPanel({
   );
 }
 
-function GumroadListingCard({ listing }: { listing: ProductListing }) {
+function GumroadListingCard({
+  listing,
+  onPublished,
+}: {
+  listing: ProductListing;
+  onPublished?: (listingId: string) => void;
+}) {
+  const [gumroadUrl, setGumroadUrl] = useState(listing.gumroadUrl?.trim() || null);
   const title = listing.title ?? "Untitled product";
-  const gumroadUrl = listing.gumroadUrl?.trim();
 
   return (
     <article className="factory-panel">
@@ -70,14 +78,18 @@ function GumroadListingCard({ listing }: { listing: ProductListing }) {
       ) : (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
-            No Gumroad URL yet. Retry server-side publishing after confirming
-            the listing PDF is ready.
+            No checkout URL yet. Retry server-side publishing after confirming
+            the listing PDF is ready, or paste a URL manually.
           </p>
           <GumroadPublishAction
             listingId={listing.id}
             status={listing.status}
             gumroadUrl={listing.gumroadUrl}
             gumroadProductId={listing.gumroadProductId}
+            onPublished={(url) => {
+              setGumroadUrl(url);
+              onPublished?.(listing.id);
+            }}
           />
         </div>
       )}
@@ -90,7 +102,7 @@ function GumroadPublishedBlock({ gumroadUrl }: { gumroadUrl: string }) {
     <div className="mt-4 space-y-3">
       <div>
         <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-          Gumroad product URL
+          Checkout URL
         </span>
         <p className="mt-1 break-all rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)]">
           {gumroadUrl}
@@ -102,7 +114,7 @@ function GumroadPublishedBlock({ gumroadUrl }: { gumroadUrl: string }) {
         rel="noopener noreferrer"
         className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--accent-blue)] px-4 text-sm font-medium text-[var(--accent-blue)] transition hover:bg-[var(--accent-blue)]/10"
       >
-        View on Gumroad
+        Open checkout
       </a>
     </div>
   );

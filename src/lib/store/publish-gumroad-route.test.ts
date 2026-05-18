@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { GumroadAdapterError } from "@/lib/ajax/adapters/gumroad";
+import { LemonSqueezyAdapterError } from "@/lib/ajax/adapters/lemonsqueezy";
 import { handlePublishGumroadRequest } from "@/lib/store/publish-gumroad-route";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -167,6 +167,25 @@ async function responseJson(response: Response) {
   return (await response.json()) as Record<string, unknown>;
 }
 
+function lemonSqueezyAdapterMock() {
+  return {
+    async createProduct() {
+      return { product_id: "ls-product-1", buy_now_url: null };
+    },
+    async getDefaultVariant() {
+      return { variant_id: "ls-variant-1" };
+    },
+    async setVariantPrice() {},
+    async uploadFile() {},
+    async publishProduct() {
+      return {
+        product_id: "ls-product-1",
+        buy_now_url: "https://store.lemonsqueezy.com/checkout/buy/meal-prep",
+      };
+    },
+  };
+}
+
 describe("publish-gumroad route", () => {
   it("requires auth", async () => {
     const { supabase } = createMockSupabase({ userId: null });
@@ -221,32 +240,29 @@ describe("publish-gumroad route", () => {
     const response = await handlePublishGumroadRequest(context(), {
       createSupabaseClient: async () => supabase,
       gumroad: {
-        accessToken: "test-token",
+        apiKey: "test-key",
         downloadPdf: async () => Buffer.from("%PDF"),
-        createAdapter: () => ({
-          async createProduct() {
-            return {
-              product_id: "gumroad-product-1",
-              short_url: "https://gumroad.com/l/meal-prep",
-            };
-          },
-          async uploadProductFile() {},
-          async publishProduct() {},
-        }),
+        createAdapter: () => lemonSqueezyAdapterMock(),
       },
     });
     const body = await responseJson(response);
 
     assert.equal(response.status, 200);
-    assert.equal(body.url, "https://gumroad.com/l/meal-prep");
-    assert.equal(body.productId, "gumroad-product-1");
-    assert.equal(state.listings[0]?.gumroad_url, "https://gumroad.com/l/meal-prep");
-    assert.equal(state.listings[0]?.gumroad_product_id, "gumroad-product-1");
+    assert.equal(
+      body.url,
+      "https://store.lemonsqueezy.com/checkout/buy/meal-prep",
+    );
+    assert.equal(body.productId, "ls-product-1");
+    assert.equal(
+      state.listings[0]?.gumroad_url,
+      "https://store.lemonsqueezy.com/checkout/buy/meal-prep",
+    );
+    assert.equal(state.listings[0]?.gumroad_product_id, "ls-product-1");
     assert.equal(state.listings[0]?.status, "published");
     assert.equal(state.events.at(-1)?.event_type, "gumroad_published");
   });
 
-  it("does not delete or unpublish the listing when Gumroad fails", async () => {
+  it("does not delete or unpublish the listing when store publish fails", async () => {
     const { supabase, state } = createMockSupabase({
       listings: [listingRow({ status: "published" })],
     });
@@ -254,14 +270,20 @@ describe("publish-gumroad route", () => {
     const response = await handlePublishGumroadRequest(context(), {
       createSupabaseClient: async () => supabase,
       gumroad: {
-        accessToken: "test-token",
+        apiKey: "test-key",
         downloadPdf: async () => Buffer.from("%PDF"),
         createAdapter: () => ({
           async createProduct() {
-            throw new GumroadAdapterError("Gumroad unavailable.", 500);
+            throw new LemonSqueezyAdapterError("Lemon Squeezy unavailable.", 500);
           },
-          async uploadProductFile() {},
-          async publishProduct() {},
+          async getDefaultVariant() {
+            return { variant_id: "x" };
+          },
+          async setVariantPrice() {},
+          async uploadFile() {},
+          async publishProduct() {
+            return { product_id: "x", buy_now_url: "https://example.com" };
+          },
         }),
       },
     });

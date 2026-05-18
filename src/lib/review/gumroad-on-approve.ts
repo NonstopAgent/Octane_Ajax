@@ -1,9 +1,9 @@
 import {
-  createGumroadAdapter,
-  type GumroadAdapter,
-  GumroadAdapterError,
+  createLemonSqueezyAdapter,
+  type LemonSqueezyAdapter,
+  LemonSqueezyAdapterError,
   listingPriceToCents,
-} from "@/lib/ajax/adapters/gumroad";
+} from "@/lib/ajax/adapters/lemonsqueezy";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import type { ProductListing } from "@/lib/ajax/types";
 import type { ProductGeneration } from "@/lib/product/domain";
@@ -43,13 +43,13 @@ export type GumroadPublishResult =
     };
 
 export type GumroadPublishDependencies = {
-  accessToken?: string;
-  createAdapter?: (options: { accessToken: string }) => GumroadAdapter;
+  apiKey?: string;
+  createAdapter?: (options: { apiKey: string }) => LemonSqueezyAdapter;
   downloadPdf?: typeof downloadProductPdf;
 };
 
 type GumroadPublishOptions = {
-  missingTokenEventType?: "gumroad_skipped" | "gumroad_publish_failed";
+  missingTokenEventType?: "gumroad_skipped" | "store_publish_skipped";
   missingTokenStatus?: "skipped" | "failed";
   missingTokenStatusCode?: number;
   skippedMessage?: string;
@@ -75,8 +75,11 @@ export async function insertGumroadEvent(
 }
 
 /**
- * Shared Gumroad publish implementation for approval auto-publish and manual
- * repair retries. Never throws — callers decide how to surface failures.
+ * Shared store publish implementation (Lemon Squeezy) for approval auto-publish
+ * and manual repair retries. Never throws — callers decide how to surface failures.
+ *
+ * Event names keep gumroad_* for backward compatibility; values land in gumroad_url
+ * and gumroad_product_id columns.
  */
 export async function publishListingToGumroad(
   ctx: GumroadOnApproveContext,
@@ -84,25 +87,26 @@ export async function publishListingToGumroad(
 ): Promise<GumroadPublishResult> {
   const { supabase, userId, listingId, listing, generation } = ctx;
   const deps = options.dependencies ?? {};
-  const token = (deps.accessToken ?? process.env.GUMROAD_ACCESS_TOKEN)?.trim();
-  const failurePrefix = options.failureMessagePrefix ?? "Gumroad auto-publish failed";
+  const apiKey = (deps.apiKey ?? process.env.LEMONSQUEEZY_API_KEY)?.trim();
+  const failurePrefix =
+    options.failureMessagePrefix ?? "Store auto-publish failed";
 
-  if (!token) {
+  if (!apiKey) {
     const message =
       options.skippedMessage ??
-      "Gumroad publish failed: GUMROAD_ACCESS_TOKEN is not configured.";
+      "Store publish skipped (LEMONSQUEEZY_API_KEY not set).";
     await insertGumroadEvent(
       supabase,
       userId,
-      options.missingTokenEventType ?? "gumroad_publish_failed",
+      options.missingTokenEventType ?? "gumroad_skipped",
       message,
       { listingId },
     );
     return {
       ok: false,
-      status: options.missingTokenStatus ?? "failed",
+      status: options.missingTokenStatus ?? "skipped",
       message,
-      statusCode: options.missingTokenStatusCode ?? 503,
+      statusCode: options.missingTokenStatusCode ?? 200,
     };
   }
 
@@ -130,8 +134,8 @@ export async function publishListingToGumroad(
   const priceCents = listingPriceToCents(listing.price);
 
   try {
-    const adapter = (deps.createAdapter ?? createGumroadAdapter)({
-      accessToken: token,
+    const adapter = (deps.createAdapter ?? createLemonSqueezyAdapter)({
+      apiKey,
     });
     const downloadPdf = deps.downloadPdf ?? downloadProductPdf;
     const pdfBuffer = await downloadPdf(pdfPath);
@@ -140,22 +144,17 @@ export async function publishListingToGumroad(
     const created = await adapter.createProduct({
       name: title,
       description,
-      price_cents: priceCents,
-      published: false,
     });
-
-    await adapter.uploadProductFile(
-      created.product_id,
-      pdfBuffer,
-      filename,
-    );
-    await adapter.publishProduct(created.product_id);
+    const variant = await adapter.getDefaultVariant(created.product_id);
+    await adapter.setVariantPrice(variant.variant_id, priceCents);
+    await adapter.uploadFile(variant.variant_id, pdfBuffer, filename);
+    const published = await adapter.publishProduct(created.product_id);
 
     const { data: updated, error } = await supabase
       .from(TABLES.LISTINGS)
       .update({
-        gumroad_url: created.short_url,
-        gumroad_product_id: created.product_id,
+        gumroad_url: published.buy_now_url,
+        gumroad_product_id: published.product_id,
         status: "published",
       })
       .eq("id", listingId)
@@ -164,8 +163,8 @@ export async function publishListingToGumroad(
       .single();
 
     if (error || !updated) {
-      throw new GumroadAdapterError(
-        "Failed to save Gumroad fields on listing.",
+      throw new LemonSqueezyAdapterError(
+        "Failed to save store fields on listing.",
         undefined,
         error,
       );
@@ -175,29 +174,30 @@ export async function publishListingToGumroad(
       supabase,
       userId,
       "gumroad_published",
-      `Published to Gumroad: ${created.short_url}`,
+      `Published to store: ${published.buy_now_url}`,
       {
         listingId,
-        gumroadUrl: created.short_url,
-        gumroadProductId: created.product_id,
+        gumroadUrl: published.buy_now_url,
+        gumroadProductId: published.product_id,
+        provider: "lemonsqueezy",
       },
     );
 
     return {
       ok: true,
       status: "published",
-      message: "Published listing to Gumroad.",
+      message: "Published listing to Lemon Squeezy.",
       listing: mapListingFromDb(updated),
-      gumroadUrl: created.short_url,
-      gumroadProductId: created.product_id,
+      gumroadUrl: published.buy_now_url,
+      gumroadProductId: published.product_id,
     };
   } catch (err) {
     const message =
-      err instanceof GumroadAdapterError
+      err instanceof LemonSqueezyAdapterError
         ? err.message
         : err instanceof Error
           ? err.message
-          : "Unknown Gumroad error.";
+          : "Unknown store publish error.";
     const eventMessage = `${failurePrefix}: ${message}`;
 
     await insertGumroadEvent(
@@ -205,19 +205,20 @@ export async function publishListingToGumroad(
       userId,
       "gumroad_publish_failed",
       eventMessage,
-      { listingId },
+      { listingId, provider: "lemonsqueezy" },
     );
     return {
       ok: false,
       status: "failed",
       message: eventMessage,
-      statusCode: err instanceof GumroadAdapterError && err.statusCode ? 502 : 500,
+      statusCode:
+        err instanceof LemonSqueezyAdapterError && err.statusCode ? 502 : 500,
     };
   }
 }
 
 /**
- * Auto-publish to Gumroad after Review Gate approval.
+ * Auto-publish to Lemon Squeezy after Review Gate approval.
  * Never throws — failures are logged as factory events and approval continues.
  */
 export async function publishListingToGumroadOnApprove(
@@ -227,8 +228,9 @@ export async function publishListingToGumroadOnApprove(
     missingTokenEventType: "gumroad_skipped",
     missingTokenStatus: "skipped",
     missingTokenStatusCode: 200,
-    skippedMessage: "Gumroad auto-publish skipped (GUMROAD_ACCESS_TOKEN not set).",
-    failureMessagePrefix: "Gumroad auto-publish failed",
+    skippedMessage:
+      "Store auto-publish skipped (LEMONSQUEEZY_API_KEY not set).",
+    failureMessagePrefix: "Store auto-publish failed",
   });
 
   if (result.ok) {

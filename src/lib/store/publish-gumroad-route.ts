@@ -104,7 +104,7 @@ export async function handlePublishGumroadRequest(
 
   if (row.status !== "approved" && row.status !== "published") {
     const message =
-      "Only approved or published listings can be published to Gumroad.";
+      "Only approved or published listings can be published to the store.";
     await logFailure(supabase, user.id, listingId, message);
     return NextResponse.json(
       { ok: false, status: "blocked", message },
@@ -117,7 +117,7 @@ export async function handlePublishGumroadRequest(
     return NextResponse.json({
       ok: true,
       status: "already_published",
-      message: "Listing already has a Gumroad URL.",
+      message: "Listing already has a checkout URL.",
       url: existingUrl,
       productId: row.gumroad_product_id,
     });
@@ -126,7 +126,7 @@ export async function handlePublishGumroadRequest(
   const generation = await loadReadyGeneration(supabase, user.id, listingId);
   if (!generation) {
     const message =
-      "Gumroad publish blocked: listing needs a ready product PDF first.";
+      "Store publish blocked: listing needs a ready product PDF first.";
     await logFailure(supabase, user.id, listingId, message);
     return NextResponse.json(
       { ok: false, status: "missing_pdf", message },
@@ -143,7 +143,7 @@ export async function handlePublishGumroadRequest(
       generation: mapGenerationFromDb(generation),
     },
     {
-      failureMessagePrefix: "Gumroad publish failed",
+      failureMessagePrefix: "Store publish failed",
       dependencies: deps.gumroad,
     },
   );

@@ -58,18 +58,18 @@ function makeSupabase(events: unknown[]) {
 }
 
 describe("publishListingToGumroadOnApprove", () => {
-  const originalToken = process.env.GUMROAD_ACCESS_TOKEN;
+  const originalApiKey = process.env.LEMONSQUEEZY_API_KEY;
 
   afterEach(() => {
-    if (originalToken === undefined) {
-      delete process.env.GUMROAD_ACCESS_TOKEN;
+    if (originalApiKey === undefined) {
+      delete process.env.LEMONSQUEEZY_API_KEY;
     } else {
-      process.env.GUMROAD_ACCESS_TOKEN = originalToken;
+      process.env.LEMONSQUEEZY_API_KEY = originalApiKey;
     }
   });
 
-  it("logs gumroad_skipped when token is missing", async () => {
-    delete process.env.GUMROAD_ACCESS_TOKEN;
+  it("logs gumroad_skipped when Lemon Squeezy API key is missing", async () => {
+    delete process.env.LEMONSQUEEZY_API_KEY;
     const events: unknown[] = [];
 
     const result = await publishListingToGumroadOnApprove({
@@ -86,7 +86,7 @@ describe("publishListingToGumroadOnApprove", () => {
   });
 
   it("logs gumroad_publish_failed when PDF path is missing", async () => {
-    process.env.GUMROAD_ACCESS_TOKEN = "test-token";
+    process.env.LEMONSQUEEZY_API_KEY = "test-key";
     const events: unknown[] = [];
 
     const result = await publishListingToGumroadOnApprove({
@@ -106,7 +106,7 @@ describe("publishListingToGumroadOnApprove", () => {
   });
 
   it("never throws — approval flow can continue", async () => {
-    delete process.env.GUMROAD_ACCESS_TOKEN;
+    delete process.env.LEMONSQUEEZY_API_KEY;
     await assert.doesNotReject(() =>
       publishListingToGumroadOnApprove({
         supabase: makeSupabase([]) as never,
