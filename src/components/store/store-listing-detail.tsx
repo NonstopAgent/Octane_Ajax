@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ReviewPhase2Section } from "@/components/review/review-phase2-section";
 import { getStatusLabel } from "@/lib/ajax/status";
 import { formatStorePrice } from "@/lib/store/display";
+import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
 import type { StoreListingDetail } from "@/lib/store/types";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Panel } from "@/components/ui/panel";
@@ -75,6 +76,19 @@ export function StoreListingDetailView({ item }: StoreListingDetailViewProps) {
           idea={idea}
         />
       </div>
+
+      <Panel title="Gumroad checkout" glow="blue">
+        <p className="mb-4 text-sm text-[var(--text-muted)]">
+          Approved or published listings can be repaired by publishing the
+          ready PDF to Gumroad from the server.
+        </p>
+        <GumroadPublishAction
+          listingId={listing.id}
+          status={displayStatus}
+          gumroadUrl={listing.gumroadUrl}
+          gumroadProductId={listing.gumroadProductId}
+        />
+      </Panel>
     </div>
   );
 }

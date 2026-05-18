@@ -2,6 +2,7 @@
 
 import type { ProductListing } from "@/lib/ajax/types";
 import { getStatusLabel } from "@/lib/ajax/status";
+import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
 import { formatStorePrice } from "@/lib/store/display";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -67,11 +68,18 @@ function GumroadListingCard({ listing }: { listing: ProductListing }) {
       {gumroadUrl ? (
         <GumroadPublishedBlock gumroadUrl={gumroadUrl} />
       ) : (
-        <p className="mt-4 text-sm text-[var(--text-muted)]">
-          No Gumroad URL yet. Auto-publish runs on approval when configured;
-          otherwise create the product in Gumroad and update from the operator
-          store.
-        </p>
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-[var(--text-muted)]">
+            No Gumroad URL yet. Retry server-side publishing after confirming
+            the listing PDF is ready.
+          </p>
+          <GumroadPublishAction
+            listingId={listing.id}
+            status={listing.status}
+            gumroadUrl={listing.gumroadUrl}
+            gumroadProductId={listing.gumroadProductId}
+          />
+        </div>
       )}
     </article>
   );

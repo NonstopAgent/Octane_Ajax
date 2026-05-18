@@ -1,5 +1,6 @@
 import {
   createGumroadAdapter,
+  type GumroadAdapter,
   GumroadAdapterError,
   listingPriceToCents,
 } from "@/lib/ajax/adapters/gumroad";
@@ -25,7 +26,38 @@ export type GumroadOnApproveResult = {
   gumroadProductId: string;
 } | null;
 
-async function insertGumroadEvent(
+export type GumroadPublishResult =
+  | {
+      ok: true;
+      status: "published";
+      message: string;
+      listing: ProductListing;
+      gumroadUrl: string;
+      gumroadProductId: string;
+    }
+  | {
+      ok: false;
+      status: "failed" | "skipped";
+      message: string;
+      statusCode: number;
+    };
+
+export type GumroadPublishDependencies = {
+  accessToken?: string;
+  createAdapter?: (options: { accessToken: string }) => GumroadAdapter;
+  downloadPdf?: typeof downloadProductPdf;
+};
+
+type GumroadPublishOptions = {
+  missingTokenEventType?: "gumroad_skipped" | "gumroad_publish_failed";
+  missingTokenStatus?: "skipped" | "failed";
+  missingTokenStatusCode?: number;
+  skippedMessage?: string;
+  failureMessagePrefix?: string;
+  dependencies?: GumroadPublishDependencies;
+};
+
+export async function insertGumroadEvent(
   supabase: Supabase,
   userId: string,
   eventType: string,
@@ -43,36 +75,53 @@ async function insertGumroadEvent(
 }
 
 /**
- * Auto-publish to Gumroad after Review Gate approval.
- * Never throws — failures are logged as factory events and approval continues.
+ * Shared Gumroad publish implementation for approval auto-publish and manual
+ * repair retries. Never throws — callers decide how to surface failures.
  */
-export async function publishListingToGumroadOnApprove(
+export async function publishListingToGumroad(
   ctx: GumroadOnApproveContext,
-): Promise<GumroadOnApproveResult> {
+  options: GumroadPublishOptions = {},
+): Promise<GumroadPublishResult> {
   const { supabase, userId, listingId, listing, generation } = ctx;
-  const token = process.env.GUMROAD_ACCESS_TOKEN?.trim();
+  const deps = options.dependencies ?? {};
+  const token = (deps.accessToken ?? process.env.GUMROAD_ACCESS_TOKEN)?.trim();
+  const failurePrefix = options.failureMessagePrefix ?? "Gumroad auto-publish failed";
 
   if (!token) {
+    const message =
+      options.skippedMessage ??
+      "Gumroad publish failed: GUMROAD_ACCESS_TOKEN is not configured.";
     await insertGumroadEvent(
       supabase,
       userId,
-      "gumroad_skipped",
-      "Gumroad auto-publish skipped (GUMROAD_ACCESS_TOKEN not set).",
+      options.missingTokenEventType ?? "gumroad_publish_failed",
+      message,
       { listingId },
     );
-    return null;
+    return {
+      ok: false,
+      status: options.missingTokenStatus ?? "failed",
+      message,
+      statusCode: options.missingTokenStatusCode ?? 503,
+    };
   }
 
   const pdfPath = generation?.pdf.storagePath?.trim();
   if (!pdfPath) {
+    const message = `${failurePrefix}: no PDF storage path.`;
     await insertGumroadEvent(
       supabase,
       userId,
       "gumroad_publish_failed",
-      "Gumroad auto-publish failed: no PDF storage path.",
+      message,
       { listingId },
     );
-    return null;
+    return {
+      ok: false,
+      status: "failed",
+      message,
+      statusCode: 409,
+    };
   }
 
   const title = listing.title?.trim() || "Digital product";
@@ -81,8 +130,11 @@ export async function publishListingToGumroadOnApprove(
   const priceCents = listingPriceToCents(listing.price);
 
   try {
-    const adapter = createGumroadAdapter({ accessToken: token });
-    const pdfBuffer = await downloadProductPdf(pdfPath);
+    const adapter = (deps.createAdapter ?? createGumroadAdapter)({
+      accessToken: token,
+    });
+    const downloadPdf = deps.downloadPdf ?? downloadProductPdf;
+    const pdfBuffer = await downloadPdf(pdfPath);
     const filename = `${title.replace(/[^\w.-]+/g, "_").slice(0, 80) || "product"}.pdf`;
 
     const created = await adapter.createProduct({
@@ -132,6 +184,9 @@ export async function publishListingToGumroadOnApprove(
     );
 
     return {
+      ok: true,
+      status: "published",
+      message: "Published listing to Gumroad.",
       listing: mapListingFromDb(updated),
       gumroadUrl: created.short_url,
       gumroadProductId: created.product_id,
@@ -143,14 +198,46 @@ export async function publishListingToGumroadOnApprove(
         : err instanceof Error
           ? err.message
           : "Unknown Gumroad error.";
+    const eventMessage = `${failurePrefix}: ${message}`;
 
     await insertGumroadEvent(
       supabase,
       userId,
       "gumroad_publish_failed",
-      `Gumroad auto-publish failed: ${message}`,
+      eventMessage,
       { listingId },
     );
-    return null;
+    return {
+      ok: false,
+      status: "failed",
+      message: eventMessage,
+      statusCode: err instanceof GumroadAdapterError && err.statusCode ? 502 : 500,
+    };
   }
+}
+
+/**
+ * Auto-publish to Gumroad after Review Gate approval.
+ * Never throws — failures are logged as factory events and approval continues.
+ */
+export async function publishListingToGumroadOnApprove(
+  ctx: GumroadOnApproveContext,
+): Promise<GumroadOnApproveResult> {
+  const result = await publishListingToGumroad(ctx, {
+    missingTokenEventType: "gumroad_skipped",
+    missingTokenStatus: "skipped",
+    missingTokenStatusCode: 200,
+    skippedMessage: "Gumroad auto-publish skipped (GUMROAD_ACCESS_TOKEN not set).",
+    failureMessagePrefix: "Gumroad auto-publish failed",
+  });
+
+  if (result.ok) {
+    return {
+      listing: result.listing,
+      gumroadUrl: result.gumroadUrl,
+      gumroadProductId: result.gumroadProductId,
+    };
+  }
+
+  return null;
 }

@@ -6,6 +6,7 @@ import {
   pdfStatusLabel,
   pdfStatusTone,
 } from "@/lib/store/display";
+import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
 import type { StoreListingDetail } from "@/lib/store/types";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -84,23 +85,31 @@ export function StoreListingCard({ item }: StoreListingCardProps) {
         </ul>
       ) : null}
 
-      <footer className="mt-6 flex flex-wrap items-center gap-3 border-t border-[var(--border-dim)] pt-4">
-        <Link
-          href={`/operator-store/${listing.id}`}
-          className="text-sm font-semibold text-[var(--accent-blue)] hover:underline"
-        >
-          View details
-        </Link>
-        {downloadHref ? (
-          <a
-            href={downloadHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-[var(--text-muted)] hover:text-[var(--foreground)]"
+      <footer className="mt-6 space-y-4 border-t border-[var(--border-dim)] pt-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/operator-store/${listing.id}`}
+            className="text-sm font-semibold text-[var(--accent-blue)] hover:underline"
           >
-            Download PDF
-          </a>
-        ) : null}
+            View details
+          </Link>
+          {downloadHref ? (
+            <a
+              href={downloadHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-[var(--text-muted)] hover:text-[var(--foreground)]"
+            >
+              Download PDF
+            </a>
+          ) : null}
+        </div>
+        <GumroadPublishAction
+          listingId={listing.id}
+          status={displayStatus}
+          gumroadUrl={listing.gumroadUrl}
+          gumroadProductId={listing.gumroadProductId}
+        />
       </footer>
     </article>
   );
