@@ -135,6 +135,7 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
                 }
               }
               generationStatus={generation?.generationStatus ?? "pending"}
+              structure={structure ?? null}
               mockMode={mockMode && !generation?.pdf.storagePath}
             />
           ) : null}

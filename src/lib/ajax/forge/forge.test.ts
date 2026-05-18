@@ -8,10 +8,98 @@ import {
 } from "@/lib/ajax/forge/service";
 import {
   AI_DISCLOSURE_TEXT,
+  FORGE_MIN_PAGES,
   ForgeLlmResponseSchema,
+  ForgeProductStructureSchema,
   ensureAiDisclosureInCopy,
 } from "@/lib/ajax/forge/types";
 import { runNovaIdeation } from "@/lib/ajax/nova/service";
+
+function sellableForgePages() {
+  const worksheet = (
+    pageNumber: number,
+    title: string,
+    extra?: Record<string, unknown>,
+  ) => ({
+    pageNumber,
+    pageKind: "worksheet" as const,
+    title,
+    purpose: `Worksheet ${pageNumber} purpose`,
+    userInstructions: "Print and fill during the week.",
+    sections: [
+      {
+        id: `section_${pageNumber}`,
+        heading: title,
+        body: "Helper copy for the buyer.",
+        fields: [
+          { id: `f_${pageNumber}`, label: "Notes", fieldType: "notes" as const },
+        ],
+        ...extra,
+      },
+    ],
+  });
+
+  return [
+    {
+      pageNumber: 1,
+      pageKind: "cover" as const,
+      title: "Night-Shift Nurse Meal Prep Planner",
+      purpose: "Cover page",
+      userInstructions: "Start here.",
+      sections: [
+        {
+          id: "cover",
+          heading: "Cover",
+          fields: [{ id: "name", label: "Name", fieldType: "text" as const }],
+        },
+      ],
+    },
+    {
+      pageNumber: 2,
+      pageKind: "instructions" as const,
+      title: "How to use",
+      purpose: "Instructions",
+      userInstructions: "Read before printing worksheets.",
+      sections: [
+        {
+          id: "how",
+          heading: "Steps",
+          checklist: {
+            id: "steps",
+            items: ["Print", "Fill", "Review"],
+          },
+        },
+      ],
+    },
+    worksheet(3, "Weekly overview", {
+      table: {
+        id: "week",
+        headers: ["Day", "Meals", "Prep"],
+        rowCount: 7,
+      },
+    }),
+    worksheet(4, "Grocery list A"),
+    worksheet(5, "Grocery list B"),
+    worksheet(6, "Prep log"),
+    {
+      pageNumber: 7,
+      pageKind: "summary" as const,
+      title: "Week in review",
+      purpose: "Reflect on the week",
+      userInstructions: "Complete on Sunday.",
+      sections: [
+        {
+          id: "summary",
+          heading: "Reflection",
+          fields: [
+            { id: "win", label: "Best win", fieldType: "text" as const },
+          ],
+        },
+      ],
+    },
+    worksheet(8, "Bonus tracker"),
+  ];
+}
 
 const validForgePayload = {
   listingTitle: "Night-Shift Nurse Meal Prep Planner (Printable PDF)",
@@ -34,40 +122,7 @@ const validForgePayload = {
   suggestedPrice: 6.99,
   productStructure: {
     format: "planner",
-    pages: [
-      {
-        pageNumber: 1,
-        title: "Weekly overview",
-        purpose: "Plan groceries and prep blocks for the week",
-        userInstructions: "Print and fill at the start of your work week.",
-        sections: [
-          {
-            id: "week_plan",
-            heading: "This week",
-            body: "List shifts and prep windows.",
-            fields: [
-              { id: "focus", label: "Focus meals", fieldType: "text" },
-            ],
-          },
-        ],
-      },
-      {
-        pageNumber: 2,
-        title: "Grocery list",
-        purpose: "Shop once with a structured list",
-        userInstructions: "Check items as you shop; duplicate for biweekly runs.",
-        sections: [
-          {
-            id: "groceries",
-            heading: "Items",
-            fields: [
-              { id: "item", label: "Item", fieldType: "text" },
-              { id: "got_it", label: "Purchased", fieldType: "checkbox" },
-            ],
-          },
-        ],
-      },
-    ],
+    pages: sellableForgePages(),
   },
   complianceNotes: ["Verify no medical claims in listing copy."],
   aiDisclosure: AI_DISCLOSURE_TEXT,
@@ -104,8 +159,17 @@ describe("Forge LLM schema", () => {
   it("parses valid mocked Forge output with exactly 13 seo tags", () => {
     const parsed = ForgeLlmResponseSchema.parse(validForgePayload);
     assert.equal(parsed.seoTags.length, 13);
-    assert.equal(parsed.productStructure.pages.length, 2);
+    assert.ok(parsed.productStructure.pages.length >= FORGE_MIN_PAGES);
     assert.ok(parsed.listingDescription.includes(AI_DISCLOSURE_TEXT));
+  });
+
+  it("rejects thin 2-page productStructure", () => {
+    assert.throws(() =>
+      ForgeProductStructureSchema.parse({
+        format: "planner",
+        pages: validForgePayload.productStructure.pages.slice(0, 2),
+      }),
+    );
   });
 
   it("rejects malformed productStructure (duplicate page numbers)", () => {
@@ -117,9 +181,10 @@ describe("Forge LLM schema", () => {
           pages: [
             validForgePayload.productStructure.pages[0],
             {
-              ...validForgePayload.productStructure.pages[1],
+              ...validForgePayload.productStructure.pages[1]!,
               pageNumber: 1,
             },
+            ...validForgePayload.productStructure.pages.slice(2),
           ],
         },
       }),
@@ -149,7 +214,7 @@ describe("runForgeGeneration", () => {
     assert.equal(result.seoTags.length, 13);
     assert.ok(result.listingDescription.includes(AI_DISCLOSURE_TEXT));
     assert.equal(result.aiDisclosure, AI_DISCLOSURE_TEXT);
-    assert.equal(result.productStructure.pages.length, 2);
+    assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
     assert.ok(result.productStructure.pages[0]?.userInstructions);
   });
 
@@ -163,7 +228,7 @@ describe("runForgeGeneration", () => {
     assert.equal(result.mode, "fallback");
     assert.equal(result.suggestedPrice, 24.99);
     assert.equal(result.seoTags.length, 13);
-    assert.ok(result.productStructure.pages.length >= 2);
+    assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
   });
 
   it("falls back when OPENAI_API_KEY is missing", async () => {
@@ -177,6 +242,7 @@ describe("runForgeGeneration", () => {
         idea,
       });
       assert.equal(result.mode, "fallback");
+      assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
     } finally {
       if (previous !== undefined) {
         process.env.OPENAI_API_KEY = previous;

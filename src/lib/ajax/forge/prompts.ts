@@ -1,5 +1,10 @@
 import { PRODUCT_FORMATS } from "@/lib/ajax/product-brain/rules";
-import { AI_DISCLOSURE_TEXT, FORGE_PROMPT_VERSION } from "@/lib/ajax/forge/types";
+import {
+  AI_DISCLOSURE_TEXT,
+  FORGE_MAX_PAGES,
+  FORGE_MIN_PAGES,
+  FORGE_PROMPT_VERSION,
+} from "@/lib/ajax/forge/types";
 
 export { FORGE_PROMPT_VERSION };
 
@@ -33,6 +38,7 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
     "pages": [
       {
         "pageNumber": 1,
+        "pageKind": "cover|instructions|worksheet|summary (optional but recommended)",
         "title": "string",
         "purpose": "string — what this page helps the buyer do",
         "userInstructions": "string — how to print/fill/use this page",
@@ -48,7 +54,17 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
                 "fieldType": "text|checkbox|number|date|notes",
                 "placeholder": "optional"
               }
-            ]
+            ],
+            "table": {
+              "id": "table_id",
+              "headers": ["Col A", "Col B", ...],
+              "rowCount": 6
+            },
+            "checklist": {
+              "id": "list_id",
+              "title": "optional",
+              "items": ["item one", "item two", ...]
+            }
           }
         ]
       }
@@ -61,8 +77,11 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
 }
 
 Rules:
-- productStructure.pages: 2–8 pages with unique pageNumber values starting at 1
-- Each page needs at least one section with fields where useful
+- productStructure.pages: ${FORGE_MIN_PAGES}–${FORGE_MAX_PAGES} pages with unique pageNumber values starting at 1
+- Required page types: cover, instructions/how-to-use, at least TWO worksheet pages with rich fields/tables/checklists, and a summary/review page
+- Each page needs a clear title, purpose, and userInstructions
+- Each section needs fields, a table, or a checklist — avoid empty sections
+- Thin 2–3 page outlines are rejected — build a complete sellable printable pack
 - seoTags: exactly 13 strings
 - Utility-first printable — not physical merch`;
 
@@ -91,5 +110,5 @@ Product idea:
 - Seed keywords: ${input.keywords.join(", ")}
 - Nova reasoning: ${input.reasoning}
 
-Deliver a cohesive digital download the buyer can print and use immediately.`;
+Deliver a cohesive ${FORGE_MIN_PAGES}+ page digital download the buyer can print and use immediately. Include cover, instructions, multiple worksheets, and a summary page.`;
 }

@@ -1,5 +1,6 @@
 import type { GenerationStatus } from "@/lib/supabase/schema";
-import type { PdfAssetPlaceholders } from "@/lib/product/domain";
+import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
+import { isSellableStructure } from "@/lib/product/structure-to-document";
 import {
   buildProductPdfDownloadHref,
   getReviewPdfUiState,
@@ -15,6 +16,7 @@ type ReviewPdfPanelProps = {
   generationId: string | null;
   pdf: PdfAssetPlaceholders;
   generationStatus: GenerationStatus;
+  structure?: ProductStructure | null;
   mockMode?: boolean;
 };
 
@@ -46,6 +48,7 @@ export function ReviewPdfPanel({
   generationId,
   pdf,
   generationStatus,
+  structure,
   mockMode = false,
 }: ReviewPdfPanelProps) {
   const uiState = getReviewPdfUiState({
@@ -58,6 +61,10 @@ export function ReviewPdfPanel({
     generationId && uiState === "download"
       ? buildProductPdfDownloadHref(generationId)
       : null;
+
+  const pageCount = structure?.pages.length ?? structure?.pageCount ?? 0;
+  const format = structure?.format;
+  const sellable = structure ? isSellableStructure(structure) : null;
 
   return (
     <section
@@ -76,6 +83,21 @@ export function ReviewPdfPanel({
           tone={statusTone(generationStatus)}
         />
       </div>
+
+      {structure && pageCount > 0 ? (
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
+          <div>
+            <dt className="font-mono uppercase tracking-wider">Pages</dt>
+            <dd className="text-[var(--foreground)]">{pageCount}</dd>
+          </div>
+          {format ? (
+            <div>
+              <dt className="font-mono uppercase tracking-wider">Format</dt>
+              <dd className="text-[var(--foreground)]">{format}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
 
       <div className={pdfPreviewSlot}>
         {downloadHref ? (
@@ -128,6 +150,24 @@ export function ReviewPdfPanel({
           </>
         )}
       </div>
+
+      <details className="mt-3 rounded-md border border-[var(--border-dim)] bg-black/20 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--text-muted)]">
+          Sellability checklist (placeholder)
+        </summary>
+        <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-[var(--text-muted)]">
+          <li>
+            {sellable === null
+              ? "Page count unknown until Forge structure loads"
+              : sellable
+                ? `${pageCount} pages — meets 6+ page guidance`
+                : `${pageCount} pages — below 6-page sellable target`}
+          </li>
+          <li>Cover, instructions, worksheets, and summary present</li>
+          <li>Tables, checklists, or fillable fields on worksheet pages</li>
+          <li>Human review required before any future store publish</li>
+        </ul>
+      </details>
     </section>
   );
 }

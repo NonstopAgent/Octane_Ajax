@@ -25,6 +25,21 @@ export interface ProductPageDescription {
   /** How the buyer should print, fill, or use this page. */
   userInstructions?: string;
   sections: ProductSectionDescription[];
+  metadata?: {
+    pageKind?: "cover" | "intro" | "worksheet" | "summary" | "content";
+  };
+}
+
+export interface ProductTableDescription {
+  id?: string;
+  headers: string[];
+  rowCount?: number;
+}
+
+export interface ProductChecklistDescription {
+  id?: string;
+  title?: string;
+  items: string[];
 }
 
 export interface ProductSectionDescription {
@@ -32,6 +47,8 @@ export interface ProductSectionDescription {
   heading: string;
   body?: string;
   fields?: ProductFieldDescription[];
+  table?: ProductTableDescription;
+  checklist?: ProductChecklistDescription;
 }
 
 export interface ProductFieldDescription {

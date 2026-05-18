@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PDFDocument } from "pdf-lib";
 import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
+import { FORGE_MIN_PAGES } from "@/lib/ajax/forge/types";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import { generateProductPdf } from "@/lib/product/pdf-generator";
 import {
   buildProductPdfStoragePath,
   parseProductPdfStoragePath,
 } from "@/lib/product/pdf-storage";
-import { productStructureToDocument } from "@/lib/product/structure-to-document";
+import {
+  isSellableStructure,
+  productStructureToDocument,
+} from "@/lib/product/structure-to-document";
 import {
   buildProductPdfDownloadHref,
   getReviewPdfUiState,
@@ -40,18 +44,65 @@ const sampleIdea: NovaEvaluatedIdea = {
 };
 
 describe("productStructureToDocument", () => {
-  it("maps Forge structure into a printable document", async () => {
+  it("maps Forge fallback structure into a sellable printable document", async () => {
     const forge = buildForgeFallbackResult(sampleIdea);
+    assert.ok(isSellableStructure(forge.productStructure));
+    assert.ok(forge.productStructure.pages.length >= FORGE_MIN_PAGES);
+
     const doc = productStructureToDocument(forge.productStructure, {
       title: forge.listingTitle,
-      footerNote: forge.aiDisclosure,
+      disclosureNote: forge.aiDisclosure,
       audience: sampleIdea.targetBuyer,
     });
 
-    assert.ok(doc.pages.length >= 2);
+    assert.ok(doc.pages.length >= FORGE_MIN_PAGES);
     assert.equal(doc.title, forge.listingTitle);
+    assert.equal(doc.pages[0]?.kind, "cover");
+    assert.ok(doc.disclosureNote?.includes("AI tools assisted"));
+
     const bytes = await generateProductPdf(doc);
     assert.equal(new TextDecoder().decode(bytes.subarray(0, 5)), "%PDF-");
+    const loaded = await PDFDocument.load(bytes);
+    assert.ok(loaded.getPageCount() >= FORGE_MIN_PAGES);
+  });
+
+  it("still maps thin legacy two-page structures", async () => {
+    const doc = productStructureToDocument(
+      {
+        format: "planner",
+        pageCount: 2,
+        pages: [
+          {
+            pageNumber: 1,
+            title: "Page one",
+            purpose: "Legacy",
+            sections: [
+              {
+                id: "a",
+                heading: "Section",
+                fields: [{ id: "f", label: "Field", fieldType: "text" }],
+              },
+            ],
+          },
+          {
+            pageNumber: 2,
+            title: "Page two",
+            purpose: "Legacy",
+            sections: [
+              {
+                id: "b",
+                heading: "Section B",
+                fields: [{ id: "g", label: "Goal", fieldType: "text" }],
+              },
+            ],
+          },
+        ],
+      },
+      { title: "Legacy Pack" },
+    );
+
+    assert.equal(doc.pages.length, 2);
+    const bytes = await generateProductPdf(doc);
     const loaded = await PDFDocument.load(bytes);
     assert.ok(loaded.getPageCount() >= 1);
   });

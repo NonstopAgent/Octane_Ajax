@@ -291,7 +291,7 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 | Mode | When | Behavior |
 |------|------|----------|
 | **LLM** | `OPENAI_API_KEY` set and OpenAI call succeeds | Forge uses `completeJson` + Zod (`src/lib/ajax/forge/`) for listing copy, exactly **13** SEO tags, printable page structure, compliance notes, and AI disclosure |
-| **Fallback** | Key missing or API/validation failure | Deterministic listing from the selected idea, **$24.99** price, minimal 2-page structure, padded SEO tags |
+| **Fallback** | Key missing or API/validation failure | Deterministic listing from the selected idea, **$24.99** price, **8-page** sellable structure (cover, instructions, worksheets, summary), padded SEO tags |
 
 **Persisted artifacts**
 
@@ -303,7 +303,20 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 
 > AI tools assisted in drafting and structuring this digital product. The seller reviewed and customized the final product.
 
-**PDF flow (Milestone 2):** After Forge persists `product_generations`, `pdf-service` maps structure → `pdf-generator` → uploads to private Supabase Storage bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) to redirect to a short-lived signed URL. If upload fails, the cycle still pauses at Review Gate (`generation_status: failed`, factory event `pdf_generation_failed`). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
+**PDF flow (Milestone 2.5):** After Forge persists `product_generations`, `pdf-service` maps structure → `pdf-generator` → uploads to private Supabase Storage bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) to redirect to a short-lived signed URL. If upload fails, the cycle still pauses at Review Gate (`generation_status: failed`, factory event `pdf_generation_failed`). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
+
+### PDF quality standard
+
+Sellable utility printables target **6–12 pages** with:
+
+- **Cover** — title, audience, format
+- **Instructions** — how to print and use the pack
+- **Worksheets** — tables, checklists, and fillable fields (at least two worksheet pages)
+- **Summary / review** — reflection and close-out
+
+Forge Zod validation enforces this for LLM output (`forge-generation-v2`). The PDF renderer adds page numbers, a light footer line, and a **single AI disclosure** on the final page (not repeated on every page). Thinner legacy structures (2–3 pages) still render for backwards compatibility but are flagged in Review.
+
+**Human review is required** before any future storefront or payment integration — no auto-publish.
 
 ### Product PDF storage setup
 

@@ -20,6 +20,7 @@ export type GenerateProductPdfInput = {
   listingTitle: string;
   listingDescription?: string;
   footerNote?: string;
+  disclosureNote?: string;
   audience?: string;
 };
 
@@ -65,6 +66,7 @@ export async function generateAndStoreProductPdf(
     listingTitle,
     listingDescription,
     footerNote,
+    disclosureNote,
     audience,
   } = input;
 
@@ -80,6 +82,7 @@ export async function generateAndStoreProductPdf(
       title: listingTitle,
       subtitle: listingDescription,
       audience,
+      disclosureNote: disclosureNote ?? footerNote,
       footerNote,
     });
 
