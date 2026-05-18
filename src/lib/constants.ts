@@ -40,7 +40,12 @@ export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", description: "Factory overview" },
   { href: "/factory", label: "Factory", description: "Live floor map" },
   { href: "/review", label: "Review", description: "Human-in-the-loop" },
-  { href: "/store", label: "Store", description: "Internal storefront" },
+  { href: "/store", label: "Store", description: "Public catalog" },
+  {
+    href: "/operator-store",
+    label: "Operator store",
+    description: "Internal approved listings",
+  },
   { href: "/agents", label: "Agents", description: "Memory & learning" },
   { href: "/settings", label: "Settings", description: "Demo & config" },
 ] as const;

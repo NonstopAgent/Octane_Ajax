@@ -253,7 +253,7 @@ draft → pending_review → approved → published
 | Human approve | Review service → Pixel simulator | Listing `approved` → job `scheduled` → listing **`published`** (demo storefront) |
 | Run Pixel (retry) | Pixel simulator | Re-processes any remaining `queued` jobs; same schedule + publish behavior |
 
-**Guards:** Staged Nova/Forge does not invoke Pixel or publish (`simulator.ts` pauses at Review Gate). PDF is manual on `/review`. Rejected listings cannot reach `published`. Blocked Product Brain verdicts cannot be approved server-side.
+**Guards:** Staged Nova/Forge does not invoke Pixel or publish (`simulator.ts` pauses at Review Gate). PDF auto-starts server-side after Forge (`scheduleGenerationPdfAfterForge`); Review can retry manually. Approval requires a ready PDF and passing sellability checklist (demo/simulated ideas bypass). Rejected listings cannot reach `published`. Blocked Product Brain verdicts cannot be approved server-side.
 
 ### Vercel-safe staged pipeline
 
@@ -261,7 +261,7 @@ draft → pending_review → approved → published
 |------|--------|---------------|------|
 | Nova | `POST /api/ajax/run-nova` | 30s | LLM ideation → `product_ideas` |
 | Forge | `POST /api/ajax/run-forge` | 60s | LLM listing + `product_generations` (queued) + `review_queue` |
-| PDF | `POST /api/ajax/product-generations/:id/generate-pdf` | 60s | Manual from Review Gate only |
+| PDF | `POST /api/ajax/product-generations/:id/generate-pdf` | 60s | Auto after Forge (server); manual retry on `/review` |
 
 Splitting Nova and Forge avoids a single Vercel function timing out while Forge LLM runs after Nova completes. Forge failure runs `recoverFromCycleFailure` (agents idle, `cycle_failed` event). Retry after **Reset factory** or fix env, then run the cycle again; Forge can reuse the latest Nova `runId`.
 
@@ -385,7 +385,7 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 
 > AI tools assisted in drafting and structuring this digital product. The seller reviewed and customized the final product.
 
-**PDF flow (Milestone 2.5):** Run-cycle stops at Review Gate with `generation_status: queued` and a `pdf_queued` factory event — PDF work does **not** block the cycle (avoids Vercel timeouts). The factory dashboard fires `POST /api/ajax/product-generations/:id/generate-pdf` in the background; `pdf-service` maps structure → `pdf-generator` → uploads to private bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) for a short-lived signed URL. Failures set `generation_status: failed` and log `pdf_generation_failed`; the listing still waits at Review Gate. **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
+**PDF flow (Milestone 2.5):** Run-cycle stops at Review Gate with `generation_status: queued` and a `pdf_queued` factory event — PDF work does **not** block the Forge response (avoids Vercel timeouts). Immediately after insert, `scheduleGenerationPdfAfterForge` runs `runGenerationPdfJob` in a fire-and-forget server task (logs `pdf_auto_triggered` / `pdf_trigger_failed`; no HTTP self-call). `pdf-service` maps structure → `pdf-generator` → uploads to private bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) for a short-lived signed URL; failed jobs can be retried via `POST …/generate-pdf`. Failures set `generation_status: failed` and log `pdf_generation_failed`; approval stays blocked until PDF is ready (except demo/simulated bypass). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
 
 ### PDF quality standard
 

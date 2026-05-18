@@ -39,6 +39,7 @@ type ReviewRowWithJoins = {
     mockup_url: string | null;
     platform: string;
     external_listing_id: string | null;
+    gumroad_url: string | null;
     status: string;
     created_at: string;
     product_ideas: IdeaRowJoined | null;

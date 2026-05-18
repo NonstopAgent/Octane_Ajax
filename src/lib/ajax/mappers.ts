@@ -89,6 +89,7 @@ export function mapListingFromDb(row: DbListing): ProductListing {
     mockupUrl: row.mockup_url,
     platform: row.platform,
     externalListingId: row.external_listing_id,
+    gumroadUrl: row.gumroad_url ?? null,
     status: row.status as ListingStatus,
     createdAt: row.created_at,
   };

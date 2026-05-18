@@ -15,7 +15,9 @@ function configReady() {
   );
 }
 
-export default async function StoreListingPage({ params }: StoreListingPageProps) {
+export default async function OperatorStoreListingPage({
+  params,
+}: StoreListingPageProps) {
   const { listingId } = await params;
   const ready = configReady();
 
@@ -43,7 +45,7 @@ export default async function StoreListingPage({ params }: StoreListingPageProps
           This storefront listing is private to your operator account.
         </p>
         <Link
-          href={`/login?next=/store/${listingId}`}
+          href={`/login?next=/operator-store/${listingId}`}
           className="mt-4 inline-flex text-sm font-semibold text-[var(--accent-blue)] hover:underline"
         >
           Sign in →
@@ -56,7 +58,7 @@ export default async function StoreListingPage({ params }: StoreListingPageProps
   try {
     item = await fetchStoreListingById(supabase, user.id, listingId);
   } catch (err) {
-    console.error("[store listing page] failed to load", err);
+    console.error("[operator store listing page] failed to load", err);
   }
 
   if (!item) {

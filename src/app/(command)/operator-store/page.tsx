@@ -9,7 +9,7 @@ function configReady() {
   );
 }
 
-export default async function StorePage() {
+export default async function OperatorStorePage() {
   const ready = configReady();
   let isAuthenticated = false;
   let listings: Awaited<ReturnType<typeof fetchStoreListings>> = [];
@@ -26,7 +26,7 @@ export default async function StorePage() {
         listings = await fetchStoreListings(supabase, user.id);
       }
     } catch (err) {
-      console.error("[store page] failed to load listings", err);
+      console.error("[operator store page] failed to load listings", err);
     }
   }
 

@@ -3,10 +3,12 @@
 import type { ReactNode } from "react";
 import { ReviewPhase2Section } from "@/components/review/review-phase2-section";
 import { getStatusLabel } from "@/lib/ajax/status";
+import { buildSellabilityInputFromGeneration } from "@/lib/review/approval-guards";
 import {
   getReviewApproveUi,
   hasComplianceRisk,
 } from "@/lib/review/display";
+import { evaluateSellabilityChecklist } from "@/lib/review/sellability";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import { Button } from "@/components/ui/button";
@@ -40,7 +42,12 @@ export function ReviewCard({
   onGenerationChange,
 }: ReviewCardProps) {
   const { listing, idea, phase2 } = review;
-  const approveUi = getReviewApproveUi(phase2.brain?.verdict);
+  const sellability = evaluateSellabilityChecklist(
+    buildSellabilityInputFromGeneration(phase2.generation, idea?.rawPayload),
+  );
+  const approveUi = getReviewApproveUi(phase2.brain?.verdict, {
+    sellabilityAllPassed: sellability.allPassed,
+  });
   const title = listing.title ?? idea?.title ?? "Untitled product";
   const description =
     listing.description ?? idea?.description ?? "No description provided.";

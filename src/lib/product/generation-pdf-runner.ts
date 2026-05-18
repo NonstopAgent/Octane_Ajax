@@ -174,3 +174,55 @@ export async function runGenerationPdfJob(
 
   return pdfResult;
 }
+
+/**
+ * Fire-and-forget PDF job after Forge — does not block the forge response.
+ * Logs `pdf_auto_triggered` on start and `pdf_trigger_failed` if the job cannot complete.
+ */
+export function scheduleGenerationPdfAfterForge(
+  supabase: Supabase,
+  userId: string,
+  generationId: string,
+  listingId: string,
+): void {
+  void (async () => {
+    await insertFactoryEvent(supabase, userId, {
+      event_type: "pdf_auto_triggered",
+      agent_slug: AGENT_SLUGS.FORGE,
+      room: ROOM_SLUGS.DESIGN_PRESS,
+      message: "PDF generation auto-started after Forge.",
+      metadata: { generationId, listingId },
+    });
+
+    try {
+      const result = await runGenerationPdfJob(supabase, userId, generationId);
+      if (!result.ok) {
+        await insertFactoryEvent(supabase, userId, {
+          event_type: "pdf_trigger_failed",
+          agent_slug: AGENT_SLUGS.FORGE,
+          room: ROOM_SLUGS.DESIGN_PRESS,
+          message: "Auto PDF trigger failed after Forge.",
+          metadata: {
+            generationId,
+            listingId,
+            error: result.error,
+          },
+        });
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "PDF auto-trigger failed.";
+      await insertFactoryEvent(supabase, userId, {
+        event_type: "pdf_trigger_failed",
+        agent_slug: AGENT_SLUGS.FORGE,
+        room: ROOM_SLUGS.DESIGN_PRESS,
+        message: "Auto PDF trigger failed after Forge.",
+        metadata: {
+          generationId,
+          listingId,
+          error: message,
+        },
+      });
+    }
+  })();
+}

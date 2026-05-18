@@ -145,7 +145,9 @@ export function ReviewPdfPanel({
       generationStatus === "queued" ||
       generationStatus === "failed");
   const showGenerating =
-    !mockMode && generationId && generationStatus === "generating";
+    !mockMode &&
+    Boolean(generationId) &&
+    (generationStatus === "generating" || generationStatus === "queued");
 
   return (
     <section
@@ -231,13 +233,15 @@ export function ReviewPdfPanel({
               {mockMode
                 ? "PDF placeholder — generation not run yet"
                 : showGenerating
-                  ? "PDF is generating…"
+                  ? "PDF generating..."
                   : "PDF asset pending"}
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               {mockMode
                 ? "Demo cycle has no printable file. Approve only after you have verified copy and structure."
-                : "Generate the printable PDF before download — approval does not require a ready file."}
+                : showGenerating
+                  ? "Forge queued PDF generation automatically. Approval unlocks once the file is ready."
+                  : "Generate the printable PDF before approval, or wait for the auto-run after Forge."}
             </p>
             {showGenerate && !showGenerating ? (
               <Button
@@ -253,7 +257,7 @@ export function ReviewPdfPanel({
             {showGenerating ? (
               <p className="mt-3 inline-flex items-center gap-2 text-xs text-[var(--text-muted)]">
                 <Spinner />
-                Building printable asset…
+                PDF generating...
               </p>
             ) : null}
           </>

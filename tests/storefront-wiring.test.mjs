@@ -7,10 +7,8 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const STORE_ROUTE_CANDIDATES = [
-  "src/app/(command)/store/page.tsx",
   "src/app/store/page.tsx",
-  "src/app/(store)/page.tsx",
-  "src/app/(public)/store/page.tsx",
+  "src/app/(command)/operator-store/page.tsx",
 ];
 
 function readIfExists(relativePath) {
@@ -53,7 +51,10 @@ describe("storefront prototype wiring", () => {
   it("includes public /store route when storefront UI is present", () => {
     const storeRoute = STORE_ROUTE_CANDIDATES.map(readIfExists).find(Boolean);
     assert.ok(storeRoute, "expected storefront page under src/app");
-    assert.match(storeRoute, /fetchStoreListings|STORE_LISTING_STATUSES/i);
+    assert.match(
+      storeRoute,
+      /fetchPublicStoreListings|fetchStoreListings|STORE_LISTING_STATUSES/i,
+    );
     assert.doesNotMatch(storeRoute, /createServiceClient/);
     assert.doesNotMatch(storeRoute, /STRIPE|stripe\.com/i);
   });

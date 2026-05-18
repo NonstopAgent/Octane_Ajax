@@ -28,8 +28,8 @@ export function StoreDashboard({
     return (
       <Callout
         title="Sign in required"
-        body="The storefront prototype is private. Sign in to browse approved and published listings you own."
-        href="/login?next=/store"
+        body="The operator storefront is private. Sign in to browse approved and published listings you own."
+        href="/login?next=/operator-store"
         hrefLabel="Sign in"
       />
     );
@@ -46,13 +46,18 @@ export function StoreDashboard({
         badge="Internal channel"
         badgeTone="blue"
         title="Storefront"
-        description="Prototype catalog of listings that passed the Review Gate — approved and demo-published units for your operator account only. PDFs download through authenticated API routes, not public buckets."
+        description="Operator catalog of listings that passed the Review Gate. Publish to the public /store with a Gumroad link from the Review Gate external-links section."
         aside={
-          <ButtonLink href="/review" variant="secondary">
-            Review Gate
-          </ButtonLink>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink href="/store" variant="secondary">
+              Public store
+            </ButtonLink>
+            <ButtonLink href="/review" variant="secondary">
+              Review Gate
+            </ButtonLink>
+          </div>
         }
-        sysline="SYS.AJAX.STORE :: PRIVATE"
+        sysline="SYS.AJAX.STORE :: OPERATOR"
       />
 
       <div className="factory-panel border-[var(--border-dim)] px-4 py-3">

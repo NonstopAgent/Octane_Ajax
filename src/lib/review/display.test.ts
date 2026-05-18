@@ -75,6 +75,14 @@ describe("review display helpers", () => {
     assert.equal(ui.cautionMessage, null);
   });
 
+  it("disables approve when sellability checklist fails", () => {
+    const ui = getReviewApproveUi("approve_for_generation", {
+      sellabilityAllPassed: false,
+    });
+    assert.equal(ui.disabled, true);
+    assert.match(ui.disabledReason ?? "", /Fix sellability issues/i);
+  });
+
   it("exposes download UI only when PDF is ready with a storage path", () => {
     assert.equal(
       getReviewPdfUiState({

@@ -13,6 +13,7 @@ import {
   normalizeProductCategory,
   normalizeProductFormat,
 } from "@/lib/ajax/nova/types";
+import { scheduleGenerationPdfAfterForge } from "@/lib/product/generation-pdf-runner";
 import { mapGenerationToDbInsert, mapIdeaBrainFromDb } from "@/lib/product/mappers";
 import type { ProductIdea as DbIdea } from "@/lib/supabase/database.types";
 import {
@@ -693,6 +694,13 @@ async function executeForgeStep(
         runId,
       },
     }),
+  );
+
+  scheduleGenerationPdfAfterForge(
+    supabase,
+    userId,
+    generationRow.id,
+    listingRow.id,
   );
 
   const { data: reviewRow, error: reviewError } = await supabase

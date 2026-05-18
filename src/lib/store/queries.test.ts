@@ -20,6 +20,7 @@ function createMockSupabase(userId: string) {
     status: "published",
     price: 24.99,
     platform: "demo",
+    gumroad_url: null,
     product_idea_id: "idea-1",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

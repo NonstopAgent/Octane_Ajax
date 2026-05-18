@@ -68,6 +68,7 @@ export interface ProductListing {
   mockupUrl: string | null;
   platform: string;
   externalListingId: string | null;
+  gumroadUrl: string | null;
   status: ListingStatus;
   createdAt: string;
 }

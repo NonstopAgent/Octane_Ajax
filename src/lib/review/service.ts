@@ -4,6 +4,14 @@ import {
   mapListingFromDb,
   mapReviewFromDb,
 } from "@/lib/ajax/mappers";
+import { mapGenerationFromDb } from "@/lib/product/mappers";
+import {
+  ApprovalBlockedError,
+  assertPdfReadyForApproval,
+  assertSellabilityForApproval,
+  buildSellabilityInputFromGeneration,
+  isDemoReviewBypass,
+} from "@/lib/review/approval-guards";
 import {
   NoQueuedContentError,
   PixelSimulatorError,
@@ -37,8 +45,10 @@ type PendingReviewRow = {
     user_id: string;
     title: string | null;
     status: string;
+    platform: string;
     product_ideas: {
       brain_verdict: string | null;
+      raw_payload: unknown;
     } | null;
   } | null;
 };
@@ -61,8 +71,10 @@ async function loadPendingReview(
         user_id,
         title,
         status,
+        platform,
         product_ideas (
-          brain_verdict
+          brain_verdict,
+          raw_payload
         )
       )
     `,
@@ -84,6 +96,32 @@ async function loadPendingReview(
   }
 
   return data as PendingReviewRow;
+}
+
+function parseIdeaRawPayload(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return raw as Record<string, unknown>;
+}
+
+async function loadGenerationForListing(
+  supabase: Supabase,
+  userId: string,
+  listingId: string,
+) {
+  const { data, error } = await supabase
+    .from(TABLES.GENERATIONS)
+    .select("*")
+    .eq("user_id", userId)
+    .eq("product_listing_id", listingId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new ReviewError("Failed to load product generation.", 500, error);
+  }
+
+  return data ? mapGenerationFromDb(data) : null;
 }
 
 async function insertEvent(
@@ -156,6 +194,32 @@ export async function approveReview(
   }
 
   const listingId = pending.listing_id;
+  const ideaRawPayload = parseIdeaRawPayload(
+    pending.product_listings?.product_ideas?.raw_payload,
+  );
+  const isDemo = isDemoReviewBypass({ ideaRawPayload });
+  const generation = await loadGenerationForListing(
+    supabase,
+    userId,
+    listingId,
+  );
+
+  try {
+    assertPdfReadyForApproval({
+      isDemo,
+      generationStatus: generation?.generationStatus,
+      pdfStoragePath: generation?.pdf.storagePath,
+    });
+    assertSellabilityForApproval(
+      buildSellabilityInputFromGeneration(generation, ideaRawPayload),
+      isDemo,
+    );
+  } catch (err) {
+    if (err instanceof ApprovalBlockedError) {
+      throw new ReviewError(err.message, err.statusCode);
+    }
+    throw err;
+  }
   const now = new Date().toISOString();
 
   const { data: reviewRow, error: reviewError } = await supabase

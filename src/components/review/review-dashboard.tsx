@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { RejectModal } from "@/components/review/reject-modal";
 import { ReviewCard } from "@/components/review/review-card";
+import { ReviewExternalLinksPanel } from "@/components/review/review-external-links-panel";
+import type { ProductListing } from "@/lib/ajax/types";
 import {
   ToastBanner,
   type ToastState,
@@ -18,16 +20,19 @@ import { ButtonLink } from "@/components/ui/button";
 
 type ReviewDashboardProps = {
   initialReviews: PendingReviewDetail[];
+  publishReadyListings: ProductListing[];
   isAuthenticated: boolean;
   configReady: boolean;
 };
 
 export function ReviewDashboard({
   initialReviews,
+  publishReadyListings: initialPublishReady,
   isAuthenticated,
   configReady,
 }: ReviewDashboardProps) {
   const [reviews, setReviews] = useState(initialReviews);
+  const [publishReady, setPublishReady] = useState(initialPublishReady);
   const [actingOn, setActingOn] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PendingReviewDetail | null>(
     null,
@@ -150,7 +155,7 @@ export function ReviewDashboard({
         badge="Quality control"
         badgeTone="warning"
         title="Review Gate"
-        description={`${REVIEW_GATE_MICROCOPY} — approving runs Pixel and publishes to the demo storefront (not Etsy). Reject with feedback for agent memory.`}
+        description={`${REVIEW_GATE_MICROCOPY} — approving runs Pixel for demo marketing. Add a Gumroad URL below to publish on the public /store (not Etsy). Reject with feedback for agent memory.`}
         aside={
           <ButtonLink href="/factory" variant="secondary">
             Back to factory
@@ -204,6 +209,13 @@ export function ReviewDashboard({
           ))}
         </ul>
       )}
+
+      <ReviewExternalLinksPanel
+        listings={publishReady}
+        onPublished={(listingId) =>
+          setPublishReady((prev) => prev.filter((l) => l.id !== listingId))
+        }
+      />
 
       <RejectModal
         open={Boolean(rejectTarget)}

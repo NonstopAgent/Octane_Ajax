@@ -161,6 +161,7 @@ describe("demo workflow wiring", () => {
     );
     assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
     assert.match(simulator, /pdf_queued/);
+    assert.match(simulator, /scheduleGenerationPdfAfterForge/);
     assert.match(simulator, /generationStatus:\s*"queued"/);
     assert.match(simulator, /cycle_paused/);
     assert.match(simulator, /pending_review/);
@@ -184,6 +185,8 @@ describe("demo workflow wiring", () => {
     assert.match(route, /downloadPath/);
     assert.match(runner, /generateAndStoreProductPdf/);
     assert.match(runner, /pdf_generation_failed/);
+    assert.match(runner, /scheduleGenerationPdfAfterForge/);
+    assert.match(runner, /pdf_auto_triggered/);
     assert.doesNotMatch(route, /createServiceClient/);
   });
 
@@ -194,8 +197,24 @@ describe("demo workflow wiring", () => {
     );
     assert.match(panel, /Generate PDF/);
     assert.match(panel, /Retry PDF generation/);
+    assert.match(panel, /PDF generating/);
     assert.match(panel, /buildProductPdfGenerateHref/);
     assert.doesNotMatch(panel, /createServiceClient/);
+  });
+
+  it("approve review enforces PDF and sellability guards", () => {
+    const service = readFileSync(
+      join(ROOT, "src/lib/review/service.ts"),
+      "utf8",
+    );
+    const guards = readFileSync(
+      join(ROOT, "src/lib/review/approval-guards.ts"),
+      "utf8",
+    );
+    assert.match(service, /assertPdfReadyForApproval/);
+    assert.match(service, /assertSellabilityForApproval/);
+    assert.match(guards, /isDemoReviewBypass/);
+    assert.match(guards, /raw\.simulated === true/);
   });
 
   it("staged steps recovery idles agents on failure", () => {

@@ -271,6 +271,7 @@ export interface Database {
           mockup_url: string | null;
           platform: string;
           external_listing_id: string | null;
+          gumroad_url: string | null;
           status: string;
           created_at: string;
         };
@@ -284,6 +285,7 @@ export interface Database {
           mockup_url?: string | null;
           platform?: string;
           external_listing_id?: string | null;
+          gumroad_url?: string | null;
           status?: string;
           created_at?: string;
         };
@@ -297,6 +299,7 @@ export interface Database {
           mockup_url?: string | null;
           platform?: string;
           external_listing_id?: string | null;
+          gumroad_url?: string | null;
           status?: string;
           created_at?: string;
         };

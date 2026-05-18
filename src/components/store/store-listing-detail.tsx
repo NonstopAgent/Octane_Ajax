@@ -21,10 +21,10 @@ export function StoreListingDetailView({ item }: StoreListingDetailViewProps) {
     <div className="space-y-6">
       <nav aria-label="Breadcrumb">
         <Link
-          href="/store"
+          href="/operator-store"
           className="text-sm font-medium text-[var(--accent-blue)] hover:underline"
         >
-          ← Back to storefront
+          ← Back to operator storefront
         </Link>
       </nav>
 

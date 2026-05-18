@@ -89,6 +89,7 @@ export type ReviewApproveUi = {
 
 export function getReviewApproveUi(
   brainVerdict: ProductBrainVerdict | null | undefined,
+  options?: { sellabilityAllPassed?: boolean },
 ): ReviewApproveUi {
   if (brainVerdict === "blocked") {
     return {
@@ -98,6 +99,22 @@ export function getReviewApproveUi(
       cautionMessage: null,
       tone: "approve",
     };
+  }
+
+  if (options?.sellabilityAllPassed === false) {
+    const blocked: ReviewApproveUi = {
+      label:
+        brainVerdict === "needs_revision" ? "Approve with Caution" : "Approve",
+      disabled: true,
+      disabledReason: "Fix sellability issues before approving.",
+      cautionMessage: null,
+      tone: brainVerdict === "needs_revision" ? "caution" : "approve",
+    };
+    if (brainVerdict === "needs_revision") {
+      blocked.cautionMessage =
+        "This product passed safety checks but needs operator review before approval.";
+    }
+    return blocked;
   }
 
   if (brainVerdict === "needs_revision") {

@@ -43,6 +43,9 @@ export default function HomePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/factory">View factory floor</ButtonLink>
+            <ButtonLink href="/store" variant="secondary">
+              Browse store
+            </ButtonLink>
             <ButtonLink href="/review" variant="secondary">
               Review queue
             </ButtonLink>

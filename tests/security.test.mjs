@@ -155,6 +155,27 @@ describe("migrations RLS", () => {
       "product_generations must have owner-scoped select policy",
     );
   });
+
+  it("allows public read of published listings only (gumroad store migration)", () => {
+    const migration = readMigration(
+      "20260517180000_gumroad_public_store.sql",
+    );
+    assert.match(migration, /gumroad_url/i);
+    assert.match(
+      migration,
+      /create policy "product_listings_select_published_public"/i,
+    );
+    assert.match(migration, /using \(status = 'published'\)/i);
+    assert.match(
+      migration,
+      /create policy "product_ideas_select_published_listing"/i,
+    );
+    assert.doesNotMatch(
+      migration,
+      /disable row level security/i,
+      "gumroad migration must not disable RLS",
+    );
+  });
 });
 
 describe("supabase browser barrel", () => {

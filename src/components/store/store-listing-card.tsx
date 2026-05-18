@@ -50,7 +50,7 @@ export function StoreListingCard({ item }: StoreListingCardProps) {
           </div>
           <h2 className="mt-2 text-lg font-bold text-[var(--foreground)]">
             <Link
-              href={`/store/${listing.id}`}
+              href={`/operator-store/${listing.id}`}
               className="hover:text-[var(--accent-blue)]"
             >
               {title}
@@ -86,7 +86,7 @@ export function StoreListingCard({ item }: StoreListingCardProps) {
 
       <footer className="mt-6 flex flex-wrap items-center gap-3 border-t border-[var(--border-dim)] pt-4">
         <Link
-          href={`/store/${listing.id}`}
+          href={`/operator-store/${listing.id}`}
           className="text-sm font-semibold text-[var(--accent-blue)] hover:underline"
         >
           View details
