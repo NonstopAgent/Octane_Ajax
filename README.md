@@ -135,7 +135,7 @@ With `.env.local` filled in, run:
 npm run check:demo
 ```
 
-This checks: env vars, all 8 pipeline tables exist, Nova/Forge/Pixel seeds, email auth, and an authenticated RLS insert. If it fails with **“Could not find the table”**, apply the migrations below first.
+This always checks env vars and all 8 pipeline tables. Without `DEMO_TEST_EMAIL` / `DEMO_TEST_PASSWORD` in `.env.local`, it skips live auth and still passes when schema is OK (with warnings). With those vars set to an **existing** Supabase test user, it also verifies sign-in, Nova/Forge/Pixel seeds, and an authenticated RLS insert. For the full UI demo, sign up or sign in at **`/login`** (main manual path). If it fails with **“Could not find the table”**, apply the migrations below first.
 
 ## Troubleshooting (local demo)
 
@@ -143,7 +143,9 @@ This checks: env vars, all 8 pipeline tables exist, Nova/Forge/Pixel seeds, emai
 |---------|----------------|-----|
 | `check:demo` — table does not exist | Migrations not applied | Run both SQL files in Supabase **SQL Editor** (project ref from your URL, e.g. `znhvutqoghugbzpkjale`) |
 | Sign up works but sign-in fails | Email confirmation required | Supabase → **Authentication → Providers → Email** → disable **Confirm email**, or confirm user in **Authentication → Users** |
-| `check:demo` auth rate limit | Too many test signups from automation | Wait ~1 hour, or sign up once at `/login`; optional `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` for seed-only checks |
+| `check:demo` skips auth (WARN) | `DEMO_TEST_EMAIL` / `DEMO_TEST_PASSWORD` not set | Normal for schema-only check; add both for full auth + RLS probe, or use `/login` for manual demo |
+| `check:demo` auth fails | Bad credentials or email confirmation | Create user at `/login`, then set `DEMO_TEST_EMAIL` / `DEMO_TEST_PASSWORD`; disable **Confirm email** or confirm user in Supabase |
+| `check:demo` auth rate limit | Too many auth attempts | Wait ~1 hour; optional `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` for seed-only checks when live auth is skipped |
 | `check:demo` table missing | Migrations not on this project | Run `supabase link --project-ref <ref>` then `supabase db push` |
 | `/factory` redirects to `/login` immediately | No session cookie | Sign in at `/login`; check browser allows cookies for `localhost` |
 | API returns **401 Unauthorized** | Session not sent to API | Hard refresh after login; ensure you use the same origin (`localhost:3000`) |
@@ -194,6 +196,8 @@ supabase gen types typescript --linked > src/lib/supabase/database.types.ts
 | `NEXT_PUBLIC_SUPABASE_URL` | Client + server | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + server | Anon key (RLS enforced) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Optional admin bypass (not used by default routes) |
+| `DEMO_TEST_EMAIL` / `DEMO_TEST_PASSWORD` | Scripts only | Optional — `npm run check:demo` live auth + RLS (existing test user) |
+| `OPENAI_API_KEY` | Server only | Optional — enables Nova LLM ideation (see below) |
 | `ETSY_*`, `PRINTIFY_*`, `TIKTOK_*`, `IMAGE_GENERATOR_*` | Server only | Future adapter integrations |
 
 Copy `.env.example` → `.env.local`. Never prefix integration secrets with `NEXT_PUBLIC_`.
@@ -232,7 +236,7 @@ Also try **Reject** on `/review` to feed **agent memory** (`/agents`).
 | `npm run lint` | ESLint |
 | `npm run test` | Security smoke + domain + demo wiring tests |
 | `npm run check:security` | Client secret scan + RLS migration check |
-| `npm run check:demo` | Live Supabase schema + auth + RLS probe (needs `.env.local`) |
+| `npm run check:demo` | Live Supabase schema probe (`.env.local`); optional `DEMO_TEST_*` for auth + RLS |
 
 ## Project layout
 
@@ -257,26 +261,39 @@ supabase/migrations/
 tests/                  # security + demo wiring smoke tests
 ```
 
-## Phase 2 architecture (foundation — not wired to Nova yet)
+## Nova ideation: LLM mode vs fallback demo mode
 
-Phase 2 adds deterministic foundations beside the existing demo simulators. **Nova, Forge, and Pixel still use the simulated pipeline** until a deliberate wiring step; `POST /api/ajax/run-cycle` does not call the LLM layer.
+`POST /api/ajax/run-cycle` runs **Nova → Forge → Review Gate**. Only **Nova** may call the LLM layer; **Forge** and **Pixel** stay deterministic/simulated.
+
+| Mode | When | Behavior |
+|------|------|----------|
+| **LLM** | `OPENAI_API_KEY` set on the server and the OpenAI call succeeds | Nova uses `completeJson` + Zod (`src/lib/ajax/nova/`) to propose utility-first digital download ideas |
+| **Fallback** | Key missing, API error, or every LLM idea blocked by Product Brain | Reuses the original deterministic demo catalog (`buildFakeProductIdeas`) |
+
+**Product Brain gates every idea before it hits the pipeline:**
+
+1. Each raw idea is scored and validated (`scoreProductIdea`, `validateProductIdea`, `getProductBrainVerdict`).
+2. `blocked` → not inserted into `product_ideas`.
+3. `approve_for_generation` → preferred for Forge selection.
+4. `needs_revision` → may be saved with a lower `trend_score` penalty; `brain_verdict` and snapshots persist via `src/lib/product/mappers.ts`.
+
+**Forge selection:** among saved ideas, Forge picks `approve_for_generation` first (highest `trend_score` / brain total), then `needs_revision` if none approved. Listing creation and Review Gate behavior are unchanged.
+
+Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to try LLM mode. Omit it to run the same demo path as before.
+
+## Phase 2 architecture
 
 | Lane | Location | Status |
 |------|----------|--------|
+| Nova ideation | `src/lib/ajax/nova/` | LLM when configured + Product Brain gate; deterministic fallback |
 | Product Brain | `src/lib/ajax/product-brain/` | Rules + scoring + verdicts (tested) |
 | Product data model | `src/lib/product/domain.ts`, `mappers.ts`, migration `20260517140000_phase2_product_generation.sql` | Brain columns on `product_ideas`, `product_generations` table, RLS |
-| LLM foundation | `src/lib/llm/` (`openai.ts`, `json.ts`, `cost.ts`) | Server-only OpenAI wrapper, `completeJson` + Zod, retries, cost stubs — **not** imported by run-cycle |
-| PDF prototype | `src/lib/product/pdf-generator.ts` | `pdf-lib` printable from `ProductDocument` — **not** connected to Forge/storage yet |
-| Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders (mock-friendly) |
+| LLM foundation | `src/lib/llm/` | Server-only OpenAI wrapper — used by Nova only |
+| Forge / Pixel | `src/lib/ajax/simulator.ts` | Simulated listing + media (no LLM) |
+| PDF prototype | `src/lib/product/pdf-generator.ts` | `pdf-lib` printable — not connected to Forge/storage yet |
+| Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders |
 
-**Product Brain** scores and filters ideas before any future LLM generation:
-
-- Validates category eligibility and blocked claims (medical, legal, financial, trademark, guaranteed results, government impersonation)
-- Scores specificity, buyer clarity, usefulness, and competition/compliance risk
-- Returns a verdict: `approve_for_generation`, `needs_revision`, or `blocked`
-- Snapshots can persist on `product_ideas` (`brain_score`, `brain_validation`, `brain_verdict`, `brain_evaluated_at`) via `src/lib/product/mappers.ts`
-
-**Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components and migrations for RLS).
+**Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components; `simulator.ts` imports Nova, not `@/lib/llm` directly).
 
 The human **Review Gate** remains mandatory — no live publishing without approval.
 

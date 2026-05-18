@@ -10,18 +10,24 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ENV_PATH = join(ROOT, ".env.local");
 
-function loadEnv() {
-  if (!existsSync(ENV_PATH)) {
-    return { ok: false, error: "Missing .env.local" };
-  }
+function parseEnvFile(path) {
   const vars = {};
-  for (const line of readFileSync(ENV_PATH, "utf8").split("\n")) {
+  if (!existsSync(path)) return vars;
+  for (const line of readFileSync(path, "utf8").split("\n")) {
     const t = line.trim();
     if (!t || t.startsWith("#")) continue;
     const i = t.indexOf("=");
     if (i === -1) continue;
     vars[t.slice(0, i).trim()] = t.slice(i + 1).trim();
   }
+  return vars;
+}
+
+function loadEnv() {
+  if (!existsSync(ENV_PATH)) {
+    return { ok: false, error: "Missing .env.local" };
+  }
+  const vars = parseEnvFile(ENV_PATH);
   const url = vars.NEXT_PUBLIC_SUPABASE_URL;
   const anon = vars.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
@@ -30,7 +36,22 @@ function loadEnv() {
       error: "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY required",
     };
   }
-  return { ok: true, url, anon };
+  const demoEmail =
+    process.env.DEMO_TEST_EMAIL?.trim() ||
+    vars.DEMO_TEST_EMAIL?.trim() ||
+    "";
+  const demoPassword =
+    process.env.DEMO_TEST_PASSWORD?.trim() ||
+    vars.DEMO_TEST_PASSWORD?.trim() ||
+    "";
+  return {
+    ok: true,
+    url,
+    anon,
+    demoEmail,
+    demoPassword,
+    hasDemoAuth: Boolean(demoEmail && demoPassword),
+  };
 }
 
 const REQUIRED_TABLES = [
@@ -55,14 +76,7 @@ function loadServiceRoleKey() {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return process.env.SUPABASE_SERVICE_ROLE_KEY;
   }
-  if (!existsSync(ENV_PATH)) return null;
-  for (const line of readFileSync(ENV_PATH, "utf8").split("\n")) {
-    const t = line.trim();
-    if (t.startsWith("SUPABASE_SERVICE_ROLE_KEY=")) {
-      return t.slice("SUPABASE_SERVICE_ROLE_KEY=".length).trim();
-    }
-  }
-  return null;
+  return parseEnvFile(ENV_PATH).SUPABASE_SERVICE_ROLE_KEY || null;
 }
 
 async function verifyAgentsAndRls(env, session) {
@@ -135,9 +149,23 @@ async function verifyWithServiceRole(env) {
   }
   console.log("OK  ajax_agents seeded (verified with service role)");
   console.log(
-    "WARN Auth API skipped — add operator via /login (signup rate limit or no session).",
+    "WARN Authenticated RLS probe skipped — sign in at /login or set DEMO_TEST_EMAIL/PASSWORD for an existing test user.",
   );
   return true;
+}
+
+async function finishWithoutLiveAuth(env, reason) {
+  console.warn(`WARN ${reason}`);
+  console.warn(
+    "WARN Live auth sign-in skipped — schema/table checks still ran. For full auth + RLS probe, set DEMO_TEST_EMAIL and DEMO_TEST_PASSWORD in .env.local (existing Supabase user). Manual demo path: /login.",
+  );
+  if (await verifyWithServiceRole(env)) {
+    console.log("\nSchema checks passed (no live auth). Complete operator setup at /login.");
+    return;
+  }
+  console.log(
+    "\nSchema checks passed (no live auth). Optional: SUPABASE_SERVICE_ROLE_KEY in .env.local to verify agent seeds without signing in.",
+  );
 }
 
 async function main() {
@@ -171,74 +199,46 @@ async function main() {
   }
   console.log("OK  All pipeline tables exist in API schema");
 
-  // Auth smoke: reuse a stable test operator (avoids signup rate limits)
-  const testEmail =
-    process.env.DEMO_READINESS_EMAIL ?? "octane.readiness@example.com";
-  const testPassword = process.env.DEMO_READINESS_PASSWORD ?? "OctaneDemo123!";
-
-  let session = null;
+  if (!env.hasDemoAuth) {
+    await finishWithoutLiveAuth(
+      env,
+      "DEMO_TEST_EMAIL and DEMO_TEST_PASSWORD not set in .env.local",
+    );
+    return;
+  }
 
   const { data: signIn, error: signInErr } =
     await supabase.auth.signInWithPassword({
-      email: testEmail,
-      password: testPassword,
+      email: env.demoEmail,
+      password: env.demoPassword,
     });
 
-  if (!signInErr && signIn.session) {
-    session = signIn.session;
-  } else {
-    const { data: signUp, error: signUpErr } = await supabase.auth.signUp({
-      email: testEmail,
-      password: testPassword,
-    });
-
-    if (signUpErr) {
-      const rateLimited = signUpErr.message.includes("rate limit");
-      if (rateLimited && (await verifyWithServiceRole(env))) {
-        console.log("\nSchema + seed OK. Complete auth manually at /login.");
-        return;
-      }
-      console.error("FAIL: auth —", signUpErr.message);
-      if (signInErr) console.error("      signIn:", signInErr.message);
-      if (rateLimited) {
-        console.error(
-          "      → Supabase signup rate limit. Wait ~1h or sign up once at /login.",
-        );
-        console.error(
-          "      → Optional: set SUPABASE_SERVICE_ROLE_KEY in .env.local for CI seed checks.",
-        );
-      }
-      process.exit(1);
+  if (signInErr || !signIn.session) {
+    const rateLimited = signInErr?.message?.includes("rate limit");
+    if (rateLimited && (await verifyWithServiceRole(env))) {
+      console.log("\nSchema + seed OK. Complete auth manually at /login.");
+      return;
     }
-
-    session = signUp.session;
-    if (!session) {
-      const retry = await supabase.auth.signInWithPassword({
-        email: testEmail,
-        password: testPassword,
-      });
-      if (retry.error || !retry.data.session) {
-        console.error(
-          "FAIL: Could not obtain session after sign-up.",
-          retry.error?.message ?? signInErr?.message,
-        );
-        console.error(
-          "      → Disable email confirmation in Supabase Auth → Providers → Email",
-        );
-        process.exit(1);
-      }
-      session = retry.data.session;
-    }
-  }
-
-  if (!session?.access_token || !session.user) {
+    console.error("FAIL: auth —", signInErr?.message ?? "no session returned");
     console.error(
-      "FAIL: No session after sign up/in (email confirmation likely required)",
+      "      → Use an existing Supabase user (create once at /login). Set DEMO_TEST_EMAIL and DEMO_TEST_PASSWORD in .env.local.",
+    );
+    console.error(
+      "      → If email confirmation is on: Supabase → Authentication → Providers → Email → disable Confirm email, or confirm the user.",
     );
     process.exit(1);
   }
 
-  console.log("OK  Auth sign-up/sign-in works for test user");
+  const session = signIn.session;
+
+  if (!session?.access_token || !session.user) {
+    console.error(
+      "FAIL: No session after sign-in (email confirmation likely required)",
+    );
+    process.exit(1);
+  }
+
+  console.log("OK  Auth sign-in works for DEMO_TEST user");
   await verifyAgentsAndRls(env, session);
 
   console.log("\nLive Supabase checks passed. Next: npm run dev → /login → full demo workflow.");

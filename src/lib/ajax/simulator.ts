@@ -1,5 +1,10 @@
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import {
+  mapNovaIdeasToDbInserts,
+  pickForgeIdeaCandidate,
+  runNovaIdeation,
+} from "@/lib/ajax/nova";
+import {
   mapEventFromDb,
   mapIdeaFromDb,
   mapListingFromDb,
@@ -64,14 +69,6 @@ export type AjaxCycleSummary = {
   tasks: ReturnType<typeof mapTaskFromDb>[];
 };
 
-type FakeIdeaDraft = {
-  niche: string;
-  title: string;
-  description: string;
-  seo_keywords: string[];
-  trend_score: number;
-};
-
 const AGENT_SEED = [
   {
     name: "Nova",
@@ -105,43 +102,6 @@ const AGENT_HOME_ROOM: Record<string, string> = {
   [AGENT_SLUGS.FORGE]: ROOM_SLUGS.DESIGN_PRESS,
   [AGENT_SLUGS.PIXEL]: ROOM_SLUGS.MEDIA_STUDIO,
 };
-
-/** Deterministic-ish fake ideas; scores differ so Forge has a clear winner. */
-function buildFakeProductIdeas(runId: string): FakeIdeaDraft[] {
-  const suffix = runId.slice(0, 8);
-  return [
-    {
-      niche: "Cottagecore desk accessories",
-      title: `Mushroom Desk Organizer — ${suffix}`,
-      description:
-        "Ceramic-style organizer with soft earth tones. Targets remote workers who want calm, aesthetic workspaces.",
-      seo_keywords: ["cottagecore", "desk organizer", "mushroom decor", "WFH aesthetic"],
-      trend_score: 72,
-    },
-    {
-      niche: "Pet parent humor",
-      title: `Dog CEO Mug — ${suffix}`,
-      description:
-        "Playful mug positioning the pet as company leadership. Strong gift potential for dog owners.",
-      seo_keywords: ["dog mom", "funny mug", "pet gift", "office humor"],
-      trend_score: 88,
-    },
-    {
-      niche: "Retro gaming nostalgia",
-      title: `Pixel Heart Poster — ${suffix}`,
-      description:
-        "Minimal 8-bit heart print for game rooms and streaming setups. Pairs with neon LED decor trends.",
-      seo_keywords: ["retro gaming", "pixel art", "streamer room", "nostalgia decor"],
-      trend_score: 65,
-    },
-  ];
-}
-
-function pickHighestTrendIdea<T extends { trend_score: number }>(ideas: T[]): T {
-  return ideas.reduce((best, row) =>
-    Number(row.trend_score) > Number(best.trend_score) ? row : best,
-  );
-}
 
 async function assertAgentsExist(supabase: Supabase) {
   const { data, error } = await supabase
@@ -391,23 +351,18 @@ async function executeAjaxCycle(
   );
   await sleep(CYCLE_PACING.agentWorkMs);
 
-  const ideaDrafts = buildFakeProductIdeas(runId);
+  const novaResult = await runNovaIdeation(runId);
+  const ideaInserts = mapNovaIdeasToDbInserts(userId, runId, novaResult);
+
+  if (ideaInserts.length === 0) {
+    throw new SimulatorError(
+      "Nova produced no product ideas that passed Product Brain.",
+    );
+  }
 
   const { data: ideaRows, error: ideasError } = await supabase
     .from(TABLES.IDEAS)
-    .insert(
-      ideaDrafts.map((draft) => ({
-        user_id: userId,
-        source: "nova",
-        niche: draft.niche,
-        title: draft.title,
-        description: draft.description,
-        seo_keywords: draft.seo_keywords,
-        trend_score: draft.trend_score,
-        status: "idea",
-        raw_payload: { simulated: true, runId },
-      })),
-    )
+    .insert(ideaInserts)
     .select();
 
   if (ideasError || !ideaRows?.length) {
@@ -415,12 +370,17 @@ async function executeAjaxCycle(
   }
 
   const ideas = ideaRows.map(mapIdeaFromDb);
-  const selectedRow = pickHighestTrendIdea(ideaRows);
+
+  const forgePick = pickForgeIdeaCandidate(novaResult.ideas);
+  const forgeIndex = novaResult.ideas.indexOf(forgePick);
+  const selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
 
   tasks.push(
     await completeTask(supabase, novaTaskRow.id, {
       ideaIds: ideaRows.map((i) => i.id),
       ideaCount: ideaRows.length,
+      ideationMode: novaResult.mode,
+      promptVersion: novaResult.promptVersion,
     }),
   );
 
@@ -435,14 +395,19 @@ async function executeAjaxCycle(
       event_type: "idea_created",
       agent_slug: AGENT_SLUGS.NOVA,
       room: ROOM_SLUGS.RESEARCH_LAB,
-      message: `Nova generated ${ideas.length} product ideas.`,
-      metadata: { ideaIds: ideas.map((i) => i.id), runId },
+      message: `Nova generated ${ideas.length} product ideas (${novaResult.mode} mode).`,
+      metadata: {
+        ideaIds: ideas.map((i) => i.id),
+        runId,
+        ideationMode: novaResult.mode,
+        promptVersion: novaResult.promptVersion,
+      },
     }),
   );
   await sleep(CYCLE_PACING.handoffMs);
 
   // -------------------------------------------------------------------------
-  // Step 2 — Forge: listing + review queue (highest trend_score idea)
+  // Step 2 — Forge: listing + review queue (Product Brain–preferred idea)
   // -------------------------------------------------------------------------
   await supabase
     .from(TABLES.IDEAS)
