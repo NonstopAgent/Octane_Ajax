@@ -10,6 +10,8 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 describe("demo workflow wiring", () => {
   const routes = [
     "src/app/api/ajax/reset-demo/route.ts",
+    "src/app/api/ajax/run-nova/route.ts",
+    "src/app/api/ajax/run-forge/route.ts",
     "src/app/api/ajax/run-cycle/route.ts",
     "src/app/api/ajax/review/approve/route.ts",
     "src/app/api/ajax/run-pixel/route.ts",
@@ -26,16 +28,41 @@ describe("demo workflow wiring", () => {
     });
   }
 
-  it("run-cycle blocks when review is pending", () => {
+  it("staged steps block when review is pending", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/ajax/simulator.ts"),
       "utf8",
     );
     assert.match(content, /CycleBlockedError/);
+    assert.match(content, /preflightCycle/);
     assert.match(content, /review_gate|REVIEW_GATE|review gate/i);
   });
 
-  it("run-cycle routes LLM through Nova and Forge (not direct @/lib/llm)", () => {
+  it("nova and forge routes delegate to staged simulator steps", () => {
+    const novaRoute = readFileSync(
+      join(ROOT, "src/app/api/ajax/run-nova/route.ts"),
+      "utf8",
+    );
+    const forgeRoute = readFileSync(
+      join(ROOT, "src/app/api/ajax/run-forge/route.ts"),
+      "utf8",
+    );
+    const simulator = readFileSync(
+      join(ROOT, "src/lib/ajax/simulator.ts"),
+      "utf8",
+    );
+    assert.match(novaRoute, /runNovaStep/);
+    assert.match(forgeRoute, /runForgeStep/);
+    assert.match(novaRoute, /maxDuration\s*=\s*30/);
+    assert.match(forgeRoute, /maxDuration\s*=\s*60/);
+    assert.match(simulator, /export async function runNovaStep/);
+    assert.match(simulator, /export async function runForgeStep/);
+    assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
+    assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
+    assert.doesNotMatch(simulator, /from ["']@\/lib\/llm/);
+  });
+
+  it("run-cycle does not run Nova and Forge in one blocking handler", () => {
     const route = readFileSync(
       join(ROOT, "src/app/api/ajax/run-cycle/route.ts"),
       "utf8",
@@ -44,11 +71,35 @@ describe("demo workflow wiring", () => {
       join(ROOT, "src/lib/ajax/simulator.ts"),
       "utf8",
     );
-    assert.doesNotMatch(route, /from ["']@\/lib\/llm/);
-    assert.doesNotMatch(route, /completeJson/);
-    assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
-    assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
-    assert.doesNotMatch(simulator, /from ["']@\/lib\/llm/);
+    assert.doesNotMatch(route, /runAjaxCycle|runNovaStep|runForgeStep/);
+    assert.match(route, /STAGED_PIPELINE_REQUIRED|run-nova/);
+    assert.match(route, /status:\s*400/);
+    assert.doesNotMatch(simulator, /runAjaxCycle/);
+    assert.doesNotMatch(simulator, /executeAjaxCycle/);
+  });
+
+  it("nova step persists ideas; forge step creates listing and review", () => {
+    const simulator = readFileSync(
+      join(ROOT, "src/lib/ajax/simulator.ts"),
+      "utf8",
+    );
+    const novaBlock = simulator.slice(
+      simulator.indexOf("async function executeNovaStep"),
+      simulator.indexOf("async function executeForgeStep"),
+    );
+    const forgeBlock = simulator.slice(
+      simulator.indexOf("async function executeForgeStep"),
+      simulator.indexOf("export type ResetDemoSummary"),
+    );
+    assert.match(novaBlock, /runNovaIdeation/);
+    assert.match(novaBlock, /TABLES\.IDEAS/);
+    assert.doesNotMatch(novaBlock, /TABLES\.LISTINGS/);
+    assert.doesNotMatch(novaBlock, /TABLES\.REVIEW_QUEUE/);
+    assert.match(forgeBlock, /runForgeGeneration/);
+    assert.match(forgeBlock, /TABLES\.LISTINGS/);
+    assert.match(forgeBlock, /TABLES\.REVIEW_QUEUE/);
+    assert.match(forgeBlock, /TABLES\.GENERATIONS/);
+    assert.match(forgeBlock, /cycle_paused/);
   });
 
   it("approve runs pixel then publishes to demo storefront", () => {
@@ -147,7 +198,7 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(panel, /createServiceClient/);
   });
 
-  it("run-cycle recovery idles agents on failure", () => {
+  it("staged steps recovery idles agents on failure", () => {
     const simulator = readFileSync(
       join(ROOT, "src/lib/ajax/simulator.ts"),
       "utf8",
@@ -155,14 +206,37 @@ describe("demo workflow wiring", () => {
     assert.match(simulator, /recoverFromCycleFailure/);
     assert.match(simulator, /cycle_failed/);
     assert.match(simulator, /status:\s*"idle"/);
+    assert.match(simulator, /runNovaStep[\s\S]*recoverFromCycleFailure/);
+    assert.match(simulator, /runForgeStep[\s\S]*recoverFromCycleFailure/);
   });
 
-  it("factory dashboard surfaces API errors and refreshes on failure", () => {
+  it("forge step can reuse ideas from a prior nova run", () => {
+    const simulator = readFileSync(
+      join(ROOT, "src/lib/ajax/simulator.ts"),
+      "utf8",
+    );
+    assert.match(simulator, /resolveRunIdeasForForge/);
+    assert.match(simulator, /pickForgeIdeaCandidate/);
+    assert.match(simulator, /No Forge-ready ideas found/);
+  });
+
+  it("factory dashboard runs staged nova then forge", () => {
     const dashboard = readFileSync(
       join(ROOT, "src/components/factory/factory-dashboard.tsx"),
       "utf8",
     );
-    assert.match(dashboard, /data\.error/);
+    const controls = readFileSync(
+      join(ROOT, "src/components/factory/control-panel.tsx"),
+      "utf8",
+    );
+    assert.match(dashboard, /\/api\/ajax\/run-nova/);
+    assert.match(dashboard, /\/api\/ajax\/run-forge/);
+    assert.match(dashboard, /cyclePhase/);
+    assert.match(controls, /Running Nova|cyclePhase === "nova"/);
+    assert.match(controls, /Running Forge|cyclePhase === "forge"/);
+    assert.match(dashboard, /Review Gate/);
+    assert.doesNotMatch(dashboard, /\/api\/ajax\/run-cycle/);
+    assert.match(dashboard, /data\.error|novaData\.error|forgeData\.error/);
     assert.match(dashboard, /Request failed or timed out/);
     assert.doesNotMatch(dashboard, /queuePdfGeneration/);
   });

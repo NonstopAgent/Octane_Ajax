@@ -4,11 +4,14 @@ export * from "@/lib/ajax/constants";
 export * from "@/lib/ajax/helpers";
 export * from "@/lib/ajax/mappers";
 export {
-  runAjaxCycle,
+  runNovaStep,
+  runForgeStep,
   resetDemoData,
   CycleBlockedError,
   SimulatorError,
   type AjaxCycleSummary,
+  type NovaStepSummary,
+  type RunForgeStepOptions,
   type ResetDemoSummary,
 } from "@/lib/ajax/simulator";
 export {

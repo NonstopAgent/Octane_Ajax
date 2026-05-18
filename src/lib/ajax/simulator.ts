@@ -8,7 +8,13 @@ import {
   pickForgeIdeaCandidate,
   runNovaIdeation,
 } from "@/lib/ajax/nova";
-import { mapGenerationToDbInsert } from "@/lib/product/mappers";
+import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
+import {
+  normalizeProductCategory,
+  normalizeProductFormat,
+} from "@/lib/ajax/nova/types";
+import { mapGenerationToDbInsert, mapIdeaBrainFromDb } from "@/lib/product/mappers";
+import type { ProductIdea as DbIdea } from "@/lib/supabase/database.types";
 import {
   mapEventFromDb,
   mapIdeaFromDb,
@@ -64,7 +70,9 @@ export class SimulatorError extends Error {
 
 export type AjaxCycleSummary = {
   ok: true;
+  step: "forge";
   stoppedAt: "review_gate";
+  runId: string;
   message: string;
   ideas: ProductIdea[];
   selectedIdea: ProductIdea;
@@ -73,6 +81,22 @@ export type AjaxCycleSummary = {
   review: ReviewItem;
   events: FactoryEvent[];
   tasks: ReturnType<typeof mapTaskFromDb>[];
+};
+
+export type NovaStepSummary = {
+  ok: true;
+  step: "nova";
+  runId: string;
+  message: string;
+  ideas: ProductIdea[];
+  selectedIdea: ProductIdea;
+  events: FactoryEvent[];
+  tasks: ReturnType<typeof mapTaskFromDb>[];
+};
+
+export type RunForgeStepOptions = {
+  /** Cycle run from Nova; when omitted, uses the latest idea batch for this user. */
+  runId?: string;
 };
 
 const AGENT_SEED = [
@@ -127,6 +151,103 @@ async function assertAgentsExist(supabase: Supabase) {
   if (missing.length > 0) {
     throw new SimulatorError(
       `Missing seeded agents: ${missing.join(", ")}. Run the Supabase migration or reset-demo.`,
+    );
+  }
+}
+
+async function preflightCycle(supabase: Supabase, userId: string) {
+  await assertAgentsExist(supabase);
+  await assertNoPendingReview(supabase, userId);
+}
+
+function ideaRowToNovaEvaluated(row: DbIdea): NovaEvaluatedIdea | null {
+  const brain = mapIdeaBrainFromDb(row);
+  if (!brain || brain.verdict === "blocked") return null;
+
+  const raw = (row.raw_payload ?? {}) as Record<string, unknown>;
+  const ideationMode = raw.ideationMode === "llm" ? "llm" : "fallback";
+
+  return {
+    niche: row.niche ?? "",
+    targetBuyer: String(raw.targetBuyer ?? ""),
+    problemSolved: String(raw.problemSolved ?? ""),
+    productConcept: row.title ?? "",
+    format: normalizeProductFormat(String(raw.format ?? "planner")),
+    category: normalizeProductCategory(String(raw.category ?? "productivity")),
+    suggestedPrice: Number(raw.suggestedPrice ?? 0),
+    keywords: row.seo_keywords ?? [],
+    reasoning: String(raw.reasoning ?? ""),
+    source: ideationMode,
+    score: brain.score,
+    validation: brain.validation,
+    verdict: brain.verdict,
+    trendScore: Number(row.trend_score),
+    llmModel: typeof raw.llmModel === "string" ? raw.llmModel : undefined,
+  };
+}
+
+async function resolveRunIdeasForForge(
+  supabase: Supabase,
+  userId: string,
+  runId?: string,
+): Promise<{ runId: string; ideaRows: DbIdea[] }> {
+  const { data, error } = await supabase
+    .from(TABLES.IDEAS)
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["idea", "selected"])
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new SimulatorError("Failed to load product ideas for Forge.", error);
+  }
+
+  const rows = data ?? [];
+  if (rows.length === 0) {
+    throw new SimulatorError(
+      "No Forge-ready ideas found. Run Nova first (POST /api/ajax/run-nova).",
+    );
+  }
+
+  const runIdFromRow = (row: DbIdea) => {
+    const payload = row.raw_payload as Record<string, unknown> | null;
+    return typeof payload?.runId === "string" ? payload.runId : null;
+  };
+
+  const targetRunId = runId ?? runIdFromRow(rows[0]!);
+  if (!targetRunId) {
+    throw new SimulatorError("Could not determine cycle runId for Forge.");
+  }
+
+  const ideaRows = rows.filter((row) => runIdFromRow(row) === targetRunId);
+  if (ideaRows.length === 0) {
+    throw new SimulatorError(
+      `No product ideas found for run ${targetRunId}. Run Nova or pass a valid runId.`,
+    );
+  }
+
+  return { runId: targetRunId, ideaRows };
+}
+
+async function assertForgeNotComplete(
+  supabase: Supabase,
+  userId: string,
+  ideaIds: string[],
+) {
+  const { data, error } = await supabase
+    .from(TABLES.LISTINGS)
+    .select("id")
+    .eq("user_id", userId)
+    .in("product_idea_id", ideaIds)
+    .limit(1);
+
+  if (error) {
+    throw new SimulatorError("Failed to check existing listings.", error);
+  }
+
+  if (data && data.length > 0) {
+    throw new SimulatorError(
+      "Forge already completed for this cycle. Visit /review or reset the factory.",
     );
   }
 }
@@ -270,7 +391,7 @@ async function recoverFromCycleFailure(
         current_task_id: null,
       });
     } catch (recoveryErr) {
-      console.error(`[run-cycle recovery] could not idle ${slug}`, recoveryErr);
+      console.error(`[ajax-cycle recovery] could not idle ${slug}`, recoveryErr);
     }
   }
 
@@ -284,39 +405,51 @@ async function recoverFromCycleFailure(
       },
     });
   } catch (logErr) {
-    console.error("[run-cycle recovery] could not log cycle_failed", logErr);
+    console.error("[ajax-cycle recovery] could not log cycle_failed", logErr);
   }
 }
 
 /**
- * Runs one simulated business cycle: Nova → Forge → Review Gate (pause).
- * Does not auto-approve or invoke Pixel.
- *
- * Pre-flight guards run first and may throw CycleBlockedError (nothing has
- * mutated yet). Once the cycle starts writing state, any failure triggers
- * best-effort recovery so the floor returns to idle, then the original error
- * is re-thrown for the API route to surface.
+ * Nova-only pipeline step: ideation → product_ideas rows (Forge runs separately).
  */
-export async function runAjaxCycle(
+export async function runNovaStep(
   supabase: Supabase,
   userId: string,
-): Promise<AjaxCycleSummary> {
-  await assertAgentsExist(supabase);
-  await assertNoPendingReview(supabase, userId);
+): Promise<NovaStepSummary> {
+  await preflightCycle(supabase, userId);
 
   try {
-    return await executeAjaxCycle(supabase, userId);
+    return await executeNovaStep(supabase, userId);
   } catch (err) {
     await recoverFromCycleFailure(supabase, userId, err);
     throw err;
   }
 }
 
-/** Mutating body of one Ajax cycle — wrapped by runAjaxCycle for recovery. */
-async function executeAjaxCycle(
+/**
+ * Forge-only pipeline step: listing + generation + review queue → Review Gate pause.
+ * Reuses the highest valid idea from a prior Nova run when `runId` is omitted.
+ */
+export async function runForgeStep(
   supabase: Supabase,
   userId: string,
+  opts?: RunForgeStepOptions,
 ): Promise<AjaxCycleSummary> {
+  await preflightCycle(supabase, userId);
+
+  try {
+    return await executeForgeStep(supabase, userId, opts);
+  } catch (err) {
+    await recoverFromCycleFailure(supabase, userId, err);
+    throw err;
+  }
+}
+
+/** Nova ideation and persistence — wrapped by runNovaStep for recovery. */
+async function executeNovaStep(
+  supabase: Supabase,
+  userId: string,
+): Promise<NovaStepSummary> {
   const runId = crypto.randomUUID();
   const events: FactoryEvent[] = [];
   const tasks: ReturnType<typeof mapTaskFromDb>[] = [];
@@ -330,9 +463,6 @@ async function executeAjaxCycle(
   );
   await sleep(CYCLE_PACING.bootMs);
 
-  // -------------------------------------------------------------------------
-  // Step 1 — Nova: trend research → 3 product ideas
-  // -------------------------------------------------------------------------
   const novaTaskRow = await createTask(
     supabase,
     userId,
@@ -412,15 +542,62 @@ async function executeAjaxCycle(
   );
   await sleep(CYCLE_PACING.handoffMs);
 
-  // -------------------------------------------------------------------------
-  // Step 2 — Forge: listing + review queue (Product Brain–preferred idea)
-  // -------------------------------------------------------------------------
+  const selectedIdea = mapIdeaFromDb(selectedRow);
+
+  return {
+    ok: true,
+    step: "nova",
+    runId,
+    message: `Nova generated ${ideas.length} ideas. Run Forge to continue.`,
+    ideas,
+    selectedIdea,
+    events,
+    tasks,
+  };
+}
+
+/** Forge listing + review gate — wrapped by runForgeStep for recovery. */
+async function executeForgeStep(
+  supabase: Supabase,
+  userId: string,
+  opts?: RunForgeStepOptions,
+): Promise<AjaxCycleSummary> {
+  const { runId, ideaRows } = await resolveRunIdeasForForge(
+    supabase,
+    userId,
+    opts?.runId,
+  );
+
+  await assertForgeNotComplete(
+    supabase,
+    userId,
+    ideaRows.map((row) => row.id),
+  );
+
+  const evaluated = ideaRows
+    .map(ideaRowToNovaEvaluated)
+    .filter((idea): idea is NovaEvaluatedIdea => idea !== null);
+
+  if (evaluated.length === 0) {
+    throw new SimulatorError(
+      "No Forge-eligible ideas in this run (all blocked by Product Brain).",
+    );
+  }
+
+  const forgePick = pickForgeIdeaCandidate(evaluated);
+  const forgeIndex = evaluated.indexOf(forgePick);
+  const selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+
+  const events: FactoryEvent[] = [];
+  const tasks: ReturnType<typeof mapTaskFromDb>[] = [];
+
   await supabase
     .from(TABLES.IDEAS)
     .update({ status: "selected" })
     .eq("id", selectedRow.id);
 
   const selectedIdea = mapIdeaFromDb({ ...selectedRow, status: "selected" });
+  const ideas = ideaRows.map(mapIdeaFromDb);
 
   const forgeTaskRow = await createTask(
     supabase,
@@ -582,7 +759,9 @@ async function executeAjaxCycle(
 
   return {
     ok: true,
+    step: "forge",
     stoppedAt: "review_gate",
+    runId,
     message,
     ideas,
     selectedIdea,

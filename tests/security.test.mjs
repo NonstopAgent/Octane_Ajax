@@ -191,9 +191,17 @@ describe("marketplace adapters stay server-side", () => {
   });
 });
 
-describe("run-cycle LLM wiring guard", () => {
-  it("does not import the LLM layer in the demo run-cycle route", () => {
-    const route = readFileSync(
+describe("staged pipeline LLM wiring guard", () => {
+  it("does not import the LLM layer in staged API routes", () => {
+    const novaRoute = readFileSync(
+      join(ROOT, "app/api/ajax/run-nova/route.ts"),
+      "utf8",
+    );
+    const forgeRoute = readFileSync(
+      join(ROOT, "app/api/ajax/run-forge/route.ts"),
+      "utf8",
+    );
+    const legacyRoute = readFileSync(
       join(ROOT, "app/api/ajax/run-cycle/route.ts"),
       "utf8",
     );
@@ -202,8 +210,13 @@ describe("run-cycle LLM wiring guard", () => {
       "utf8",
     );
 
+    for (const route of [novaRoute, forgeRoute, legacyRoute]) {
+      for (const pattern of [/from ["']@\/lib\/llm/, /completeJson/, /OPENAI_API_KEY/]) {
+        assert.doesNotMatch(route, pattern, `route must not match ${pattern}`);
+      }
+    }
+
     for (const pattern of [/from ["']@\/lib\/llm/, /completeJson/, /OPENAI_API_KEY/]) {
-      assert.doesNotMatch(route, pattern, `run-cycle route must not match ${pattern}`);
       assert.doesNotMatch(simulator, pattern, `simulator must not match ${pattern}`);
     }
 
@@ -214,6 +227,7 @@ describe("run-cycle LLM wiring guard", () => {
     assert.match(simulator, /review_gate|cycle_paused/i);
     assert.match(simulator, /pdf_queued/);
     assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
+    assert.doesNotMatch(legacyRoute, /runAjaxCycle|runNovaStep|runForgeStep/);
 
     const generatePdfRoute = readFileSync(
       join(

@@ -29,7 +29,7 @@ Browser (React + Tailwind)
 
 Next.js App Router
   ├── src/middleware.ts      — session refresh + redirect to /login
-  ├── src/app/api/ajax/*     — run-cycle, reset-demo, review, run-pixel, snapshot
+  ├── src/app/api/ajax/*     — run-nova, run-forge, reset-demo, review, run-pixel, snapshot
   ├── src/lib/ajax/          — domain types, simulators, agent memory
   ├── src/lib/factory/       — snapshot queries
   └── src/lib/supabase/      — client (browser), server (RSC/API)
@@ -120,9 +120,9 @@ Check **Settings** (`/settings`) for env status, signed-in email, and user id.
 | Step | Where | Action |
 |------|--------|--------|
 | 1 | `/factory` | **Reset factory** |
-| 2 | `/factory` | **Run Ajax cycle** (Nova → Forge → stops at Review Gate) |
+| 2 | `/factory` | **Run Ajax cycle** (staged: Nova, then Forge → stops at Review Gate) |
 | 3 | `/review` | Open pending listing |
-| 4 | `/review` | **Generate PDF** (separate from run-cycle; avoids Vercel timeout) then **Download PDF** when ready |
+| 4 | `/review` | **Generate PDF** (manual on review; separate from Nova/Forge) then **Download PDF** when ready |
 | 5 | `/review` | **Approve** — runs Pixel automatically and publishes to the **demo storefront** (not Etsy) |
 | 6 | `/store` | Confirm the listing appears (status `published`) |
 | 7 | `/factory` | Confirm metrics, machine log, and agent sprites updated |
@@ -163,7 +163,8 @@ This always checks env vars and all 8 pipeline tables. Without `DEMO_TEST_EMAIL`
 | UI control | Method | Route |
 |------------|--------|--------|
 | Reset factory | POST | `/api/ajax/reset-demo` |
-| Run Ajax cycle | POST | `/api/ajax/run-cycle` |
+| Run Ajax cycle (UI: Nova then Forge) | POST | `/api/ajax/run-nova` then `/api/ajax/run-forge` |
+| Legacy run-cycle (deprecated) | POST | `/api/ajax/run-cycle` → **400** staged-pipeline message |
 | Approve | POST | `/api/ajax/review/approve` |
 | Reject | POST | `/api/ajax/review/reject` |
 | Run Pixel | POST | `/api/ajax/run-pixel` |
@@ -216,7 +217,7 @@ Copy `.env.example` → `.env.local`. Never prefix integration secrets with `NEX
 End-to-end path (requires Supabase configured + signed in):
 
 1. **Reset factory** — `/factory` → **Reset factory** (`POST /api/ajax/reset-demo`) clears your user’s pipeline rows and idles agents.
-2. **Run Ajax cycle** — **Run Ajax cycle** (`POST /api/ajax/run-cycle`): Nova creates ideas → Forge creates a listing → pipeline **pauses at Review Gate** (409 if a review is already pending).
+2. **Run Ajax cycle** — Factory **Run Ajax cycle** calls `POST /api/ajax/run-nova` (ideas only, 30s budget), then `POST /api/ajax/run-forge` with `{ runId }` (listing + review queue, 60s budget). Pipeline **pauses at Review Gate** (409 if a review is already pending). The old `POST /api/ajax/run-cycle` returns **400** so one serverless invocation never runs both LLM steps.
 3. **View pending review** — `/review` or factory metrics **QC pending**; listing appears in the review queue.
 4. **Approve listing** — **Approve** (`POST /api/ajax/review/approve`): listing `approved`, Pixel runs inline, content job `scheduled`, listing **`published` on the demo storefront** (not Etsy).
 5. **Optional retry** — `/factory` → **Run Pixel** (`POST /api/ajax/run-pixel`) only if a job is still `queued` (e.g. partial failure).
@@ -252,7 +253,17 @@ draft → pending_review → approved → published
 | Human approve | Review service → Pixel simulator | Listing `approved` → job `scheduled` → listing **`published`** (demo storefront) |
 | Run Pixel (retry) | Pixel simulator | Re-processes any remaining `queued` jobs; same schedule + publish behavior |
 
-**Guards:** `run-cycle` does not invoke Pixel or publish (`simulator.ts` pauses at Review Gate). Rejected listings cannot reach `published`. Blocked Product Brain verdicts cannot be approved server-side.
+**Guards:** Staged Nova/Forge does not invoke Pixel or publish (`simulator.ts` pauses at Review Gate). PDF is manual on `/review`. Rejected listings cannot reach `published`. Blocked Product Brain verdicts cannot be approved server-side.
+
+### Vercel-safe staged pipeline
+
+| Step | Route | `maxDuration` | Work |
+|------|--------|---------------|------|
+| Nova | `POST /api/ajax/run-nova` | 30s | LLM ideation → `product_ideas` |
+| Forge | `POST /api/ajax/run-forge` | 60s | LLM listing + `product_generations` (queued) + `review_queue` |
+| PDF | `POST /api/ajax/product-generations/:id/generate-pdf` | 60s | Manual from Review Gate only |
+
+Splitting Nova and Forge avoids a single Vercel function timing out while Forge LLM runs after Nova completes. Forge failure runs `recoverFromCycleFailure` (agents idle, `cycle_failed` event). Retry after **Reset factory** or fix env, then run the cycle again; Forge can reuse the latest Nova `runId`.
 
 ## Sellability checklist (Review Gate)
 
@@ -339,7 +350,7 @@ tests/                  # security, demo workflow, pixel marketing, storefront w
 
 ## Nova ideation: LLM mode vs fallback demo mode
 
-`POST /api/ajax/run-cycle` runs **Nova → Forge → Review Gate**. **Nova** and **Forge** may call the LLM layer (via `src/lib/ajax/nova/` and `src/lib/ajax/forge/`). **Pixel** stays deterministic/simulated. The simulator imports agent modules only — never `@/lib/llm` directly.
+`POST /api/ajax/run-nova` and `POST /api/ajax/run-forge` run **Nova** and **Forge** in separate serverless invocations (Review Gate pause after Forge). **Nova** and **Forge** may call the LLM layer (via `src/lib/ajax/nova/` and `src/lib/ajax/forge/`). **Pixel** stays deterministic/simulated. The simulator imports agent modules only — never `@/lib/llm` directly.
 
 | Mode | When | Behavior |
 |------|------|----------|

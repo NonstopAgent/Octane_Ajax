@@ -45,6 +45,7 @@ export function FactoryDashboard({
     initialSnapshot ?? EMPTY_SNAPSHOT,
   );
   const [running, setRunning] = useState(false);
+  const [cyclePhase, setCyclePhase] = useState<"nova" | "forge" | null>(null);
   const [runningPixel, setRunningPixel] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
@@ -80,37 +81,60 @@ export function FactoryDashboard({
 
   const runCycle = async () => {
     setRunning(true);
+    setCyclePhase("nova");
     try {
-      const res = await fetch("/api/ajax/run-cycle", {
+      const novaRes = await fetch("/api/ajax/run-nova", {
         method: "POST",
         credentials: "include",
       });
-      const data = await res.json();
+      const novaData = await novaRes.json();
 
-      if (res.status === 409) {
-        showToast("info", data.error ?? "Cycle blocked — resolve review first.");
+      if (novaRes.status === 409) {
+        showToast("info", novaData.error ?? "Cycle blocked — resolve review first.");
         return;
       }
 
-      if (!res.ok) {
-        showToast("error", data.error ?? "Failed to run Ajax cycle.");
+      if (!novaRes.ok) {
+        showToast("error", novaData.error ?? "Nova step failed.");
+        await refresh();
+        return;
+      }
+
+      setCyclePhase("forge");
+      const forgeRes = await fetch("/api/ajax/run-forge", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: novaData.runId }),
+      });
+      const forgeData = await forgeRes.json();
+
+      if (forgeRes.status === 409) {
+        showToast("info", forgeData.error ?? "Cycle blocked — resolve review first.");
+        await refresh();
+        return;
+      }
+
+      if (!forgeRes.ok) {
+        showToast("error", forgeData.error ?? "Forge step failed.");
         await refresh();
         return;
       }
 
       showToast(
         "success",
-        data.message ?? "Cycle complete — listing awaiting your review.",
+        forgeData.message ?? "Cycle paused at Review Gate.",
       );
       await refresh();
     } catch {
       showToast(
         "error",
-        "Request failed or timed out. Check Vercel logs.",
+        "Request failed or timed out. Refresh the floor and retry after Reset factory if agents look stuck.",
       );
       await refresh();
     } finally {
       setRunning(false);
+      setCyclePhase(null);
     }
   };
 
@@ -245,6 +269,7 @@ export function FactoryDashboard({
         onRunPixel={runPixel}
         onResetDemo={resetDemo}
         running={running}
+        cyclePhase={cyclePhase}
         runningPixel={runningPixel}
         resetting={resetting}
       />

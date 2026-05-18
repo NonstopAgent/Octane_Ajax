@@ -2,11 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 
+type CyclePhase = "nova" | "forge" | null;
+
 type ControlPanelProps = {
   onRunCycle: () => void;
   onRunPixel: () => void;
   onResetDemo: () => void;
   running: boolean;
+  cyclePhase: CyclePhase;
   runningPixel: boolean;
   resetting: boolean;
   disabled?: boolean;
@@ -17,11 +20,20 @@ export function ControlPanel({
   onRunPixel,
   onResetDemo,
   running,
+  cyclePhase,
   runningPixel,
   resetting,
   disabled,
 }: ControlPanelProps) {
   const busy = running || runningPixel || resetting;
+
+  const cycleLabel = !running
+    ? "Run Ajax cycle"
+    : cyclePhase === "nova"
+      ? "Running Nova…"
+      : cyclePhase === "forge"
+        ? "Running Forge…"
+        : "Cycle running";
 
   return (
     <section className="factory-panel panel-glow-orange border-l-4 border-l-[var(--accent-orange)]">
@@ -42,7 +54,7 @@ export function ControlPanel({
         >
           {running ? (
             <>
-              <Spinner /> Cycle running
+              <Spinner /> {cycleLabel}
             </>
           ) : (
             "Run Ajax cycle"
