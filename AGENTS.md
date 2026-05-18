@@ -117,19 +117,46 @@ When in doubt, choose a generic, compliant alternative and flag ambiguity for hu
 - Create `.env.local` from these env vars before running the app (Next.js reads `.env.local` at startup).
 - The Supabase cloud project is pre-provisioned with all migrations applied.
 
-### Running the application
+| Variable | Scope | Required | Purpose |
+|----------|-------|----------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Client + Server | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + Server | Yes | Anon key (RLS enforced) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Yes | PDF storage/download routes, admin user creation |
+| `OPENAI_API_KEY` | Server only | No | Nova/Forge LLM mode; omit for deterministic fallback |
+
+### Verification before committing
+
+Agents **must** run all four checks before committing:
 
 ```bash
-npm run dev          # Dev server on localhost:3000
+npm run check:demo   # Live Supabase schema + optional auth probe
 npm run lint         # ESLint (warnings only for unused adapter stubs)
-npm run test         # 116 tests via node --test + tsx
+npm run test         # 155+ tests via node --test + tsx (after async PDF split)
 npm run build        # Production build (TypeScript + static generation)
 ```
 
+`npm run dev` starts the dev server on `localhost:3000`.
+
+### Production-safe pipeline (staged requests)
+
+The pipeline is intentionally split into separate HTTP requests to avoid Vercel serverless timeouts. **Do not collapse these stages into a single long request.**
+
+| Step | Where | Action | Endpoint |
+|------|-------|--------|----------|
+| 1 | `/factory` | Run Ajax Cycle (Nova → Forge → pause) | `POST /api/ajax/run-cycle` |
+| 2 | `/review` | Generate PDF for listing | `POST /api/ajax/product-generations/[id]/generate-pdf` |
+| 3 | `/review` | Download PDF for inspection | `GET /api/ajax/product-generations/[id]/pdf-download` |
+| 4 | `/review` | Approve (or reject with feedback) | `POST /api/ajax/review/approve` |
+| 5 | `/factory` | Run Pixel → demo publish | `POST /api/ajax/run-pixel` |
+| 6 | `/store` | Published listing visible | — |
+
+**Critical constraint:** `POST /api/ajax/run-cycle` must **not** perform PDF generation synchronously. PDF generation is a separate request from the Review Gate (`POST /api/ajax/product-generations/[id]/generate-pdf`). The Review Gate remains mandatory between Forge output and Pixel/publish.
+
 ### Key gotchas
 
+- **No sync PDF in run-cycle:** Combining Nova + Forge + PDF in one serverless invocation causes Vercel timeouts. Keep them as separate staged requests (see pipeline table above).
 - **Cookie auth for API testing:** The `@supabase/ssr` v0.10 library stores sessions in chunked cookies named `sb-<project-ref>-auth-token.0`. To call API routes from scripts (curl/Python), sign in via Supabase Auth REST, then set the cookie as raw JSON (not base64) in the `Cookie` header.
-- **Run-cycle timeout:** `POST /api/ajax/run-cycle` calls OpenAI (Nova + Forge) and can take 30–80 seconds when `OPENAI_API_KEY` is set. Without it, falls back to instant deterministic demo mode.
+- **Run-cycle duration:** `POST /api/ajax/run-cycle` calls OpenAI (Nova + Forge, no PDF) and can take 30–80 seconds when `OPENAI_API_KEY` is set. Without it, falls back to instant deterministic demo mode.
 - **Approve needs reviewId:** `POST /api/ajax/review/approve` requires `{ "reviewId": "<uuid>" }` in the body. Get pending reviews from `GET /api/ajax/review-queue`.
 - **Next.js middleware deprecation warning** (`"middleware" file convention is deprecated`) is expected on Next.js 16.2.6 — does not affect functionality.
 - **Test user creation:** Use the Supabase Admin API (`POST /auth/v1/admin/users` with service role key) to create confirmed users for testing without needing email verification.
