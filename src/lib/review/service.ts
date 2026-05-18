@@ -17,6 +17,7 @@ import {
   PixelSimulatorError,
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
+import { publishListingToEtsyOnApprove } from "@/lib/review/etsy-on-approve";
 import { publishListingToGumroadOnApprove } from "@/lib/review/gumroad-on-approve";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
@@ -181,7 +182,7 @@ export type ApproveReviewResult = {
 
 /**
  * Approve a pending listing: `approved` → Pixel schedules content → `published`
- * (demo storefront). Does not publish to Etsy or other external channels.
+ * then optional Lemon Squeezy + Etsy publish, then Pixel for demo marketing.
  */
 export async function approveReview(
   supabase: Supabase,
@@ -307,6 +308,18 @@ export async function approveReview(
     listingAfterGumroad = gumroadPublish.listing;
   }
 
+  let listingAfterEtsy = listingAfterGumroad;
+  const etsyPublish = await publishListingToEtsyOnApprove({
+    supabase,
+    userId,
+    listingId,
+    listing: listingAfterGumroad,
+    generation,
+  });
+  if (etsyPublish) {
+    listingAfterEtsy = etsyPublish.listing;
+  }
+
   let pixelResult;
   try {
     pixelResult = await runPixelMarketing(supabase, userId);
@@ -336,12 +349,19 @@ export async function approveReview(
     pixelResult.jobs[0];
 
   const pixelListing = processed?.listing;
+  const externalUrl = listingAfterEtsy.gumroadUrl ?? listingAfterGumroad.gumroadUrl;
+  const externalProductId =
+    listingAfterEtsy.gumroadProductId ?? listingAfterGumroad.gumroadProductId;
   const listing =
     pixelListing &&
     pixelListing.status === "published" &&
-    listingAfterGumroad.gumroadUrl
-      ? { ...pixelListing, gumroadUrl: listingAfterGumroad.gumroadUrl, gumroadProductId: listingAfterGumroad.gumroadProductId }
-      : (pixelListing ?? listingAfterGumroad);
+    externalUrl
+      ? {
+          ...pixelListing,
+          gumroadUrl: externalUrl,
+          gumroadProductId: externalProductId,
+        }
+      : (pixelListing ?? listingAfterEtsy);
 
   return {
     ok: true,

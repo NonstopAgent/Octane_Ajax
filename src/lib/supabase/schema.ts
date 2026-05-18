@@ -101,4 +101,5 @@ export const TABLES = {
   FEEDBACK: "agent_feedback",
   EVENTS: "factory_events",
   CONTENT_JOBS: "content_jobs",
+  ETSY_CREDENTIALS: "etsy_credentials",
 } as const;

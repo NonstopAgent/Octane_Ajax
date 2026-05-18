@@ -471,6 +471,44 @@ export interface Database {
           },
         ];
       };
+      etsy_credentials: {
+        Row: {
+          id: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          shop_id: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          shop_id: string;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          access_token?: string;
+          refresh_token?: string;
+          shop_id?: string;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "etsy_credentials_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       content_jobs: {
         Row: {
           id: string;

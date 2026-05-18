@@ -166,6 +166,19 @@ describe("migrations RLS", () => {
     assert.match(migration, /add column if not exists/i);
   });
 
+  it("enables RLS on etsy_credentials with owner-only policies", () => {
+    const migration = readMigration("20260518160000_etsy_credentials.sql");
+    assertRlsEnabled(migration, "etsy_credentials");
+    assert.match(migration, /create policy "etsy_credentials_select_own"/i);
+    assert.match(migration, /create policy "etsy_credentials_insert_own"/i);
+    assert.match(migration, /create policy "etsy_credentials_update_own"/i);
+    assert.doesNotMatch(
+      migration,
+      /disable row level security/i,
+      "etsy_credentials migration must not disable RLS",
+    );
+  });
+
   it("allows public read of published listings only (gumroad store migration)", () => {
     const migration = readMigration(
       "20260517180000_gumroad_public_store.sql",

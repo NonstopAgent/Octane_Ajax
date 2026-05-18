@@ -180,7 +180,7 @@ export function ReviewDashboard({
         badge="Quality control"
         badgeTone="warning"
         title="Review Gate"
-        description={`${REVIEW_GATE_MICROCOPY} — approving runs Gumroad auto-publish when configured, then Pixel for demo marketing. Published listings with a Gumroad link appear on /store. Reject with feedback for agent memory.`}
+        description={`${REVIEW_GATE_MICROCOPY} — approving runs Lemon Squeezy when configured, then Etsy auto-publish when Etsy is connected, then Pixel for demo marketing. Published listings with a checkout URL appear on /store. Reject with feedback for agent memory.`}
         aside={
           <ButtonLink href="/factory" variant="secondary">
             Back to factory

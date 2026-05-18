@@ -30,8 +30,8 @@ export function ReviewExternalLinksPanel({
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           Listings with a checkout URL appear on the public{" "}
           <span className="text-[var(--foreground)]">/store</span> catalog.
-          When Lemon Squeezy is configured on the server, approval creates the
-          product for you.
+          When Lemon Squeezy is configured, approval creates the store product.
+          Etsy auto-publish runs when Etsy is connected in Settings.
         </p>
       </div>
 
