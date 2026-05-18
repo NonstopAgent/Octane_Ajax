@@ -66,9 +66,16 @@ export function scoreBarPercent(value: number, invert?: boolean): number {
 
 export const AI_DISCLOSURE_FLAG_CODE = "ai_disclosure";
 
-/** Compliance flags only — AI disclosure is shown in its own panel. */
+/** Forge / disclosure markers — informational only; not compliance risks. */
+const INFORMATIONAL_COMPLIANCE_FLAG_CODES = new Set([
+  AI_DISCLOSURE_FLAG_CODE,
+  "review_note",
+  "fallback_indicator",
+]);
+
+/** Compliance flags that can block approval or appear in the compliance panel. */
 export function filterComplianceFlags(flags: ComplianceFlag[]): ComplianceFlag[] {
-  return flags.filter((flag) => flag.code !== AI_DISCLOSURE_FLAG_CODE);
+  return flags.filter((flag) => !INFORMATIONAL_COMPLIANCE_FLAG_CODES.has(flag.code));
 }
 
 export function hasComplianceRisk(input: {

@@ -18,26 +18,10 @@ import {
 } from "@/lib/ajax/forge/types";
 import { completeJson } from "@/lib/llm/json";
 import { isOpenAiConfigured } from "@/lib/llm/openai";
-import type { ComplianceFlag } from "@/lib/product/domain";
-
 export type ForgeGenerationOptions = {
   client?: OpenAI;
   forceFallback?: boolean;
 };
-
-function buildComplianceArtifacts(notes: string[]): {
-  flags: ComplianceFlag[];
-  warnings: string[];
-} {
-  const warnings = notes.map((n) => n.trim()).filter(Boolean);
-  const flags: ComplianceFlag[] = warnings.map((warning) => ({
-    code: "review_note",
-    message: warning,
-    severity: "warning",
-    source: "forge",
-  }));
-  return { flags, warnings };
-}
 
 function mapLlmResponseToResult(
   data: ReturnType<typeof ForgeLlmResponseSchema.parse>,
@@ -56,7 +40,9 @@ function mapLlmResponseToResult(
     forgeMode: "llm",
   });
 
-  const { warnings } = buildComplianceArtifacts(data.complianceNotes);
+  const complianceNotes = data.complianceNotes
+    .map((n) => n.trim())
+    .filter(Boolean);
 
   return {
     mode: "llm",
@@ -65,7 +51,7 @@ function mapLlmResponseToResult(
     seoTags: data.seoTags.map((t) => t.trim()),
     suggestedPrice: data.suggestedPrice,
     productStructure: structure,
-    complianceNotes: warnings,
+    complianceNotes,
     aiDisclosure,
     coverImagePrompt: data.coverImagePrompt.trim(),
     revisionNotes: data.revisionNotes.map((n) => n.trim()).filter(Boolean),
@@ -132,10 +118,13 @@ export async function runForgeGeneration(
   return buildForgeFallbackResult(input.idea);
 }
 
-/** Compliance flags + warnings for persisting on product_generations. */
-export function forgeResultToCompliance(result: ForgeGenerationResult): {
-  flags: ComplianceFlag[];
-  warnings: string[];
+/**
+ * Persisted compliance on product_generations — policy risks only.
+ * Forge review notes live on {@link ForgeGenerationResult.complianceNotes} and factory events.
+ */
+export function forgeResultToCompliance(_result: ForgeGenerationResult): {
+  flags: [];
+  warnings: [];
 } {
-  return buildComplianceArtifacts(result.complianceNotes);
+  return { flags: [], warnings: [] };
 }

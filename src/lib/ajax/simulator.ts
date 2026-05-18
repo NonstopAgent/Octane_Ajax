@@ -731,6 +731,7 @@ async function executeForgeStep(
       coverImagePrompt: forgeResult.coverImagePrompt,
       revisionNotes: forgeResult.revisionNotes,
       aiDisclosure: forgeResult.aiDisclosure,
+      complianceNotes: forgeResult.complianceNotes,
     }),
   );
 

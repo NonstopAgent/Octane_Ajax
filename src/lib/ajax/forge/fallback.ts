@@ -282,9 +282,7 @@ export function buildForgeFallbackResult(
     seoTags: padSeoTags(idea.keywords, idea.productConcept),
     suggestedPrice: FALLBACK_PRICE,
     productStructure: structure,
-    complianceNotes: [
-      "Demo fallback structure — verify claims and niche accuracy before publish.",
-    ],
+    complianceNotes: [],
     aiDisclosure: AI_DISCLOSURE_TEXT,
     coverImagePrompt: String(structure.metadata?.coverImagePrompt ?? ""),
     revisionNotes: ["Deterministic Forge fallback (no LLM)."],

@@ -157,6 +157,25 @@ describe("sellability checklist", () => {
     assert.equal(check(blocked, "no_compliance_warnings")?.passed, false);
   });
 
+  it("ignores forge review_note flag for compliance check", () => {
+    const reviewNoteFlag: ComplianceFlag = {
+      code: "review_note",
+      message: "Demo fallback — verify niche accuracy.",
+      severity: "warning",
+      source: "forge",
+    };
+
+    const clear = evaluateSellabilityChecklist({
+      structure: null,
+      aiDisclosure: "Present",
+      complianceWarnings: [],
+      complianceFlags: [reviewNoteFlag],
+      generationStatus: "pending",
+      pdfStoragePath: null,
+    });
+    assert.equal(check(clear, "no_compliance_warnings")?.passed, true);
+  });
+
   it("requires ready status and storage path for PDF ready", () => {
     const base = {
       structure: null,

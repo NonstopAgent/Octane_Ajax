@@ -60,10 +60,9 @@ describe("review display helpers", () => {
     source: "forge",
   };
 
-  it("filters AI disclosure out of compliance flags", () => {
+  it("filters informational forge flags out of compliance flags", () => {
     const filtered = filterComplianceFlags([aiFlag, reviewFlag]);
-    assert.equal(filtered.length, 1);
-    assert.equal(filtered[0]?.code, "review_note");
+    assert.equal(filtered.length, 0);
   });
 
   it("does not count AI disclosure as compliance risk", () => {
@@ -77,9 +76,17 @@ describe("review display helpers", () => {
     );
   });
 
-  it("omits AI disclosure from compliance messages", () => {
+  it("omits informational flags from compliance messages", () => {
     const messages = collectComplianceMessages({
       warnings: [],
+      flags: [aiFlag, reviewFlag],
+    });
+    assert.equal(messages.length, 0);
+  });
+
+  it("includes real policy warnings in compliance messages", () => {
+    const messages = collectComplianceMessages({
+      warnings: ["Verify niche claims before publish."],
       flags: [aiFlag, reviewFlag],
     });
     assert.equal(messages.length, 1);
