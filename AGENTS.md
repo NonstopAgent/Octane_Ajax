@@ -105,3 +105,31 @@ When in doubt, choose a generic, compliant alternative and flag ambiguity for hu
 - [ ] Product ideas fit utility-first strategy and blocked-product rules
 - [ ] RLS and server-only secrets unchanged or strengthened
 - [ ] `npm run lint`, `npm run test`, `npm run build` pass after substantive edits
+
+---
+
+## Cursor Cloud specific instructions
+
+### Environment
+
+- **Runtime:** Node.js 22+ with npm (lockfile: `package-lock.json`).
+- **Secrets** are injected as environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`.
+- Create `.env.local` from these env vars before running the app (Next.js reads `.env.local` at startup).
+- The Supabase cloud project is pre-provisioned with all migrations applied.
+
+### Running the application
+
+```bash
+npm run dev          # Dev server on localhost:3000
+npm run lint         # ESLint (warnings only for unused adapter stubs)
+npm run test         # 116 tests via node --test + tsx
+npm run build        # Production build (TypeScript + static generation)
+```
+
+### Key gotchas
+
+- **Cookie auth for API testing:** The `@supabase/ssr` v0.10 library stores sessions in chunked cookies named `sb-<project-ref>-auth-token.0`. To call API routes from scripts (curl/Python), sign in via Supabase Auth REST, then set the cookie as raw JSON (not base64) in the `Cookie` header.
+- **Run-cycle timeout:** `POST /api/ajax/run-cycle` calls OpenAI (Nova + Forge) and can take 30–80 seconds when `OPENAI_API_KEY` is set. Without it, falls back to instant deterministic demo mode.
+- **Approve needs reviewId:** `POST /api/ajax/review/approve` requires `{ "reviewId": "<uuid>" }` in the body. Get pending reviews from `GET /api/ajax/review-queue`.
+- **Next.js middleware deprecation warning** (`"middleware" file convention is deprecated`) is expected on Next.js 16.2.6 — does not affect functionality.
+- **Test user creation:** Use the Supabase Admin API (`POST /auth/v1/admin/users` with service role key) to create confirmed users for testing without needing email verification.
