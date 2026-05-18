@@ -15,6 +15,53 @@ export function buildProductPdfStoragePath(
   return `${userId}/${generationId}.pdf`;
 }
 
+/** User-scoped mockup path: `{userId}/{generationId}_mockup.jpg` */
+export function buildProductMockupStoragePath(
+  userId: string,
+  generationId: string,
+): string {
+  return `${userId}/${generationId}_mockup.jpg`;
+}
+
+export async function uploadProductMockup(
+  storagePath: string,
+  imageBytes: Buffer,
+): Promise<void> {
+  if (imageBytes.byteLength === 0) {
+    throw new Error("Mockup image buffer is empty.");
+  }
+  if (imageBytes.byteLength > MAX_BYTES) {
+    throw new Error(`Mockup image exceeds ${MAX_BYTES} byte limit.`);
+  }
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.storage
+    .from(PRODUCT_PDFS_BUCKET)
+    .upload(storagePath, imageBytes, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Mockup upload failed: ${error.message}`);
+  }
+}
+
+export async function downloadProductMockup(storagePath: string): Promise<Buffer> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage
+    .from(PRODUCT_PDFS_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) {
+    throw new Error(
+      `Mockup download failed: ${error?.message ?? "missing file data"}`,
+    );
+  }
+
+  return Buffer.from(await data.arrayBuffer());
+}
+
 export function parseProductPdfStoragePath(path: string): {
   userId: string;
   generationId: string;

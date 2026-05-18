@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type OpenAI from "openai";
+import { buildNovaIdeationUserPrompt } from "@/lib/ajax/nova/prompts";
+import {
+  buildNovaPastContext,
+  dedupePreserveOrder,
+  extractNicheFromIdea,
+  extractNichesFromListings,
+} from "@/lib/ajax/nova/past-context";
 import {
   mapNovaIdeasToDbInserts,
   pickForgeIdeaCandidate,
@@ -87,6 +94,65 @@ function createMockOpenAiClient(content: string): OpenAI {
     },
   } as unknown as OpenAI;
 }
+
+describe("buildNovaIdeationUserPrompt", () => {
+  it("omits past-cycle block when pastContext is absent", () => {
+    const prompt = buildNovaIdeationUserPrompt("run-abc-123");
+    assert.doesNotMatch(prompt, /IMPORTANT CONTEXT FROM PAST CYCLES/);
+    assert.match(prompt, /cycle run run-abc-/);
+  });
+
+  it("appends IMPORTANT CONTEXT when pastContext is provided", () => {
+    const prompt = buildNovaIdeationUserPrompt("run-abc-123", {
+      rejectedNiches: ["generic daily planner"],
+      approvedNiches: ["night-shift nurse meal prep"],
+      recentTitles: ["Night-Shift Weekly Meal Prep Planner"],
+    });
+
+    assert.match(prompt, /IMPORTANT CONTEXT FROM PAST CYCLES/);
+    assert.match(prompt, /REJECTED niches.*generic daily planner/);
+    assert.match(prompt, /APPROVED niches.*night-shift nurse meal prep/);
+    assert.match(prompt, /Recent product titles.*Night-Shift Weekly Meal Prep Planner/);
+    assert.match(prompt, /DIFFERENT from all of the above/);
+  });
+});
+
+describe("Nova past context extraction", () => {
+  it("prefers product_ideas.niche over raw_payload", () => {
+    assert.equal(
+      extractNicheFromIdea("homeschool attendance", { niche: "payload niche" }),
+      "homeschool attendance",
+    );
+  });
+
+  it("falls back to raw_payload.niche when column is empty", () => {
+    assert.equal(
+      extractNicheFromIdea(null, { niche: "  ADHD mornings  " }),
+      "ADHD mornings",
+    );
+  });
+
+  it("extracts niches from joined listing rows and dedupes", () => {
+    const niches = extractNichesFromListings([
+      {
+        product_ideas: { niche: "niche A", raw_payload: {} },
+      },
+      {
+        product_ideas: { niche: null, raw_payload: { niche: "niche B" } },
+      },
+      {
+        product_ideas: { niche: "niche A", raw_payload: {} },
+      },
+    ]);
+
+    assert.deepEqual(niches, ["niche A", "niche B"]);
+    assert.deepEqual(dedupePreserveOrder(["Foo", "foo", "Bar"]), ["Foo", "Bar"]);
+  });
+
+  it("buildNovaPastContext returns undefined when all inputs are empty", () => {
+    assert.equal(buildNovaPastContext([], [], [{ title: null }]), undefined);
+  });
+});
 
 describe("Nova LLM schema", () => {
   it("parses valid mocked LLM output", () => {

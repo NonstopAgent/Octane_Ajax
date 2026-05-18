@@ -6,6 +6,7 @@ import {
 } from "@/lib/ajax/product-brain";
 import type { ProductBrainInput } from "@/lib/ajax/product-brain/types";
 import { mapFakeDraftsToNovaRaw } from "@/lib/ajax/nova/fallback";
+import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 import {
   buildNovaIdeationUserPrompt,
   NOVA_IDEATION_JSON_INSTRUCTIONS,
@@ -33,6 +34,8 @@ export type NovaIdeationOptions = {
   client?: OpenAI;
   /** Force deterministic fallback (e.g. missing key tests). */
   forceFallback?: boolean;
+  /** Operator history from past cycles (rejected/approved niches, recent titles). */
+  pastContext?: NovaPastContext;
 };
 
 function toBrainInput(raw: NovaRawIdea): ProductBrainInput {
@@ -101,7 +104,10 @@ async function fetchLlmRawIdeas(
   const result = await completeJson({
     messages: [
       { role: "system", content: NOVA_IDEATION_SYSTEM_PROMPT },
-      { role: "user", content: buildNovaIdeationUserPrompt(runId) },
+      {
+        role: "user",
+        content: buildNovaIdeationUserPrompt(runId, options?.pastContext),
+      },
     ],
     schema: NovaLlmResponseSchema,
     jsonInstructions: NOVA_IDEATION_JSON_INSTRUCTIONS,

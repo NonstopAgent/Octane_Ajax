@@ -53,6 +53,7 @@ describe("collectStoreTags", () => {
       },
       generationStatus: "ready",
       pdf: { storagePath: null, publicUrl: null },
+      mockupStoragePath: null,
       complianceFlags: [],
       complianceWarnings: [],
       createdAt: new Date().toISOString(),

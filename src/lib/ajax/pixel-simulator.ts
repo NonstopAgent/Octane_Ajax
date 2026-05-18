@@ -4,10 +4,12 @@ import {
   mapEventFromDb,
   mapListingFromDb,
 } from "@/lib/ajax/mappers";
+import { generatePixelMarketing } from "@/lib/ajax/pixel/service";
 import {
   buildContentJobScheduleUpdate,
   buildPixelPromoPackage,
   parseStructure,
+  type PixelPromoInput,
   type PixelPromoMetadata,
   type PixelPromoPackage,
 } from "@/lib/ajax/pixel-promo-package";
@@ -114,7 +116,7 @@ function pickGeneration(
   })[0];
 }
 
-function promoInputFromJob(job: QueuedJobRow): Parameters<typeof buildPixelPromoPackage>[0] {
+function promoInputFromJob(job: QueuedJobRow): PixelPromoInput {
   const listing = job.product_listings;
   const idea = firstOrSelf(listing?.product_ideas);
   const generation = pickGeneration(listing?.product_generations);
@@ -255,7 +257,13 @@ export async function runPixelMarketing(
   await sleep(1500);
 
   for (const job of jobs) {
-    const promo = buildPixelPromoPackage(promoInputFromJob(job));
+    const promoInput = promoInputFromJob(job);
+    let promo: PixelPromoPackage;
+    try {
+      promo = await generatePixelMarketing(promoInput);
+    } catch {
+      promo = buildPixelPromoPackage(promoInput);
+    }
 
     const { data: jobRow, error: jobError } = await supabase
       .from(TABLES.CONTENT_JOBS)

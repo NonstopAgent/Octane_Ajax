@@ -7,7 +7,7 @@ import { EtsyAuthError, refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import type { ProductListing } from "@/lib/ajax/types";
 import type { ProductGeneration } from "@/lib/product/domain";
-import { downloadProductPdf } from "@/lib/product/pdf-storage";
+import { downloadProductMockup, downloadProductPdf } from "@/lib/product/pdf-storage";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
 import { insertGumroadEvent } from "@/lib/review/gumroad-on-approve";
@@ -30,6 +30,7 @@ export type EtsyPublishDependencies = {
   refreshToken?: typeof refreshEtsyToken;
   createAdapter?: typeof createEtsyAdapter;
   downloadPdf?: typeof downloadProductPdf;
+  downloadMockup?: typeof downloadProductMockup;
 };
 
 /**
@@ -44,6 +45,7 @@ export async function publishListingToEtsyOnApprove(
   const refreshTokenFn = dependencies.refreshToken ?? refreshEtsyToken;
   const createAdapter = dependencies.createAdapter ?? createEtsyAdapter;
   const downloadPdf = dependencies.downloadPdf ?? downloadProductPdf;
+  const downloadMockup = dependencies.downloadMockup ?? downloadProductMockup;
 
   let credentials;
   try {
@@ -92,6 +94,7 @@ export async function publishListingToEtsyOnApprove(
   const description =
     listing.description?.trim() || "Utility-first digital download.";
   const priceCents = listingPriceToCents(listing.price);
+  const mockupPath = generation?.mockupStoragePath?.trim() || null;
 
   try {
     const adapter = createAdapter();
@@ -113,6 +116,40 @@ export async function publishListingToEtsyOnApprove(
       credentials.shop_id,
       credentials.access_token,
     );
+
+    if (mockupPath) {
+      try {
+        const mockupBuffer = await downloadMockup(mockupPath);
+        const mockupFilename = `${filename.replace(/\.pdf$/i, "")}_mockup.jpg`;
+        await adapter.uploadListingImage(
+          created.listing_id,
+          mockupBuffer,
+          mockupFilename,
+          credentials.shop_id,
+          credentials.access_token,
+        );
+      } catch (imageErr) {
+        const imageMessage =
+          imageErr instanceof Error
+            ? imageErr.message
+            : "Etsy listing image upload failed.";
+        await insertGumroadEvent(
+          supabase,
+          userId,
+          "etsy_image_upload_failed",
+          `Etsy draft created but mockup image upload failed: ${imageMessage}`,
+          { listingId, provider: "etsy", mockupPath },
+        );
+      }
+    } else {
+      await insertGumroadEvent(
+        supabase,
+        userId,
+        "etsy_no_mockup_image",
+        "Etsy draft created without listing hero image (no mockup on generation).",
+        { listingId, provider: "etsy" },
+      );
+    }
 
     const { data: updated, error } = await supabase
       .from(TABLES.LISTINGS)

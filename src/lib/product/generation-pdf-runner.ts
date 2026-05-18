@@ -3,6 +3,8 @@
  */
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import { mapGenerationFromDb } from "@/lib/product/mappers";
+import type { ProductStructure } from "@/lib/product/domain";
+import { generateListingMockup } from "@/lib/product/mockup-generator";
 import { generateAndStoreProductPdf } from "@/lib/product/pdf-service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
@@ -156,6 +158,12 @@ export async function runGenerationPdfJob(
         storagePath: pdfResult.storagePath,
       },
     });
+
+    scheduleListingMockupAfterPdf(supabase, userId, generationId, listingId, {
+      listingTitle,
+      structure: generation.structure,
+    });
+
     return pdfResult;
   }
 
@@ -173,6 +181,44 @@ export async function runGenerationPdfJob(
   });
 
   return pdfResult;
+}
+
+function scheduleListingMockupAfterPdf(
+  supabase: Supabase,
+  userId: string,
+  generationId: string,
+  listingId: string,
+  context: { listingTitle: string; structure: ProductStructure },
+): void {
+  void (async () => {
+    const storagePath = await generateListingMockup({
+      supabase,
+      userId,
+      generationId,
+      listingTitle: context.listingTitle,
+      structure: context.structure,
+    });
+
+    if (storagePath) {
+      await insertFactoryEvent(supabase, userId, {
+        event_type: "mockup_ready",
+        agent_slug: AGENT_SLUGS.FORGE,
+        room: ROOM_SLUGS.DESIGN_PRESS,
+        message: "Listing mockup ready for review and Etsy.",
+        metadata: { generationId, listingId, storagePath },
+      });
+      return;
+    }
+
+    await insertFactoryEvent(supabase, userId, {
+      event_type: "mockup_generation_failed",
+      agent_slug: AGENT_SLUGS.FORGE,
+      room: ROOM_SLUGS.DESIGN_PRESS,
+      message:
+        "Mockup generation failed — listing can still be reviewed and published without a hero image.",
+      metadata: { generationId, listingId },
+    });
+  })();
 }
 
 /**

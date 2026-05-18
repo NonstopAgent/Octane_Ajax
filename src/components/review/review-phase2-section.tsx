@@ -156,6 +156,7 @@ export function ReviewPhase2Section({
                   publicUrl: null,
                 }
               }
+              mockupStoragePath={generation?.mockupStoragePath ?? null}
               generationStatus={sellabilityInput.generationStatus}
               structure={structure ?? null}
               mockMode={pdfMockMode}

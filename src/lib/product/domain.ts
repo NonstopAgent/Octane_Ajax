@@ -88,6 +88,10 @@ export interface PdfAssetPlaceholders {
   publicUrl: string | null;
 }
 
+export interface MockupAssetPlaceholders {
+  storagePath: string | null;
+}
+
 /** Forge pipeline generation row (domain). */
 export interface ProductGeneration {
   id: string;
@@ -98,6 +102,7 @@ export interface ProductGeneration {
   llm: LlmRunMetadata;
   generationStatus: GenerationStatus;
   pdf: PdfAssetPlaceholders;
+  mockupStoragePath: string | null;
   complianceFlags: ComplianceFlag[];
   complianceWarnings: string[];
   createdAt: string;

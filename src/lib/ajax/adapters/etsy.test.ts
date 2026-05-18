@@ -40,11 +40,39 @@ describe("etsy adapter", () => {
     assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
     const body = String(calls[0]!.init.body);
     assert.match(body, /title=Meal\+Prep\+Planner/);
-    assert.match(body, /price=799/);
+    assert.match(body, /price=7\.99/);
+    assert.match(body, /when_made=2020_2026/);
     assert.match(body, new RegExp(`taxonomy_id=${ETSY_DIGITAL_TAXONOMY_ID}`));
     assert.match(body, /type=download/);
     assert.match(body, /state=active/);
     assert.match(body, /tags%5B%5D=planner/);
+  });
+
+  it("uploadListingImage multipart posts JPEG to images endpoint", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return jsonResponse({ listing_image_id: 555001 });
+    };
+
+    const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
+    const result = await adapter.uploadListingImage(
+      "999001",
+      Buffer.from([0xff, 0xd8, 0xff]),
+      "cover.jpg",
+      "12345",
+      "42.token-value",
+      1,
+    );
+
+    assert.equal(result.listing_image_id, "555001");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!.url, /\/shops\/12345\/listings\/999001\/images$/);
+    assert.ok(calls[0]!.init.body instanceof FormData);
+    const headers = new Headers(calls[0]!.init.headers);
+    assert.equal(headers.get("x-api-key"), "etsy-key");
+    assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
+    assert.equal(headers.get("Content-Type"), null);
   });
 
   it("uploadListingFile multipart posts PDF to files endpoint", async () => {

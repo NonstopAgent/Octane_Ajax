@@ -1,5 +1,9 @@
+import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
+import { hasNovaPastContext } from "@/lib/ajax/nova/past-context";
 import { ALLOWED_PRODUCT_CATEGORIES, PRODUCT_FORMATS } from "@/lib/ajax/product-brain/rules";
 import { NOVA_PROMPT_VERSION } from "@/lib/ajax/nova/types";
+
+export type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 
 export { NOVA_PROMPT_VERSION };
 
@@ -20,7 +24,9 @@ Your job is to propose specific, compliant, niche product concepts that solve a 
 
 ${BLOCKED_GUIDANCE}
 
-Only suggest utility-first digital downloads. Each idea must name a specific person, a specific problem, and a structured printable format with clear usefulness.`;
+Only suggest utility-first digital downloads. Each idea must name a specific person, a specific problem, and a structured printable format with clear usefulness.
+
+You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify.`;
 
 export const NOVA_IDEATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
@@ -41,8 +47,37 @@ export const NOVA_IDEATION_JSON_INSTRUCTIONS = `Return JSON with this exact shap
 
 Generate exactly 3 ideas. Ideas must be distinct niches. Prefer high specificity over broad appeal.`;
 
-export function buildNovaIdeationUserPrompt(runId: string): string {
-  return `Generate 3 utility-first digital product ideas for cycle run ${runId.slice(0, 8)}.
+export function buildNovaIdeationUserPrompt(
+  runId: string,
+  pastContext?: NovaPastContext,
+): string {
+  const base = `Generate 3 utility-first digital product ideas for cycle run ${runId.slice(0, 8)}.
 
 Focus on underserved niches where a printable planner, tracker, worksheet, checklist, template, or logbook would save time or reduce stress. Avoid physical merch, mugs, posters, or apparel.`;
+
+  if (!pastContext || !hasNovaPastContext(pastContext)) {
+    return base;
+  }
+
+  const rejected =
+    pastContext.rejectedNiches.length > 0
+      ? pastContext.rejectedNiches.join(", ")
+      : "(none on record)";
+  const approved =
+    pastContext.approvedNiches.length > 0
+      ? pastContext.approvedNiches.join(", ")
+      : "(none on record)";
+  const titles =
+    pastContext.recentTitles.length > 0
+      ? pastContext.recentTitles.join(", ")
+      : "(none on record)";
+
+  return `${base}
+
+IMPORTANT CONTEXT FROM PAST CYCLES:
+- Previously REJECTED niches (do NOT repeat these): ${rejected}
+- Previously APPROVED niches (you can explore adjacent ideas): ${approved}
+- Recent product titles already created (avoid duplicates): ${titles}
+
+Generate ideas that are DIFFERENT from all of the above. Explore new territory.`;
 }

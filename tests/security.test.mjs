@@ -23,6 +23,7 @@ const FORBIDDEN_IN_CLIENT = [
   /from ["']@\/lib\/product\/pdf-generator/,
   /from ["']@\/lib\/product\/pdf-storage/,
   /from ["']@\/lib\/product\/pdf-service/,
+  /from ["']@\/lib\/product\/mockup-generator/,
   /from ["']@\/lib\/ajax\/adapters/,
   /createDemoEtsyAdapter/,
   /etsyAdapter/,
@@ -166,6 +167,13 @@ describe("migrations RLS", () => {
     assert.match(migration, /add column if not exists/i);
   });
 
+  it("stores mockup_storage_path on product_generations and allows JPEG in product_pdfs", () => {
+    const migration = readMigration("20260519000000_mockup_storage_path.sql");
+    assert.match(migration, /mockup_storage_path/i);
+    assert.match(migration, /image\/jpeg/i);
+    assert.match(migration, /product_pdfs/i);
+  });
+
   it("enables RLS on etsy_credentials with owner-only policies", () => {
     const migration = readMigration("20260518160000_etsy_credentials.sql");
     assertRlsEnabled(migration, "etsy_credentials");
@@ -282,5 +290,6 @@ describe("staged pipeline LLM wiring guard", () => {
     );
     assert.match(generatePdfRoute, /runGenerationPdfJob/);
     assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/pdf-generator/);
+    assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/mockup-generator/);
   });
 });

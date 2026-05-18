@@ -107,9 +107,9 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       body.set("quantity", "999");
       body.set("title", input.title.trim() || "Digital product");
       body.set("description", input.description.trim() || "Digital download.");
-      body.set("price", String(input.price_cents));
+      body.set("price", String((input.price_cents / 100).toFixed(2)));
       body.set("who_made", "i_did");
-      body.set("when_made", "2020_2025");
+      body.set("when_made", "2020_2026");
       body.set("taxonomy_id", String(ETSY_DIGITAL_TAXONOMY_ID));
       body.set("type", "download");
       body.set("state", "active");
@@ -178,6 +178,39 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       if (!response.ok) {
         await parseEtsyJson(response);
       }
+    },
+
+    async uploadListingImage(
+      listingId: string,
+      imageBuffer: Buffer,
+      filename: string,
+      shopId: string,
+      accessToken: string,
+      rank?: number,
+    ): Promise<{ listing_image_id: string }> {
+      const form = new FormData();
+      form.append(
+        "image",
+        new Blob([new Uint8Array(imageBuffer)], { type: "image/jpeg" }),
+        filename,
+      );
+      form.append("rank", String(rank ?? 1));
+
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/images`,
+        {
+          method: "POST",
+          headers: authHeaders(clientId, accessToken),
+          body: form,
+        },
+      );
+
+      const parsed = await parseEtsyJson<{ listing_image_id?: number }>(response);
+      const imageId =
+        parsed.listing_image_id != null
+          ? String(parsed.listing_image_id)
+          : "unknown";
+      return { listing_image_id: imageId };
     },
   };
 }

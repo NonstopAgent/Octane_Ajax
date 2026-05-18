@@ -23,7 +23,17 @@ export {
   NOVA_IDEATION_JSON_INSTRUCTIONS,
   NOVA_IDEATION_SYSTEM_PROMPT,
   buildNovaIdeationUserPrompt,
+  type NovaPastContext,
 } from "@/lib/ajax/nova/prompts";
+
+export {
+  buildNovaPastContext,
+  dedupePreserveOrder,
+  extractNicheFromIdea,
+  extractNichesFromListings,
+  fetchNovaPastContext,
+  hasNovaPastContext,
+} from "@/lib/ajax/nova/past-context";
 
 export {
   mapNovaIdeasToDbInserts,

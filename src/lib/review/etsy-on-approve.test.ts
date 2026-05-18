@@ -37,6 +37,7 @@ const generation: ProductGeneration = {
     tokenEstimateOutput: null,
   },
   pdf: { storagePath: "user-1/gen-1.pdf", publicUrl: null },
+  mockupStoragePath: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

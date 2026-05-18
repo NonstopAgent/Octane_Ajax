@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
 import {
+  buildProductMockupDownloadHref,
   buildProductPdfDownloadHref,
   buildProductPdfGenerateHref,
   getReviewPdfUiState,
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button";
 type ReviewPdfPanelProps = {
   generationId: string | null;
   pdf: PdfAssetPlaceholders;
+  mockupStoragePath?: string | null;
   generationStatus: GenerationStatus;
   structure?: ProductStructure | null;
   mockMode?: boolean;
@@ -55,6 +57,7 @@ function statusTone(
 export function ReviewPdfPanel({
   generationId,
   pdf,
+  mockupStoragePath = null,
   generationStatus: initialStatus,
   structure,
   mockMode = false,
@@ -135,6 +138,11 @@ export function ReviewPdfPanel({
       ? buildProductPdfDownloadHref(generationId)
       : null;
 
+  const mockupHref =
+    generationId && mockupStoragePath?.trim()
+      ? buildProductMockupDownloadHref(generationId)
+      : null;
+
   const pageCount = structure?.pages.length ?? structure?.pageCount ?? 0;
   const format = structure?.format;
 
@@ -183,6 +191,20 @@ export function ReviewPdfPanel({
       ) : null}
 
       <div className={pdfPreviewSlot}>
+        {mockupHref ? (
+          <div className="mb-4 w-full">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Listing mockup
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mockupHref}
+              alt="Generated listing mockup preview"
+              className="mx-auto max-h-48 w-auto rounded-md border border-[var(--border-dim)] object-contain"
+            />
+          </div>
+        ) : null}
+
         {downloadHref ? (
           <>
             <span className={pdfPreviewIcon} aria-hidden>

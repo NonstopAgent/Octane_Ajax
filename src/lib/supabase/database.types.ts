@@ -193,6 +193,7 @@ export interface Database {
           generation_status: string;
           pdf_storage_path: string | null;
           pdf_public_url: string | null;
+          mockup_storage_path: string | null;
           compliance_flags: Json;
           compliance_warnings: string[];
           created_at: string;
@@ -212,6 +213,7 @@ export interface Database {
           generation_status?: string;
           pdf_storage_path?: string | null;
           pdf_public_url?: string | null;
+          mockup_storage_path?: string | null;
           compliance_flags?: Json;
           compliance_warnings?: string[];
           created_at?: string;
@@ -231,6 +233,7 @@ export interface Database {
           generation_status?: string;
           pdf_storage_path?: string | null;
           pdf_public_url?: string | null;
+          mockup_storage_path?: string | null;
           compliance_flags?: Json;
           compliance_warnings?: string[];
           created_at?: string;

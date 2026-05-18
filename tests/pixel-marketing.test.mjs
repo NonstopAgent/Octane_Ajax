@@ -7,19 +7,29 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PIXEL = join(ROOT, "src/lib/ajax/pixel-simulator.ts");
 const PROMO = join(ROOT, "src/lib/ajax/pixel-promo-package.ts");
+const SERVICE = join(ROOT, "src/lib/ajax/pixel/service.ts");
+const MARKETING_PAGE = join(ROOT, "src/app/(command)/marketing/page.tsx");
 const RUN_PIXEL = join(ROOT, "src/app/api/ajax/run-pixel/route.ts");
+const NAV = join(ROOT, "src/lib/constants.ts");
 
 describe("pixel marketing wiring", () => {
   const pixel = readFileSync(PIXEL, "utf8");
   const promo = readFileSync(PROMO, "utf8");
+  const service = readFileSync(SERVICE, "utf8");
   const route = readFileSync(RUN_PIXEL, "utf8");
+  const marketingPage = readFileSync(MARKETING_PAGE, "utf8");
+  const nav = readFileSync(NAV, "utf8");
 
-  it("uses pixel-promo-package for deterministic marketing metadata", () => {
+  it("uses generatePixelMarketing with deterministic fallback", () => {
+    assert.match(pixel, /generatePixelMarketing/);
     assert.match(pixel, /buildPixelPromoPackage/);
     assert.match(pixel, /buildContentJobScheduleUpdate/);
     assert.match(promo, /PixelPromoMetadata/);
     assert.match(promo, /tiktokHookIdeas/);
     assert.match(promo, /pinterestTitle/);
+    assert.match(service, /completeJson/);
+    assert.match(service, /isOpenAiConfigured/);
+    assert.match(service, /PIXEL_MARKETING_SYSTEM_PROMPT/);
     assert.match(promo, /CONTENT_JOBS_HAS_METADATA_COLUMN\s*=\s*true/);
   });
 
@@ -41,5 +51,17 @@ describe("pixel marketing wiring", () => {
     assert.match(route, /createClient/);
     assert.doesNotMatch(route, /createServiceClient/);
     assert.doesNotMatch(route, /OPENAI_API_KEY/);
+  });
+
+  it("marketing page is server-only and does not import LLM", () => {
+    assert.doesNotMatch(marketingPage, /["']use client["']/);
+    assert.doesNotMatch(marketingPage, /@\/lib\/llm/);
+    assert.doesNotMatch(marketingPage, /generatePixelMarketing/);
+    assert.match(marketingPage, /fetchMarketingContentJobs/);
+  });
+
+  it("adds Marketing to navigation", () => {
+    assert.match(nav, /href:\s*"\/marketing"/);
+    assert.match(nav, /label:\s*"Marketing"/);
   });
 });

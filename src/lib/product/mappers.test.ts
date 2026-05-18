@@ -62,6 +62,7 @@ function baseDbGeneration(overrides: Partial<DbGeneration> = {}): DbGeneration {
     generation_status: "ready",
     pdf_storage_path: "generations/sample.pdf",
     pdf_public_url: null,
+    mockup_storage_path: "generations/sample_mockup.jpg",
     compliance_flags: [
       {
         code: "ai_disclosure",
@@ -167,6 +168,7 @@ describe("product mappers — product_generations", () => {
     assert.equal(domain.structure.pageCount, 1);
     assert.equal(domain.llm.model, "gpt-4o-mini");
     assert.equal(domain.pdf.storagePath, "generations/sample.pdf");
+    assert.equal(domain.mockupStoragePath, "generations/sample_mockup.jpg");
     assert.equal(domain.complianceFlags.length, 1);
     assert.equal(domain.complianceFlags[0]?.code, "ai_disclosure");
     assert.deepEqual(domain.complianceWarnings, [
@@ -192,6 +194,7 @@ describe("product mappers — product_generations", () => {
       llm: domain.llm,
       generationStatus: "queued",
       pdf: domain.pdf,
+      mockupStoragePath: domain.mockupStoragePath,
       complianceFlags: domain.complianceFlags,
       complianceWarnings: domain.complianceWarnings,
     });

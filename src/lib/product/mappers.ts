@@ -198,6 +198,7 @@ export function mapGenerationFromDb(row: DbGeneration): ProductGeneration {
       storagePath: row.pdf_storage_path,
       publicUrl: row.pdf_public_url,
     },
+    mockupStoragePath: row.mockup_storage_path,
     complianceFlags: parseComplianceFlags(row.compliance_flags),
     complianceWarnings: row.compliance_warnings ?? [],
     createdAt: row.created_at,
@@ -214,6 +215,7 @@ export function mapGenerationToDbInsert(
     | "llm"
     | "generationStatus"
     | "pdf"
+    | "mockupStoragePath"
     | "complianceFlags"
     | "complianceWarnings"
   > & { userId?: string },
@@ -231,6 +233,7 @@ export function mapGenerationToDbInsert(
     generation_status: input.generationStatus,
     pdf_storage_path: input.pdf.storagePath,
     pdf_public_url: input.pdf.publicUrl,
+    mockup_storage_path: input.mockupStoragePath,
     compliance_flags: toJson(input.complianceFlags),
     compliance_warnings: input.complianceWarnings,
   };
@@ -245,6 +248,7 @@ export function mapGenerationToDbUpdate(
       | "llm"
       | "generationStatus"
       | "pdf"
+      | "mockupStoragePath"
       | "complianceFlags"
       | "complianceWarnings"
     >
@@ -281,6 +285,9 @@ export function mapGenerationToDbUpdate(
     if (patch.pdf.publicUrl !== undefined) {
       update.pdf_public_url = patch.pdf.publicUrl;
     }
+  }
+  if (patch.mockupStoragePath !== undefined) {
+    update.mockup_storage_path = patch.mockupStoragePath;
   }
   if (patch.complianceFlags !== undefined) {
     update.compliance_flags = toJson(patch.complianceFlags);

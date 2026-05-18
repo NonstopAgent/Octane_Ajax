@@ -40,6 +40,11 @@ export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", description: "Factory overview" },
   { href: "/factory", label: "Factory", description: "Live floor map" },
   { href: "/review", label: "Review", description: "Human-in-the-loop" },
+  {
+    href: "/marketing",
+    label: "Marketing",
+    description: "Pixel promo copy",
+  },
   { href: "/store", label: "Store", description: "Public catalog" },
   {
     href: "/operator-store",

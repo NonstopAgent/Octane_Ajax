@@ -8,6 +8,7 @@ import {
   pickForgeIdeaCandidate,
   runNovaIdeation,
 } from "@/lib/ajax/nova";
+import { fetchNovaPastContext } from "@/lib/ajax/nova/past-context";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   normalizeProductCategory,
@@ -488,7 +489,8 @@ async function executeNovaStep(
   );
   await sleep(CYCLE_PACING.agentWorkMs);
 
-  const novaResult = await runNovaIdeation(runId);
+  const pastContext = await fetchNovaPastContext(supabase, userId);
+  const novaResult = await runNovaIdeation(runId, { pastContext });
   const ideaInserts = mapNovaIdeasToDbInserts(userId, runId, novaResult);
 
   if (ideaInserts.length === 0) {
@@ -665,6 +667,7 @@ async function executeForgeStep(
     },
     generationStatus: "queued",
     pdf: { storagePath: null, publicUrl: null },
+    mockupStoragePath: null,
     complianceFlags: compliance.flags,
     complianceWarnings: compliance.warnings,
   });
