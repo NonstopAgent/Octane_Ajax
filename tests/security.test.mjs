@@ -289,7 +289,7 @@ describe("staged pipeline LLM wiring guard", () => {
       "utf8",
     );
     assert.match(generatePdfRoute, /runGenerationPdfJob/);
+    assert.match(generatePdfRoute, /generateListingMockup/);
     assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/pdf-generator/);
-    assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/mockup-generator/);
   });
 });

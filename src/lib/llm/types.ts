@@ -48,6 +48,8 @@ export interface JsonCompletionRequest<T> extends LlmCompletionRequest {
   /** Extra system instructions (JSON shape hints, field names, etc.). */
   jsonInstructions?: string;
   maxRetries?: number;
+  /** Per-request OpenAI client timeout in ms (used when `client` is omitted). */
+  timeout?: number;
   /** Inject a client for tests; production callers omit this. */
   client?: OpenAI;
 }

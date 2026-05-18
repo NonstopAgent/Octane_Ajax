@@ -79,7 +79,11 @@ function isRetryableError(error: unknown): boolean {
 export async function completeJson<T>(
   request: JsonCompletionRequest<T>,
 ): Promise<JsonCompletionResult<T>> {
-  const client = request.client ?? createOpenAiClient();
+  const client =
+    request.client ??
+    createOpenAiClient(
+      request.timeout !== undefined ? { timeout: request.timeout } : undefined,
+    );
   const model = request.model ?? DEFAULT_LLM_MODEL;
   const maxRetries = request.maxRetries ?? DEFAULT_MAX_RETRIES;
   const messages = buildSystemMessages(request.messages, request.jsonInstructions);

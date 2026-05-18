@@ -100,6 +100,7 @@ async function fetchLlmForgeOutput(
     schema: ForgeLlmResponseSchema,
     jsonInstructions: FORGE_GENERATION_JSON_INSTRUCTIONS,
     options: { temperature: 0.6, maxTokens: 4000 },
+    timeout: 28_000,
     client: options?.client,
   });
 

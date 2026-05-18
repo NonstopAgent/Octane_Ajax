@@ -1,12 +1,17 @@
 export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
+import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import {
   GenerationPdfError,
   runGenerationPdfJob,
 } from "@/lib/product/generation-pdf-runner";
+import { mapGenerationFromDb } from "@/lib/product/mappers";
+import { generateListingMockup } from "@/lib/product/mockup-generator";
 import { buildProductPdfDownloadHref } from "@/lib/review/display";
+import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { TABLES } from "@/lib/supabase/schema";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -49,6 +54,76 @@ export async function POST(_request: Request, context: RouteContext) {
         },
         { status: 500 },
       );
+    }
+
+    const { data: genRow, error: genLoadError } = await supabase
+      .from(TABLES.GENERATIONS)
+      .select("*")
+      .eq("id", generationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!genLoadError && genRow) {
+      const generation = mapGenerationFromDb(genRow);
+      const listingId = generation.productListingId;
+      const { structure } = generation;
+      const { format, pageCount } = structure;
+
+      const { data: listingRow } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("title")
+        .eq("id", listingId ?? "")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const { data: ideaRow } = await supabase
+        .from(TABLES.IDEAS)
+        .select("niche")
+        .eq("id", generation.productIdeaId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const listingTitle = listingRow?.title?.trim() || "Untitled product";
+      const niche = ideaRow?.niche?.trim() || undefined;
+
+      const mockupStoragePath = await generateListingMockup({
+        supabase,
+        userId: user.id,
+        generationId,
+        listingTitle,
+        structure,
+      });
+
+      const mockupMetadata: Json = {
+        generationId,
+        listingId: listingId ?? null,
+        listingTitle,
+        niche: niche ?? null,
+        format,
+        pageCount,
+      };
+
+      if (mockupStoragePath) {
+        await supabase.from(TABLES.EVENTS).insert({
+          user_id: user.id,
+          event_type: "mockup_ready",
+          message: "Listing mockup ready for review and Etsy.",
+          agent_slug: AGENT_SLUGS.FORGE,
+          room: ROOM_SLUGS.DESIGN_PRESS,
+          metadata: { ...mockupMetadata, storagePath: mockupStoragePath } as Json,
+        });
+      } else {
+        console.error("[generate-pdf] mockup_generation_failed", mockupMetadata);
+        await supabase.from(TABLES.EVENTS).insert({
+          user_id: user.id,
+          event_type: "mockup_generation_failed",
+          message:
+            "Mockup generation failed — listing can still be reviewed and published without a hero image.",
+          agent_slug: AGENT_SLUGS.FORGE,
+          room: ROOM_SLUGS.DESIGN_PRESS,
+          metadata: mockupMetadata,
+        });
+      }
     }
 
     return NextResponse.json({
