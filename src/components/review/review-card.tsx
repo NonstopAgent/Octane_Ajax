@@ -8,6 +8,7 @@ import {
   hasComplianceRisk,
 } from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
+import type { GenerationStatus } from "@/lib/supabase/schema";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -25,6 +26,10 @@ type ReviewCardProps = {
   busy: boolean;
   onApprove: () => void;
   onReject: () => void;
+  onGenerationChange?: (patch: {
+    generationStatus: GenerationStatus;
+    storagePath?: string | null;
+  }) => void;
 };
 
 export function ReviewCard({
@@ -32,6 +37,7 @@ export function ReviewCard({
   busy,
   onApprove,
   onReject,
+  onGenerationChange,
 }: ReviewCardProps) {
   const { listing, idea, phase2 } = review;
   const approveUi = getReviewApproveUi(phase2.brain?.verdict);
@@ -184,7 +190,11 @@ export function ReviewCard({
         </dl>
       </div>
 
-      <ReviewPhase2Section phase2={phase2} idea={idea} />
+      <ReviewPhase2Section
+        phase2={phase2}
+        idea={idea}
+        onGenerationChange={onGenerationChange}
+      />
     </article>
   );
 }

@@ -209,9 +209,20 @@ describe("run-cycle LLM wiring guard", () => {
 
     assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
     assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
-    assert.match(simulator, /from ["']@\/lib\/product\/pdf-service/);
+    assert.doesNotMatch(simulator, /from ["']@\/lib\/product\/pdf-service/);
     assert.doesNotMatch(simulator, /from ["']@\/lib\/product\/pdf-generator/);
     assert.match(simulator, /review_gate|cycle_paused/i);
-    assert.match(simulator, /pdf_generation_failed/);
+    assert.match(simulator, /pdf_queued/);
+    assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
+
+    const generatePdfRoute = readFileSync(
+      join(
+        ROOT,
+        "app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+      ),
+      "utf8",
+    );
+    assert.match(generatePdfRoute, /runGenerationPdfJob/);
+    assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/pdf-generator/);
   });
 });

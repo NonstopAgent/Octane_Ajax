@@ -122,9 +122,10 @@ Check **Settings** (`/settings`) for env status, signed-in email, and user id.
 | 1 | `/factory` | **Reset factory** |
 | 2 | `/factory` | **Run Ajax cycle** (Nova → Forge → stops at Review Gate) |
 | 3 | `/review` | Open pending listing |
-| 4 | `/review` | **Approve** — runs Pixel automatically and publishes to the **demo storefront** (not Etsy) |
-| 5 | `/store` | Confirm the listing appears (status `published`) |
-| 6 | `/factory` | Confirm metrics, machine log, and agent sprites updated |
+| 4 | `/review` | **Generate PDF** (separate from run-cycle; avoids Vercel timeout) then **Download PDF** when ready |
+| 5 | `/review` | **Approve** — runs Pixel automatically and publishes to the **demo storefront** (not Etsy) |
+| 6 | `/store` | Confirm the listing appears (status `published`) |
+| 7 | `/factory` | Confirm metrics, machine log, and agent sprites updated |
 
 Optional: **Run Pixel** on `/factory` retries any still-queued jobs. Reject a listing to populate **Agents** memory, then approve another.
 
@@ -167,6 +168,7 @@ This always checks env vars and all 8 pipeline tables. Without `DEMO_TEST_EMAIL`
 | Reject | POST | `/api/ajax/review/reject` |
 | Run Pixel | POST | `/api/ajax/run-pixel` |
 | Snapshot refresh / Realtime | GET | `/api/ajax/factory-snapshot` |
+| Generate PDF (async) | POST | `/api/ajax/product-generations/:id/generate-pdf` |
 | Download PDF (Review) | GET | `/api/ajax/product-generations/:id/pdf-download` |
 
 ## Supabase migrations
@@ -365,14 +367,14 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 **Persisted artifacts**
 
 - `product_listings` — title, description, price (`pending_review`, platform `demo`)
-- `product_generations` — `structure` (pages with `userInstructions`), `compliance_flags` / `compliance_warnings`, LLM metadata, `generation_status` (`pending` → `generating` → `ready` or `failed`), `pdf_storage_path`
+- `product_generations` — `structure` (pages with `userInstructions`), `compliance_flags` / `compliance_warnings`, LLM metadata, `generation_status` (`queued` → `generating` → `ready` or `failed`), `pdf_storage_path`
 - `ajax_tasks.output` — `seoTags`, `generationId`, `forgeMode`, `aiDisclosure`, etc.
 
 **AI disclosure** (required in listing copy and stored on the generation):
 
 > AI tools assisted in drafting and structuring this digital product. The seller reviewed and customized the final product.
 
-**PDF flow (Milestone 2.5):** After Forge persists `product_generations`, `pdf-service` maps structure → `pdf-generator` → uploads to private Supabase Storage bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) to redirect to a short-lived signed URL. If upload fails, the cycle still pauses at Review Gate (`generation_status: failed`, factory event `pdf_generation_failed`). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
+**PDF flow (Milestone 2.5):** Run-cycle stops at Review Gate with `generation_status: queued` and a `pdf_queued` factory event — PDF work does **not** block the cycle (avoids Vercel timeouts). The factory dashboard fires `POST /api/ajax/product-generations/:id/generate-pdf` in the background; `pdf-service` maps structure → `pdf-generator` → uploads to private bucket `product_pdfs` at `{user_id}/{generation_id}.pdf`. Review uses `GET /api/ajax/product-generations/:id/pdf-download` (session auth + ownership) for a short-lived signed URL. Failures set `generation_status: failed` and log `pdf_generation_failed`; the listing still waits at Review Gate. **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory. No Stripe in this repo.
 
 ### PDF quality standard
 
@@ -403,7 +405,7 @@ Forge Zod validation enforces this for LLM output (`forge-generation-v2`). The P
 | LLM foundation | `src/lib/llm/` | Server-only OpenAI wrapper — used by Nova and Forge services |
 | Forge generation | `src/lib/ajax/forge/` | LLM when configured + Zod; deterministic fallback |
 | Pixel | `src/lib/ajax/pixel-simulator.ts` | Simulated media (no LLM) |
-| PDF pipeline | `src/lib/product/pdf-generator.ts`, `pdf-service.ts`, `pdf-storage.ts` | Forge cycle generates + uploads; Review downloads via signed URL |
+| PDF pipeline | `src/lib/product/pdf-generator.ts`, `pdf-service.ts`, `generation-pdf-runner.ts` | Async route after cycle; Review downloads via signed URL |
 | Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders |
 
 **Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components; `simulator.ts` imports Nova and Forge, not `@/lib/llm` directly).

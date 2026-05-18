@@ -94,6 +94,7 @@ export function FactoryDashboard({
 
       if (!res.ok) {
         showToast("error", data.error ?? "Failed to run Ajax cycle.");
+        await refresh();
         return;
       }
 
@@ -103,7 +104,11 @@ export function FactoryDashboard({
       );
       await refresh();
     } catch {
-      showToast("error", "Network error while running cycle.");
+      showToast(
+        "error",
+        "Request failed or timed out. Check Vercel logs.",
+      );
+      await refresh();
     } finally {
       setRunning(false);
     }

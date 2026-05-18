@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   AI_DISCLOSURE_FLAG_CODE,
   buildProductPdfDownloadHref,
+  buildProductPdfGenerateHref,
   collectComplianceMessages,
   filterComplianceFlags,
   getReviewApproveUi,
@@ -95,6 +96,13 @@ describe("review display helpers", () => {
     assert.match(
       buildProductPdfDownloadHref("abc"),
       /product-generations\/abc\/pdf-download/,
+    );
+  });
+
+  it("builds server generate route for generation id", () => {
+    assert.match(
+      buildProductPdfGenerateHref("abc"),
+      /product-generations\/abc\/generate-pdf/,
     );
   });
 });

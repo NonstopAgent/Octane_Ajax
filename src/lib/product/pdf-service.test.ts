@@ -135,10 +135,17 @@ describe("review PDF display helpers", () => {
     );
   });
 
-  it("shows placeholder when pending or mock mode", () => {
+  it("shows placeholder when pending, queued, or mock mode", () => {
     assert.equal(
       getReviewPdfUiState({
         generationStatus: "pending",
+        storagePath: null,
+      }),
+      "placeholder",
+    );
+    assert.equal(
+      getReviewPdfUiState({
+        generationStatus: "queued",
         storagePath: null,
       }),
       "placeholder",

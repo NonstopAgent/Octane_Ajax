@@ -9,7 +9,6 @@ import {
   runNovaIdeation,
 } from "@/lib/ajax/nova";
 import { mapGenerationToDbInsert } from "@/lib/product/mappers";
-import { generateAndStoreProductPdf } from "@/lib/product/pdf-service";
 import {
   mapEventFromDb,
   mapIdeaFromDb,
@@ -70,6 +69,7 @@ export type AjaxCycleSummary = {
   ideas: ProductIdea[];
   selectedIdea: ProductIdea;
   listing: ProductListing;
+  generationId: string;
   review: ReviewItem;
   events: FactoryEvent[];
   tasks: ReturnType<typeof mapTaskFromDb>[];
@@ -485,7 +485,7 @@ async function executeAjaxCycle(
       tokenEstimateInput: forgeResult.tokenEstimateInput ?? null,
       tokenEstimateOutput: forgeResult.tokenEstimateOutput ?? null,
     },
-    generationStatus: "pending",
+    generationStatus: "queued",
     pdf: { storagePath: null, publicUrl: null },
     complianceFlags: compliance.flags,
     complianceWarnings: compliance.warnings,
@@ -504,38 +504,19 @@ async function executeAjaxCycle(
     );
   }
 
-  const aiDisclosure =
-    typeof forgeResult.productStructure.metadata?.aiDisclosure === "string"
-      ? forgeResult.productStructure.metadata.aiDisclosure
-      : forgeResult.aiDisclosure;
-
-  const pdfResult = await generateAndStoreProductPdf({
-    supabase,
-    userId,
-    generationId: generationRow.id,
-    structure: forgeResult.productStructure,
-    listingTitle: forgeResult.listingTitle,
-    listingDescription: forgeResult.listingDescription,
-    footerNote: aiDisclosure,
-    audience: forgePick.targetBuyer,
-  });
-
-  if (!pdfResult.ok) {
-    events.push(
-      await insertEvent(supabase, userId, {
-        event_type: "pdf_generation_failed",
-        agent_slug: AGENT_SLUGS.FORGE,
-        room: ROOM_SLUGS.DESIGN_PRESS,
-        message: "PDF generation failed — listing remains at Review Gate for human review.",
-        metadata: {
-          generationId: generationRow.id,
-          listingId: listingRow.id,
-          error: pdfResult.error,
-          runId,
-        },
-      }),
-    );
-  }
+  events.push(
+    await insertEvent(supabase, userId, {
+      event_type: "pdf_queued",
+      agent_slug: AGENT_SLUGS.FORGE,
+      room: ROOM_SLUGS.DESIGN_PRESS,
+      message: "PDF generation queued — printable asset will build in the background.",
+      metadata: {
+        generationId: generationRow.id,
+        listingId: listingRow.id,
+        runId,
+      },
+    }),
+  );
 
   const { data: reviewRow, error: reviewError } = await supabase
     .from(TABLES.REVIEW_QUEUE)
@@ -606,6 +587,7 @@ async function executeAjaxCycle(
     ideas,
     selectedIdea,
     listing,
+    generationId: generationRow.id,
     review,
     events,
     tasks,

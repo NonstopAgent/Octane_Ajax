@@ -142,6 +142,10 @@ export function buildProductPdfDownloadHref(generationId: string): string {
   return `/api/ajax/product-generations/${generationId}/pdf-download`;
 }
 
+export function buildProductPdfGenerateHref(generationId: string): string {
+  return `/api/ajax/product-generations/${generationId}/generate-pdf`;
+}
+
 export function collectComplianceMessages(input: {
   warnings: string[];
   flags: ComplianceFlag[];

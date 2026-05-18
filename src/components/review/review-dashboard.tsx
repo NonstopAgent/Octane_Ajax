@@ -11,6 +11,7 @@ import {
 } from "@/components/factory/toast-banner";
 import { hasComplianceRisk } from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
+import type { GenerationStatus } from "@/lib/supabase/schema";
 import { CommandHeader } from "@/components/layout/command-header";
 import { REVIEW_GATE_MICROCOPY } from "@/lib/ajax/constants";
 import { ButtonLink } from "@/components/ui/button";
@@ -37,6 +38,37 @@ export function ReviewDashboard({
     setToast({ tone, message });
     window.setTimeout(() => setToast(null), 6000);
   }, []);
+
+  const patchReviewGeneration = useCallback(
+    (
+      reviewId: string,
+      patch: { generationStatus: GenerationStatus; storagePath?: string | null },
+    ) => {
+      setReviews((prev) =>
+        prev.map((item) => {
+          if (item.id !== reviewId || !item.phase2.generation) return item;
+          return {
+            ...item,
+            phase2: {
+              ...item.phase2,
+              generation: {
+                ...item.phase2.generation,
+                generationStatus: patch.generationStatus,
+                pdf: {
+                  ...item.phase2.generation.pdf,
+                  storagePath:
+                    patch.storagePath !== undefined
+                      ? patch.storagePath
+                      : item.phase2.generation.pdf.storagePath,
+                },
+              },
+            },
+          };
+        }),
+      );
+    },
+    [],
+  );
 
   const approve = async (reviewId: string) => {
     setActingOn(reviewId);
@@ -164,6 +196,9 @@ export function ReviewDashboard({
                 busy={actingOn === review.id}
                 onApprove={() => approve(review.id)}
                 onReject={() => setRejectTarget(review)}
+                onGenerationChange={(patch) =>
+                  patchReviewGeneration(review.id, patch)
+                }
               />
             </li>
           ))}

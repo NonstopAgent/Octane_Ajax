@@ -1,7 +1,11 @@
+"use client";
+
+import { useCallback, useState } from "react";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
 import {
   buildProductPdfDownloadHref,
+  buildProductPdfGenerateHref,
   getReviewPdfUiState,
 } from "@/lib/review/display";
 import {
@@ -10,6 +14,7 @@ import {
   reviewQcPanel,
 } from "@/components/review/review-panel-styles";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
 
 type ReviewPdfPanelProps = {
   generationId: string | null;
@@ -17,6 +22,10 @@ type ReviewPdfPanelProps = {
   generationStatus: GenerationStatus;
   structure?: ProductStructure | null;
   mockMode?: boolean;
+  onGenerationChange?: (patch: {
+    generationStatus: GenerationStatus;
+    storagePath?: string | null;
+  }) => void;
 };
 
 function statusLabel(status: GenerationStatus): string {
@@ -46,13 +55,78 @@ function statusTone(
 export function ReviewPdfPanel({
   generationId,
   pdf,
-  generationStatus,
+  generationStatus: initialStatus,
   structure,
   mockMode = false,
+  onGenerationChange,
 }: ReviewPdfPanelProps) {
+  const [generationStatus, setGenerationStatus] =
+    useState<GenerationStatus>(initialStatus);
+  const [storagePath, setStoragePath] = useState(pdf.storagePath);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const applyGenerationPatch = useCallback(
+    (patch: {
+      generationStatus: GenerationStatus;
+      storagePath?: string | null;
+    }) => {
+      setGenerationStatus(patch.generationStatus);
+      if (patch.storagePath !== undefined) {
+        setStoragePath(patch.storagePath);
+      }
+      onGenerationChange?.(patch);
+    },
+    [onGenerationChange],
+  );
+
+  const generatePdf = async () => {
+    if (!generationId || mockMode) return;
+
+    setBusy(true);
+    setActionError(null);
+    applyGenerationPatch({ generationStatus: "generating" });
+
+    try {
+      const res = await fetch(buildProductPdfGenerateHref(generationId), {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        status?: GenerationStatus;
+        storagePath?: string;
+      };
+
+      if (!res.ok) {
+        const nextStatus =
+          data.status === "generating" ? "generating" : "failed";
+        applyGenerationPatch({ generationStatus: nextStatus });
+        setActionError(
+          data.error ??
+            "PDF generation failed. Request failed or timed out. Check Vercel logs.",
+        );
+        return;
+      }
+
+      applyGenerationPatch({
+        generationStatus: data.status ?? "ready",
+        storagePath: data.storagePath ?? storagePath,
+      });
+    } catch {
+      applyGenerationPatch({ generationStatus: "failed" });
+      setActionError(
+        "Request failed or timed out. Check Vercel logs.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const uiState = getReviewPdfUiState({
     generationStatus,
-    storagePath: pdf.storagePath,
+    storagePath,
     mockMode,
   });
 
@@ -63,6 +137,15 @@ export function ReviewPdfPanel({
 
   const pageCount = structure?.pages.length ?? structure?.pageCount ?? 0;
   const format = structure?.format;
+
+  const showGenerate =
+    !mockMode &&
+    generationId &&
+    (generationStatus === "pending" ||
+      generationStatus === "queued" ||
+      generationStatus === "failed");
+  const showGenerating =
+    !mockMode && generationId && generationStatus === "generating";
 
   return (
     <section
@@ -125,8 +208,19 @@ export function ReviewPdfPanel({
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               Listing remains at Review Gate. Inspect structure and compliance,
-              then run another cycle after fixes.
+              then retry PDF generation or run another cycle after fixes.
             </p>
+            {showGenerate ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-3 h-10"
+                disabled={busy}
+                onClick={() => void generatePdf()}
+              >
+                {busy ? "Generating…" : "Retry PDF generation"}
+              </Button>
+            ) : null}
           </>
         ) : (
           <>
@@ -136,19 +230,49 @@ export function ReviewPdfPanel({
             <p className="text-sm font-medium text-[var(--foreground)]">
               {mockMode
                 ? "PDF placeholder — generation not run yet"
-                : generationStatus === "generating" || generationStatus === "queued"
+                : showGenerating
                   ? "PDF is generating…"
                   : "PDF asset pending"}
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               {mockMode
                 ? "Demo cycle has no printable file. Approve only after you have verified copy and structure."
-                : "Download will appear here when generation completes."}
+                : "Generate the printable PDF before download — approval does not require a ready file."}
             </p>
+            {showGenerate && !showGenerating ? (
+              <Button
+                type="button"
+                variant="primary"
+                className="mt-3 h-10"
+                disabled={busy}
+                onClick={() => void generatePdf()}
+              >
+                {busy ? "Generating…" : "Generate PDF"}
+              </Button>
+            ) : null}
+            {showGenerating ? (
+              <p className="mt-3 inline-flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <Spinner />
+                Building printable asset…
+              </p>
+            ) : null}
           </>
         )}
+        {actionError ? (
+          <p className="mt-3 text-xs text-red-300" role="alert">
+            {actionError}
+          </p>
+        ) : null}
       </div>
-
     </section>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+      aria-hidden
+    />
   );
 }

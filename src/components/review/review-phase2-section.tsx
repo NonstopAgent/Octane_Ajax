@@ -10,10 +10,15 @@ import { ReviewStructurePreview } from "@/components/review/review-structure-pre
 import { hasComplianceRisk } from "@/lib/review/display";
 import type { ReviewPhase2Context } from "@/lib/review/types";
 import type { ProductIdea } from "@/lib/ajax/types";
+import type { GenerationStatus } from "@/lib/supabase/schema";
 
 type ReviewPhase2SectionProps = {
   phase2: ReviewPhase2Context;
   idea: ProductIdea | null;
+  onGenerationChange?: (patch: {
+    generationStatus: GenerationStatus;
+    storagePath?: string | null;
+  }) => void;
 };
 
 function isSimulatedDemo(idea: ProductIdea | null): boolean {
@@ -28,7 +33,11 @@ function Phase2EmptyHint({ label }: { label: string }) {
   );
 }
 
-export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) {
+export function ReviewPhase2Section({
+  phase2,
+  idea,
+  onGenerationChange,
+}: ReviewPhase2SectionProps) {
   const { brain, generation } = phase2;
   const mockMode = isSimulatedDemo(idea);
 
@@ -150,6 +159,7 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
               generationStatus={sellabilityInput.generationStatus}
               structure={structure ?? null}
               mockMode={pdfMockMode}
+              onGenerationChange={onGenerationChange}
             />
           ) : null}
 
