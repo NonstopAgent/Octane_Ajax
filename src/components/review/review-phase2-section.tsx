@@ -32,8 +32,14 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
 
   const complianceWarnings = generation?.complianceWarnings ?? [];
   const complianceFlags = generation?.complianceFlags ?? [];
+  const aiDisclosure =
+    typeof generation?.structure.metadata?.aiDisclosure === "string"
+      ? generation.structure.metadata.aiDisclosure
+      : null;
   const hasCompliance =
-    complianceWarnings.length > 0 || complianceFlags.length > 0;
+    complianceWarnings.length > 0 ||
+    complianceFlags.length > 0 ||
+    Boolean(aiDisclosure);
 
   const structure = generation?.structure;
   const showStructure =
@@ -80,10 +86,22 @@ export function ReviewPhase2Section({ phase2, idea }: ReviewPhase2SectionProps) 
           )}
 
           {hasCompliance ? (
-            <ReviewCompliancePanel
-              warnings={complianceWarnings}
-              flags={complianceFlags}
-            />
+            <>
+              {aiDisclosure ? (
+                <div className={reviewQcPanelMuted}>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+                    AI disclosure
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">
+                    {aiDisclosure}
+                  </p>
+                </div>
+              ) : null}
+              <ReviewCompliancePanel
+                warnings={complianceWarnings}
+                flags={complianceFlags}
+              />
+            </>
           ) : generation ? (
             <div className={reviewQcPanelMuted}>
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">

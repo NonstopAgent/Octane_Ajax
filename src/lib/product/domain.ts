@@ -22,6 +22,8 @@ export interface ProductPageDescription {
   pageNumber: number;
   title: string;
   purpose: string;
+  /** How the buyer should print, fill, or use this page. */
+  userInstructions?: string;
   sections: ProductSectionDescription[];
 }
 

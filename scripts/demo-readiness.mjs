@@ -58,6 +58,7 @@ const REQUIRED_TABLES = [
   "ajax_agents",
   "ajax_tasks",
   "product_ideas",
+  "product_generations",
   "product_listings",
   "review_queue",
   "agent_feedback",

@@ -146,5 +146,8 @@ describe("run-cycle LLM wiring guard", () => {
       assert.doesNotMatch(route, pattern, `run-cycle route must not match ${pattern}`);
       assert.doesNotMatch(simulator, pattern, `simulator must not match ${pattern}`);
     }
+
+    assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
+    assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
   });
 });

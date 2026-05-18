@@ -33,7 +33,7 @@ describe("demo workflow wiring", () => {
     assert.match(content, /review_gate|REVIEW_GATE|review gate/i);
   });
 
-  it("run-cycle routes LLM through Nova only (not direct @/lib/llm)", () => {
+  it("run-cycle routes LLM through Nova and Forge (not direct @/lib/llm)", () => {
     const route = readFileSync(
       join(ROOT, "src/app/api/ajax/run-cycle/route.ts"),
       "utf8",
@@ -45,6 +45,7 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(route, /from ["']@\/lib\/llm/);
     assert.doesNotMatch(route, /completeJson/);
     assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);
+    assert.match(simulator, /from ["']@\/lib\/ajax\/forge/);
     assert.doesNotMatch(simulator, /from ["']@\/lib\/llm/);
   });
 

@@ -241,5 +241,3 @@ export function mapNovaIdeasToDbInserts(
     };
   });
 }
-
-// Fix typo: toISOOSString -> toISOString

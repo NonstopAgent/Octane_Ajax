@@ -94,13 +94,37 @@ function parseProductBrainValidation(
   };
 }
 
+function parsePageDescription(
+  raw: unknown,
+  index: number,
+): ProductStructure["pages"][number] | null {
+  if (!isRecord(raw)) return null;
+  if (typeof raw.title !== "string" || typeof raw.purpose !== "string") {
+    return null;
+  }
+  const pageNumber =
+    typeof raw.pageNumber === "number" ? raw.pageNumber : index + 1;
+  const sections = Array.isArray(raw.sections) ? raw.sections : [];
+  return {
+    pageNumber,
+    title: raw.title,
+    purpose: raw.purpose,
+    userInstructions:
+      typeof raw.userInstructions === "string" ? raw.userInstructions : undefined,
+    sections: sections as ProductStructure["pages"][number]["sections"],
+  };
+}
+
 function parseProductStructure(raw: unknown): ProductStructure {
   if (!isRecord(raw)) return EMPTY_STRUCTURE;
-  const pages = Array.isArray(raw.pages) ? raw.pages : [];
+  const rawPages = Array.isArray(raw.pages) ? raw.pages : [];
+  const pages = rawPages
+    .map((page, index) => parsePageDescription(page, index))
+    .filter((page): page is ProductStructure["pages"][number] => page !== null);
   return {
     format: typeof raw.format === "string" ? raw.format : "unknown",
     pageCount: typeof raw.pageCount === "number" ? raw.pageCount : pages.length,
-    pages: pages as ProductStructure["pages"],
+    pages,
     metadata: isRecord(raw.metadata) ? raw.metadata : undefined,
   };
 }

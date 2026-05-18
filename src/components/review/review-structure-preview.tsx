@@ -49,6 +49,14 @@ export function ReviewStructurePreview({
                   {page.purpose}
                 </p>
               ) : null}
+              {page.userInstructions ? (
+                <p className="mt-2 rounded border border-[var(--border-dim)] bg-black/15 px-2 py-1.5 text-xs text-[var(--foreground)]">
+                  <span className="font-mono text-[var(--accent-blue)]">
+                    Use:{" "}
+                  </span>
+                  {page.userInstructions}
+                </p>
+              ) : null}
               {page.sections.length > 0 ? (
                 <ul className="mt-2 space-y-1 border-t border-[var(--border-dim)] pt-2 text-xs text-[var(--foreground)]">
                   {page.sections.map((section) => (

@@ -9,7 +9,7 @@ Octane Ajax runs a demo-first pipeline:
 | Stage | Station | Actor |
 |-------|---------|--------|
 | Research | Research Lab | **Nova** — product ideas from trend signals |
-| Creation | Design Press | **Forge** — listing assets (simulated) |
+| Creation | Design Press | **Forge** — listing + product structure (LLM when configured) |
 | Quality | Review Gate | **You** — approve or reject with feedback |
 | Marketing | Media Studio | **Pixel** — schedules promo content after approval |
 | Output | Storefront | Published listings (display) |
@@ -90,6 +90,7 @@ Run both SQL files in **SQL Editor** (or use `supabase db push`):
 
 - `supabase/migrations/20260516120000_init_octane_ajax_schema.sql`
 - `supabase/migrations/20260516130000_realtime_pipeline_tables.sql`
+- `supabase/migrations/20260517140000_phase2_product_generation.sql`
 
 ### 4. Enable email/password auth
 
@@ -171,6 +172,7 @@ Apply both migrations in order:
 
 1. `supabase/migrations/20260516120000_init_octane_ajax_schema.sql` — tables, **RLS enabled on all tables**, policies, seed Nova/Forge/Pixel
 2. `supabase/migrations/20260516130000_realtime_pipeline_tables.sql` — Realtime for factory tables
+3. `supabase/migrations/20260517140000_phase2_product_generation.sql` — Product Brain columns, `product_generations`, RLS
 
 **CLI (recommended)**
 
@@ -253,7 +255,7 @@ src/
   hooks/
     useAjaxRealtime.ts
   lib/
-    ajax/               # constants, simulators, adapters, agent-memory
+    ajax/               # constants, simulators, nova/, forge/, adapters
     factory/            # snapshot queries
     review/             # review service
     supabase/           # client, server, types, schema
@@ -263,7 +265,7 @@ tests/                  # security + demo wiring smoke tests
 
 ## Nova ideation: LLM mode vs fallback demo mode
 
-`POST /api/ajax/run-cycle` runs **Nova → Forge → Review Gate**. Only **Nova** may call the LLM layer; **Forge** and **Pixel** stay deterministic/simulated.
+`POST /api/ajax/run-cycle` runs **Nova → Forge → Review Gate**. **Nova** and **Forge** may call the LLM layer (via `src/lib/ajax/nova/` and `src/lib/ajax/forge/`). **Pixel** stays deterministic/simulated. The simulator imports agent modules only — never `@/lib/llm` directly.
 
 | Mode | When | Behavior |
 |------|------|----------|
@@ -277,9 +279,28 @@ tests/                  # security + demo wiring smoke tests
 3. `approve_for_generation` → preferred for Forge selection.
 4. `needs_revision` → may be saved with a lower `trend_score` penalty; `brain_verdict` and snapshots persist via `src/lib/product/mappers.ts`.
 
-**Forge selection:** among saved ideas, Forge picks `approve_for_generation` first (highest `trend_score` / brain total), then `needs_revision` if none approved. Listing creation and Review Gate behavior are unchanged.
+**Forge selection:** among saved ideas, Forge picks `approve_for_generation` first (highest `trend_score` / brain total), then `needs_revision` if none approved.
 
-Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to try LLM mode. Omit it to run the same demo path as before.
+Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to try LLM mode for Nova and Forge. Omit it to run the deterministic fallback path for both.
+
+## Forge generation: LLM mode vs fallback
+
+| Mode | When | Behavior |
+|------|------|----------|
+| **LLM** | `OPENAI_API_KEY` set and OpenAI call succeeds | Forge uses `completeJson` + Zod (`src/lib/ajax/forge/`) for listing copy, exactly **13** SEO tags, printable page structure, compliance notes, and AI disclosure |
+| **Fallback** | Key missing or API/validation failure | Deterministic listing from the selected idea, **$24.99** price, minimal 2-page structure, padded SEO tags |
+
+**Persisted artifacts**
+
+- `product_listings` — title, description, price (`pending_review`, platform `demo`)
+- `product_generations` — `structure` (pages with `userInstructions`), `compliance_flags` / `compliance_warnings`, LLM metadata, `generation_status` (`pending` until PDF is wired)
+- `ajax_tasks.output` — `seoTags`, `generationId`, `forgeMode`, `aiDisclosure`, etc.
+
+**AI disclosure** (required in listing copy and stored on the generation):
+
+> AI tools assisted in drafting and structuring this digital product. The seller reviewed and customized the final product.
+
+**Not wired yet:** PDF rendering to storage (`pdf-generator.ts` exists but Forge does not upload files). **Etsy** remains a future draft-only adapter — no live publish; Review Gate is mandatory.
 
 ## Phase 2 architecture
 
@@ -288,12 +309,13 @@ Set `OPENAI_API_KEY` in `.env.local` (server only — never `NEXT_PUBLIC_*`) to 
 | Nova ideation | `src/lib/ajax/nova/` | LLM when configured + Product Brain gate; deterministic fallback |
 | Product Brain | `src/lib/ajax/product-brain/` | Rules + scoring + verdicts (tested) |
 | Product data model | `src/lib/product/domain.ts`, `mappers.ts`, migration `20260517140000_phase2_product_generation.sql` | Brain columns on `product_ideas`, `product_generations` table, RLS |
-| LLM foundation | `src/lib/llm/` | Server-only OpenAI wrapper — used by Nova only |
-| Forge / Pixel | `src/lib/ajax/simulator.ts` | Simulated listing + media (no LLM) |
+| LLM foundation | `src/lib/llm/` | Server-only OpenAI wrapper — used by Nova and Forge services |
+| Forge generation | `src/lib/ajax/forge/` | LLM when configured + Zod; deterministic fallback |
+| Pixel | `src/lib/ajax/pixel-simulator.ts` | Simulated media (no LLM) |
 | PDF prototype | `src/lib/product/pdf-generator.ts` | `pdf-lib` printable — not connected to Forge/storage yet |
 | Review upgrades | `/review` UI | Brain scores, compliance warnings, structure/PDF placeholders |
 
-**Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components; `simulator.ts` imports Nova, not `@/lib/llm` directly).
+**Security:** only `NEXT_PUBLIC_SUPABASE_*` in the browser. `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and adapter secrets stay server-only (`tests/security.test.mjs` scans client components; `simulator.ts` imports Nova and Forge, not `@/lib/llm` directly).
 
 The human **Review Gate** remains mandatory — no live publishing without approval.
 
