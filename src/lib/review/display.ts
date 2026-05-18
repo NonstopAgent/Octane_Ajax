@@ -1,6 +1,7 @@
 import type { ProductBrainVerdict } from "@/lib/ajax/product-brain/types";
 import type { ComplianceFlag, ProductBrainScore } from "@/lib/product/domain";
 import type { GenerationStatus } from "@/lib/supabase/schema";
+import type { SellabilityChecklist } from "@/lib/review/sellability";
 
 export function formatBrainVerdictLabel(verdict: ProductBrainVerdict): string {
   switch (verdict) {
@@ -79,42 +80,112 @@ export function hasComplianceRisk(input: {
   return trimmedWarnings.length > 0 || riskFlags.length > 0;
 }
 
+export const COMPLIANCE_APPROVAL_BLOCK_MESSAGE =
+  "Reject or regenerate this product. Products with compliance warnings cannot be approved.";
+
 export type ReviewApproveUi = {
   label: string;
   disabled: boolean;
   disabledReason: string | null;
   cautionMessage: string | null;
-  tone: "approve" | "caution";
+  tone: "approve" | "caution" | "blocked";
+  approvalBlockedHeading: string | null;
+  blockedCheckLabels: string[];
+  showGeneratePdfAction: boolean;
+  complianceBlockMessage: string | null;
 };
+
+export function getFailedSellabilityCheckLabels(
+  checklist: SellabilityChecklist,
+): string[] {
+  return checklist.checks.filter((c) => !c.passed).map((c) => c.label);
+}
+
+/** True when the only failing sellability check is PDF readiness. */
+export function isPdfOnlySellabilityBlock(
+  checklist: SellabilityChecklist,
+): boolean {
+  const failed = checklist.checks.filter((c) => !c.passed);
+  return failed.length === 1 && failed[0]?.id === "pdf_ready";
+}
+
+export function hasComplianceSellabilityBlock(
+  checklist: SellabilityChecklist,
+): boolean {
+  return checklist.checks.some(
+    (c) => c.id === "no_compliance_warnings" && !c.passed,
+  );
+}
+
+export function resolveApproveApiError(
+  status: number,
+  data: { error?: string },
+): string {
+  const message = data.error?.trim();
+  if (message) return message;
+  if (status === 403) return "Approval blocked.";
+  return "Approval failed.";
+}
+
+function sellabilityBlockedUi(
+  checklist: SellabilityChecklist,
+): ReviewApproveUi {
+  return {
+    label: "Cannot Approve Yet",
+    disabled: true,
+    disabledReason: null,
+    cautionMessage: null,
+    tone: "blocked",
+    approvalBlockedHeading: "Approval blocked because:",
+    blockedCheckLabels: getFailedSellabilityCheckLabels(checklist),
+    showGeneratePdfAction: isPdfOnlySellabilityBlock(checklist),
+    complianceBlockMessage: hasComplianceSellabilityBlock(checklist)
+      ? COMPLIANCE_APPROVAL_BLOCK_MESSAGE
+      : null,
+  };
+}
 
 export function getReviewApproveUi(
   brainVerdict: ProductBrainVerdict | null | undefined,
-  options?: { sellabilityAllPassed?: boolean },
+  options?: {
+    sellabilityAllPassed?: boolean;
+    sellability?: SellabilityChecklist;
+  },
 ): ReviewApproveUi {
   if (brainVerdict === "blocked") {
     return {
-      label: "Approve",
+      label: "Cannot Approve Yet",
       disabled: true,
       disabledReason: "Blocked products cannot be approved.",
       cautionMessage: null,
-      tone: "approve",
+      tone: "blocked",
+      approvalBlockedHeading: null,
+      blockedCheckLabels: [],
+      showGeneratePdfAction: false,
+      complianceBlockMessage: null,
     };
   }
 
-  if (options?.sellabilityAllPassed === false) {
-    const blocked: ReviewApproveUi = {
-      label:
-        brainVerdict === "needs_revision" ? "Approve with Caution" : "Approve",
+  const sellabilityFailed =
+    options?.sellabilityAllPassed === false ||
+    (options?.sellability != null && !options.sellability.allPassed);
+
+  if (sellabilityFailed && options?.sellability) {
+    return sellabilityBlockedUi(options.sellability);
+  }
+
+  if (sellabilityFailed) {
+    return {
+      label: "Cannot Approve Yet",
       disabled: true,
-      disabledReason: "Fix sellability issues before approving.",
+      disabledReason: null,
       cautionMessage: null,
-      tone: brainVerdict === "needs_revision" ? "caution" : "approve",
+      tone: "blocked",
+      approvalBlockedHeading: "Approval blocked because:",
+      blockedCheckLabels: [],
+      showGeneratePdfAction: false,
+      complianceBlockMessage: null,
     };
-    if (brainVerdict === "needs_revision") {
-      blocked.cautionMessage =
-        "This product passed safety checks but needs operator review before approval.";
-    }
-    return blocked;
   }
 
   if (brainVerdict === "needs_revision") {
@@ -125,6 +196,10 @@ export function getReviewApproveUi(
       cautionMessage:
         "This product passed safety checks but needs operator review before approval.",
       tone: "caution",
+      approvalBlockedHeading: null,
+      blockedCheckLabels: [],
+      showGeneratePdfAction: false,
+      complianceBlockMessage: null,
     };
   }
 
@@ -134,6 +209,10 @@ export function getReviewApproveUi(
     disabledReason: null,
     cautionMessage: null,
     tone: "approve",
+    approvalBlockedHeading: null,
+    blockedCheckLabels: [],
+    showGeneratePdfAction: false,
+    complianceBlockMessage: null,
   };
 }
 

@@ -5,12 +5,45 @@ import {
   buildProductPdfDownloadHref,
   buildProductPdfGenerateHref,
   collectComplianceMessages,
+  COMPLIANCE_APPROVAL_BLOCK_MESSAGE,
   filterComplianceFlags,
+  getFailedSellabilityCheckLabels,
   getReviewApproveUi,
   getReviewPdfUiState,
   hasComplianceRisk,
+  hasComplianceSellabilityBlock,
+  isPdfOnlySellabilityBlock,
+  resolveApproveApiError,
 } from "@/lib/review/display";
+import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
+import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import type { ComplianceFlag } from "@/lib/product/domain";
+import { evaluateSellabilityChecklist } from "@/lib/review/sellability";
+
+const sampleIdea: NovaEvaluatedIdea = {
+  niche: "meal prep",
+  targetBuyer: "Busy parents",
+  problemSolved: "Plan weekly meals",
+  productConcept: "Weekly Meal Prep Planner",
+  format: "planner",
+  category: "productivity",
+  suggestedPrice: 19.99,
+  keywords: ["meal prep"],
+  reasoning: "Utility-first",
+  source: "fallback",
+  trendScore: 82,
+  score: {
+    urgency: 70,
+    specificity: 80,
+    buyerClarity: 75,
+    usefulness: 85,
+    competitionRisk: 40,
+    complianceRisk: 10,
+    totalScore: 78,
+  },
+  validation: { riskLevel: "safe", violations: [] },
+  verdict: "approve_for_generation",
+};
 
 describe("review display helpers", () => {
   const aiFlag: ComplianceFlag = {
@@ -75,12 +108,94 @@ describe("review display helpers", () => {
     assert.equal(ui.cautionMessage, null);
   });
 
-  it("disables approve when sellability checklist fails", () => {
-    const ui = getReviewApproveUi("approve_for_generation", {
-      sellabilityAllPassed: false,
+  it("disables approve with blocked styling when sellability checklist fails", () => {
+    const checklist = evaluateSellabilityChecklist({
+      structure: null,
+      aiDisclosure: null,
+      complianceWarnings: [],
+      complianceFlags: [],
+      generationStatus: "pending",
+      pdfStoragePath: null,
     });
+    const ui = getReviewApproveUi("needs_revision", {
+      sellabilityAllPassed: false,
+      sellability: checklist,
+    });
+    assert.equal(ui.label, "Cannot Approve Yet");
     assert.equal(ui.disabled, true);
-    assert.match(ui.disabledReason ?? "", /Fix sellability issues/i);
+    assert.equal(ui.tone, "blocked");
+    assert.equal(ui.cautionMessage, null);
+    assert.equal(ui.approvalBlockedHeading, "Approval blocked because:");
+    assert.ok(ui.blockedCheckLabels.length > 0);
+  });
+
+  it("lists failed sellability check labels", () => {
+    const checklist = evaluateSellabilityChecklist({
+      structure: null,
+      aiDisclosure: null,
+      complianceWarnings: [],
+      complianceFlags: [],
+      generationStatus: "pending",
+      pdfStoragePath: null,
+    });
+    const labels = getFailedSellabilityCheckLabels(checklist);
+    assert.ok(labels.includes("PDF ready"));
+    assert.ok(labels.includes("6+ pages"));
+  });
+
+  it("detects PDF-only sellability block", () => {
+    const forge = buildForgeFallbackResult(sampleIdea);
+    const forgeLike = evaluateSellabilityChecklist({
+      structure: forge.productStructure,
+      aiDisclosure: forge.aiDisclosure,
+      complianceWarnings: [],
+      complianceFlags: [],
+      generationStatus: "ready",
+      pdfStoragePath: null,
+    });
+    assert.equal(isPdfOnlySellabilityBlock(forgeLike), true);
+    const ui = getReviewApproveUi("approve_for_generation", {
+      sellability: forgeLike,
+    });
+    assert.equal(ui.showGeneratePdfAction, true);
+  });
+
+  it("shows compliance reject message when compliance check fails", () => {
+    const checklist = evaluateSellabilityChecklist({
+      structure: null,
+      aiDisclosure: "disclosed",
+      complianceWarnings: ["Policy concern"],
+      complianceFlags: [],
+      generationStatus: "ready",
+      pdfStoragePath: "user/gen.pdf",
+    });
+    assert.equal(hasComplianceSellabilityBlock(checklist), true);
+    const ui = getReviewApproveUi("approve_for_generation", {
+      sellability: checklist,
+    });
+    assert.equal(ui.complianceBlockMessage, COMPLIANCE_APPROVAL_BLOCK_MESSAGE);
+    assert.match(
+      ui.complianceBlockMessage ?? "",
+      /Reject or regenerate/i,
+    );
+  });
+
+  it("uses blocked label for brain-blocked verdict", () => {
+    const ui = getReviewApproveUi("blocked");
+    assert.equal(ui.label, "Cannot Approve Yet");
+    assert.equal(ui.tone, "blocked");
+    assert.equal(ui.disabled, true);
+  });
+
+  it("resolves approve API errors including 403 payloads", () => {
+    assert.equal(
+      resolveApproveApiError(403, {
+        error: "Sellability checklist has failing items: PDF ready",
+      }),
+      "Sellability checklist has failing items: PDF ready",
+    );
+    assert.equal(resolveApproveApiError(403, {}), "Approval blocked.");
+    assert.equal(resolveApproveApiError(500, {}), "Approval failed.");
   });
 
   it("exposes download UI only when PDF is ready with a storage path", () => {

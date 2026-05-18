@@ -11,7 +11,7 @@ import {
   type ToastState,
   type ToastTone,
 } from "@/components/factory/toast-banner";
-import { hasComplianceRisk } from "@/lib/review/display";
+import { hasComplianceRisk, resolveApproveApiError } from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import { CommandHeader } from "@/components/layout/command-header";
@@ -38,6 +38,9 @@ export function ReviewDashboard({
     null,
   );
   const [toast, setToast] = useState<ToastState>(null);
+  const [approveErrors, setApproveErrors] = useState<Record<string, string>>(
+    {},
+  );
 
   const showToast = useCallback((tone: ToastTone, message: string) => {
     setToast({ tone, message });
@@ -77,6 +80,11 @@ export function ReviewDashboard({
 
   const approve = async (reviewId: string) => {
     setActingOn(reviewId);
+    setApproveErrors((prev) => {
+      const next = { ...prev };
+      delete next[reviewId];
+      return next;
+    });
     try {
       const res = await fetch("/api/ajax/review/approve", {
         method: "POST",
@@ -84,10 +92,16 @@ export function ReviewDashboard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewId }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        listing?: ProductListing;
+      };
 
       if (!res.ok) {
-        showToast("error", data.error ?? "Approval failed.");
+        const message = resolveApproveApiError(res.status, data);
+        setApproveErrors((prev) => ({ ...prev, [reviewId]: message }));
+        showToast("error", message);
         return;
       }
 
@@ -210,6 +224,7 @@ export function ReviewDashboard({
               <ReviewCard
                 review={review}
                 busy={actingOn === review.id}
+                approveError={approveErrors[review.id] ?? null}
                 onApprove={() => approve(review.id)}
                 onReject={() => setRejectTarget(review)}
                 onGenerationChange={(patch) =>
