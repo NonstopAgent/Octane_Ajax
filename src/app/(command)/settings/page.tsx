@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ButtonLink } from "@/components/ui/button";
 import { isSupabaseConfigured } from "@/lib/auth/env";
 import { createClient } from "@/lib/supabase/server";
+import { isOpenAiConfigured } from "@/lib/llm/openai";
 
 type SettingsPageProps = {
   searchParams?: Promise<{ etsy?: string; message?: string }>;
@@ -12,6 +13,8 @@ type SettingsPageProps = {
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const configured = isSupabaseConfigured();
+  const openAiConfigured = isOpenAiConfigured();
+  const etsyClientIdConfigured = Boolean(process.env.ETSY_CLIENT_ID?.trim());
   const params = (await searchParams) ?? {};
   const etsyFlash = params.etsy;
   const etsyMessage = params.message?.trim();
@@ -48,7 +51,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <StatusBadge label="Configuration" tone="neutral" />
         <h1 className="mt-3 text-3xl font-bold">Settings</h1>
         <p className="mt-2 max-w-2xl text-[var(--text-muted)]">
-          Local demo status, Supabase connection, and operator session.
+          System configuration, pipeline status, and operator session.
         </p>
       </header>
 
@@ -148,34 +151,63 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </Panel>
       </div>
 
-      <Panel title="Demo mode" glow="orange">
-        <ul className="space-y-2 text-sm text-[var(--text-muted)]">
-          <li>Simulated Nova → Forge → Review → Pixel pipeline: enabled</li>
-          <li>Realtime factory floor: {configured ? "ready when signed in" : "needs Supabase"}</li>
-          <li>
-            Etsy OAuth + listing publish:{" "}
-            {etsyConnected ? "connected" : "connect in Etsy panel above"}
-          </li>
-        </ul>
+      <Panel title="System status" glow={openAiConfigured ? "blue" : "orange"}>
+        <dl className="space-y-3 text-sm">
+          <Row
+            label="Nova ideation mode"
+            value={openAiConfigured ? "LLM (GPT-4o-mini)" : "Fallback catalog"}
+            ok={openAiConfigured}
+          />
+          <Row
+            label="OpenAI API key"
+            value={openAiConfigured ? "Configured ✓" : "Not set — add OPENAI_API_KEY"}
+            ok={openAiConfigured}
+          />
+          <Row
+            label="Etsy market research"
+            value={etsyClientIdConfigured ? "Active — Nova reads live Etsy signals" : "Not configured"}
+            ok={etsyClientIdConfigured}
+          />
+          <Row
+            label="Realtime factory floor"
+            value={configured ? "Ready" : "Needs Supabase"}
+            ok={configured}
+          />
+          <Row
+            label="Pipeline mode"
+            value="Nova → Forge → Human Review → Pixel → Publish"
+            ok
+          />
+        </dl>
+        {!openAiConfigured && (
+          <p className="mt-4 text-xs text-[var(--text-muted)]">
+            Without an OpenAI key, Nova uses a deterministic fallback catalog for ideas. Set{" "}
+            <code className="text-[var(--accent-blue)]">OPENAI_API_KEY</code> in Vercel env vars to enable live LLM ideation.
+          </p>
+        )}
       </Panel>
 
-      <Panel title="Next steps">
+      <Panel title="How the pipeline works">
         <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--text-muted)]">
-          <li>Create a Supabase project and apply migrations (see README).</li>
-          <li>Enable Email provider under Authentication → Providers.</li>
           <li>
-            For local dev, disable email confirmation under Authentication →
-            Providers → Email (optional but recommended).
+            <strong className="text-[var(--foreground)]">Nova</strong> searches Etsy for market signals, then generates 3 product ideas using GPT.
           </li>
           <li>
-            <Link href="/login" className="text-[var(--accent-blue)] hover:underline">
-              Sign up or sign in
-            </Link>
-            , then open the{" "}
-            <Link href="/factory" className="text-[var(--accent-blue)] hover:underline">
-              factory floor
-            </Link>
-            .
+            <strong className="text-[var(--foreground)]">Forge</strong> picks the top-scoring idea and builds a full listing (title, description, PDF structure, cover image prompt).
+          </li>
+          <li>
+            <strong className="text-[var(--foreground)]">Review Gate</strong> — you approve or reject the listing. Nothing publishes without your sign-off.
+          </li>
+          <li>
+            <strong className="text-[var(--foreground)]">Pixel</strong> generates social copy (TikTok hooks, Pinterest title, hashtags) for approved listings.
+          </li>
+          <li>
+            <strong className="text-[var(--foreground)]">Publish</strong> — listings go live on Etsy or LemonSqueezy.{" "}
+            {!etsyConnected && (
+              <Link href="/settings/etsy-connect" className="text-[var(--accent-blue)] hover:underline">
+                Connect your Etsy shop →
+              </Link>
+            )}
           </li>
         </ol>
       </Panel>

@@ -20,6 +20,7 @@ import {
   type NovaIdeationResult,
   type NovaRawIdea,
 } from "@/lib/ajax/nova/types";
+import type { EtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
 import { completeJson } from "@/lib/llm/json";
 import { isOpenAiConfigured } from "@/lib/llm/openai";
 import type { Json } from "@/lib/supabase/database.types";
@@ -36,6 +37,8 @@ export type NovaIdeationOptions = {
   forceFallback?: boolean;
   /** Operator history from past cycles (rejected/approved niches, recent titles). */
   pastContext?: NovaPastContext;
+  /** Live Etsy market data to ground ideation (passed through from simulator). */
+  marketContext?: EtsyMarketContext;
 };
 
 function toBrainInput(raw: NovaRawIdea): ProductBrainInput {
@@ -106,7 +109,7 @@ async function fetchLlmRawIdeas(
       { role: "system", content: NOVA_IDEATION_SYSTEM_PROMPT },
       {
         role: "user",
-        content: buildNovaIdeationUserPrompt(runId, options?.pastContext),
+        content: buildNovaIdeationUserPrompt(runId, options?.pastContext, options?.marketContext),
       },
     ],
     schema: NovaLlmResponseSchema,

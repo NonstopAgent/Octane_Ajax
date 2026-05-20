@@ -166,12 +166,16 @@ export function DashboardView({
     dashboard.agents.map((a) => [a.slug, a]),
   );
 
+  const hasActivity =
+    dashboard.recentEvents.length > 0 ||
+    Object.values(dashboard.thisWeek).some((v) => v > 0);
+
   return (
     <div className="space-y-6">
       <CommandHeader
-        badge="Revenue dashboard"
-        title="Pipeline & revenue overview"
-        description="This week’s factory output, quality gate pass-through, and live Etsy listings — plus agent status and recent activity."
+        badge="Command center"
+        title="Pipeline overview"
+        description="Agent status, pipeline output, and this week’s activity across Nova → Forge → Review → Pixel."
         aside={
           <ButtonLink href="/factory" variant="primary">
             Open factory floor
@@ -180,9 +184,26 @@ export function DashboardView({
         sysline="SYS.AJAX.REV :: TELEMETRY"
       />
 
+      {!hasActivity && (
+        <section className="factory-panel panel-glow-blue text-center py-10">
+          <p className="text-lg font-semibold">Ready to run your first cycle</p>
+          <p className="mt-2 text-sm text-[var(--text-muted)] max-w-md mx-auto">
+            Go to the factory floor and hit <strong>Run Ajax cycle</strong>. Nova will search Etsy for demand signals, generate product ideas, and Forge will build a listing. It lands here in the review gate.
+          </p>
+          <div className="mt-6 flex justify-center gap-3 flex-wrap">
+            <ButtonLink href="/factory" variant="primary">
+              Go to factory floor →
+            </ButtonLink>
+            <ButtonLink href="/review" variant="secondary">
+              Review gate
+            </ButtonLink>
+          </div>
+        </section>
+      )}
+
       <section className="factory-panel panel-glow-blue">
         <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-          Factory status
+          Agent status
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           {FACTORY_AGENTS.map((slug) => {
@@ -206,25 +227,29 @@ export function DashboardView({
         </div>
       </section>
 
-      <section aria-label="This week metrics">
-        <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-          This week
-        </p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {THIS_WEEK_METRICS.map((item) => (
-            <div key={item.key} className="factory-metric command-metric">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-                {item.label}
-              </p>
-              <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--foreground)]">
-                {dashboard.thisWeek[item.key]}
-              </p>
+      {hasActivity && (
+        <>
+          <section aria-label="This week metrics">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              This week
+            </p>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {THIS_WEEK_METRICS.map((item) => (
+                <div key={item.key} className="factory-metric command-metric">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--foreground)]">
+                    {dashboard.thisWeek[item.key]}
+                  </p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <PipelineFunnelBar funnel={dashboard.funnel} />
+          <PipelineFunnelBar funnel={dashboard.funnel} />
+        </>
+      )}
 
       <RecentActivityTimeline events={dashboard.recentEvents} />
 

@@ -10,6 +10,7 @@ import {
   runNovaIdeation,
 } from "@/lib/ajax/nova";
 import { fetchNovaPastContext } from "@/lib/ajax/nova/past-context";
+import { fetchEtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   normalizeProductCategory,
@@ -484,14 +485,24 @@ async function executeNovaStep(
       event_type: "agent_started",
       agent_slug: AGENT_SLUGS.NOVA,
       room: ROOM_SLUGS.RESEARCH_LAB,
-      message: "Nova is scanning trend signals...",
+      message: "Nova is scanning Etsy market signals and generating ideas...",
       metadata: { taskId: novaTaskRow.id, runId },
     }),
   );
   await sleep(CYCLE_PACING.agentWorkMs);
 
-  const pastContext = await fetchNovaPastContext(supabase, userId);
-  const novaResult = await runNovaIdeation(runId, { pastContext });
+  const [pastContext, marketContext] = await Promise.all([
+    fetchNovaPastContext(supabase, userId),
+    fetchEtsyMarketContext(process.env.ETSY_CLIENT_ID ?? "").catch((err) => {
+      console.warn("[nova] Etsy research failed, running without market data:", err);
+      return null;
+    }),
+  ]);
+
+  const novaResult = await runNovaIdeation(runId, {
+    pastContext,
+    marketContext: marketContext ?? undefined,
+  });
   const ideaInserts = mapNovaIdeasToDbInserts(userId, runId, novaResult);
 
   if (ideaInserts.length === 0) {
@@ -840,14 +851,14 @@ export async function resetDemoData(
   }
 
   await insertEvent(supabase, userId, {
-    event_type: "demo_reset",
-    message: "Demo data cleared. Agents reset to idle.",
+    event_type: "factory_reset",
+    message: "Factory cleared. Agents reset to idle. Ready for a new cycle.",
     metadata: { deleted },
   });
 
   return {
     ok: true,
-    message: "Demo data cleared and agents reseeded.",
+    message: "Factory cleared and agents reseeded.",
     deleted,
     agents: (agents ?? []).map((a) => ({ slug: a.slug, status: a.status })),
   };

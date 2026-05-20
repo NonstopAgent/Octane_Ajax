@@ -42,3 +42,11 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+
+build-out.txt
+lint-out.txt
+lint2.txt
+tsc-out.txt
+git-status.txt

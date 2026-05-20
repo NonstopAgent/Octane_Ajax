@@ -2,6 +2,8 @@ import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 import { hasNovaPastContext } from "@/lib/ajax/nova/past-context";
 import { ALLOWED_PRODUCT_CATEGORIES, PRODUCT_FORMATS } from "@/lib/ajax/product-brain/rules";
 import { NOVA_PROMPT_VERSION } from "@/lib/ajax/nova/types";
+import type { EtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
+import { formatEtsyContextForPrompt } from "@/lib/ajax/nova/etsy-research";
 
 export type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 
@@ -52,34 +54,39 @@ Generate exactly 3 ideas. Ideas must be distinct niches. Prefer high specificity
 export function buildNovaIdeationUserPrompt(
   runId: string,
   pastContext?: NovaPastContext,
+  marketContext?: EtsyMarketContext,
 ): string {
   const base = `Generate 3 utility-first digital product ideas for cycle run ${runId.slice(0, 8)}.
 
-Focus on underserved niches where a printable planner, tracker, worksheet, checklist, template, or logbook would save time or reduce stress. Avoid physical merch, mugs, posters, or apparel.`;
+Focus on underserved niches where a printable planner, tracker, worksheet, checklist, template, or logbook would save time or reduce stress. Avoid physical merch, mugs, posters, or apparel. Only digital downloads.`;
 
-  if (!pastContext || !hasNovaPastContext(pastContext)) {
-    return base;
+  const sections: string[] = [base];
+
+  if (marketContext) {
+    sections.push(formatEtsyContextForPrompt(marketContext));
   }
 
-  const rejected =
-    pastContext.rejectedNiches.length > 0
-      ? pastContext.rejectedNiches.join(", ")
-      : "(none on record)";
-  const approved =
-    pastContext.approvedNiches.length > 0
-      ? pastContext.approvedNiches.join(", ")
-      : "(none on record)";
-  const titles =
-    pastContext.recentTitles.length > 0
-      ? pastContext.recentTitles.join(", ")
-      : "(none on record)";
+  if (pastContext && hasNovaPastContext(pastContext)) {
+    const rejected =
+      pastContext.rejectedNiches.length > 0
+        ? pastContext.rejectedNiches.join(", ")
+        : "(none on record)";
+    const approved =
+      pastContext.approvedNiches.length > 0
+        ? pastContext.approvedNiches.join(", ")
+        : "(none on record)";
+    const titles =
+      pastContext.recentTitles.length > 0
+        ? pastContext.recentTitles.join(", ")
+        : "(none on record)";
 
-  return `${base}
-
-IMPORTANT CONTEXT FROM PAST CYCLES:
-- Previously REJECTED niches (do NOT repeat these): ${rejected}
-- Previously APPROVED niches (you can explore adjacent ideas): ${approved}
+    sections.push(`OPERATOR HISTORY FROM PAST CYCLES:
+- Previously REJECTED niches (do NOT repeat): ${rejected}
+- Previously APPROVED niches (explore adjacent ideas): ${approved}
 - Recent product titles already created (avoid duplicates): ${titles}
 
-Generate ideas that are DIFFERENT from all of the above. Explore new territory.`;
+Generate ideas that are DIFFERENT from all of the above. Explore new territory.`);
+  }
+
+  return sections.join("\n\n");
 }

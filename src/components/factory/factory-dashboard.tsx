@@ -175,7 +175,7 @@ export function FactoryDashboard({
   const resetDemo = async () => {
     if (
       !window.confirm(
-        "Clear all your demo pipeline data and reset agents to idle?",
+        "Clear all pipeline data and reset agents to idle? This removes ideas, listings, and events for your account.",
       )
     ) {
       return;
@@ -190,11 +190,11 @@ export function FactoryDashboard({
       const data = await res.json();
 
       if (!res.ok) {
-        showToast("error", data.error ?? "Failed to reset demo factory.");
+        showToast("error", data.error ?? "Failed to reset factory.");
         return;
       }
 
-      showToast("success", data.message ?? "Demo factory reset.");
+      showToast("success", data.message ?? "Factory cleared. Ready for a new cycle.");
       await refresh();
     } catch {
       showToast("error", "Network error while resetting.");

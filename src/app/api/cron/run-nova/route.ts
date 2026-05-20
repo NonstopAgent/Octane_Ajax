@@ -1,0 +1,91 @@
+/**
+ * GET /api/cron/run-nova
+ *
+ * Called daily by Vercel Cron (configured in vercel.json).
+ * Runs Nova + Forge for the operator account automatically — products appear
+ * in the Review Gate each morning without manual triggering.
+ *
+ * Security: Vercel sends CRON_SECRET as Bearer token. Route returns 401 if missing.
+ */
+export const maxDuration = 60;
+
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { runNovaStep, runForgeStep, CycleBlockedError, SimulatorError } from "@/lib/ajax/simulator";
+
+export async function GET(req: NextRequest) {
+  // Validate Vercel cron secret
+  const authHeader = req.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const operatorEmail = process.env.OPERATOR_EMAIL;
+  if (!operatorEmail) {
+    return NextResponse.json(
+      { ok: false, error: "OPERATOR_EMAIL env var not set. Add your login email to Vercel env vars." },
+      { status: 500 },
+    );
+  }
+
+  try {
+    const supabase = await createClient();
+
+    // Resolve the operator's user ID from their email
+    const { data: userList, error: listError } = await supabase.auth.admin.listUsers();
+    if (listError) {
+      return NextResponse.json(
+        { ok: false, error: `Failed to list users: ${listError.message}` },
+        { status: 500 },
+      );
+    }
+
+    const operator = userList.users.find(
+      (u) => u.email?.toLowerCase() === operatorEmail.toLowerCase(),
+    );
+
+    if (!operator) {
+      return NextResponse.json(
+        { ok: false, error: `No user found with email ${operatorEmail}. Sign up first.` },
+        { status: 404 },
+      );
+    }
+
+    const userId = operator.id;
+
+    // Run Nova
+    const novaSummary = await runNovaStep(supabase, userId);
+
+    // Auto-chain Forge
+    const forgeSummary = await runForgeStep(supabase, userId, { runId: novaSummary.runId });
+
+    return NextResponse.json({
+      ok: true,
+      runId: novaSummary.runId,
+      ideasGenerated: novaSummary.ideas.length,
+      listingCreated: forgeSummary.listing.title,
+      message: "Daily Nova cycle complete. Listing queued at Review Gate.",
+    });
+  } catch (err) {
+    if (err instanceof CycleBlockedError) {
+      // A listing is already pending review — skip today's cycle
+      return NextResponse.json(
+        { ok: false, code: "CYCLE_BLOCKED", error: err.message, skipped: true },
+        { status: 200 }, // 200 so Vercel doesn't retry
+      );
+    }
+
+    if (err instanceof SimulatorError) {
+      console.error("[cron/run-nova]", err.message, err.cause);
+      return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    }
+
+    console.error("[cron/run-nova] unexpected error", err);
+    return NextResponse.json(
+      { ok: false, error: "Unexpected error during cron cycle." },
+      { status: 500 },
+    );
+  }
+}

@@ -61,20 +61,20 @@ export function AgentsDashboard({
   return (
     <div className="space-y-6">
       <CommandHeader
-        badge="Agent memory v1"
-        title="Unit memory banks"
-        description="Human feedback becomes deterministic learning notes — ready to inject into LLM prompts later. No vector DB yet."
+        badge="Agent intelligence"
+        title="Agent memory"
+        description="Every approval or rejection you make at the Review Gate trains the agents. Nova avoids rejected niches. Forge learns what copy you like. Pixel improves its hooks. This gets smarter every cycle."
         aside={
           <div className="flex flex-wrap gap-2">
             <Button variant="ghost" disabled={loading} onClick={() => void refresh()}>
-              {loading ? "Refreshing…" : "Refresh memory"}
+              {loading ? "Refreshing…" : "Refresh"}
             </Button>
             <ButtonLink href="/factory" variant="secondary">
               Factory floor
             </ButtonLink>
           </div>
         }
-        sysline="SYS.AJAX.MEM :: DETERMINISTIC"
+        sysline="SYS.AJAX.MEM :: LEARNING"
       />
 
       {error && (
