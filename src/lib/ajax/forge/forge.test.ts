@@ -11,128 +11,45 @@ import {
 } from "@/lib/ajax/forge/service";
 import {
   AI_DISCLOSURE_TEXT,
-  FORGE_MIN_PAGES,
   FORGE_PROMPT_VERSION,
   ForgeLlmResponseSchema,
-  ForgeProductStructureSchema,
+  ForgePodDetailsSchema,
   ensureAiDisclosureInCopy,
 } from "@/lib/ajax/forge/types";
 import { mapGenerationToDbInsert } from "@/lib/product/mappers";
 import { runNovaIdeation } from "@/lib/ajax/nova/service";
 
-function sellableForgePages() {
-  const worksheet = (
-    pageNumber: number,
-    title: string,
-    extra?: Record<string, unknown>,
-  ) => ({
-    pageNumber,
-    pageKind: "worksheet" as const,
-    title,
-    purpose: `Worksheet ${pageNumber} purpose`,
-    userInstructions: "Print and fill during the week.",
-    sections: [
-      {
-        id: `section_${pageNumber}`,
-        heading: title,
-        body: "Helper copy for the buyer.",
-        fields: [
-          { id: `f_${pageNumber}`, label: "Notes", fieldType: "notes" as const },
-        ],
-        ...extra,
-      },
-    ],
-  });
-
-  return [
-    {
-      pageNumber: 1,
-      pageKind: "cover" as const,
-      title: "Night-Shift Nurse Meal Prep Planner",
-      purpose: "Cover page",
-      userInstructions: "Start here.",
-      sections: [
-        {
-          id: "cover",
-          heading: "Cover",
-          fields: [{ id: "name", label: "Name", fieldType: "text" as const }],
-        },
-      ],
-    },
-    {
-      pageNumber: 2,
-      pageKind: "instructions" as const,
-      title: "How to use",
-      purpose: "Instructions",
-      userInstructions: "Read before printing worksheets.",
-      sections: [
-        {
-          id: "how",
-          heading: "Steps",
-          checklist: {
-            id: "steps",
-            items: ["Print", "Fill", "Review"],
-          },
-        },
-      ],
-    },
-    worksheet(3, "Weekly overview", {
-      table: {
-        id: "week",
-        headers: ["Day", "Meals", "Prep"],
-        rowCount: 7,
-      },
-    }),
-    worksheet(4, "Grocery list A"),
-    worksheet(5, "Grocery list B"),
-    worksheet(6, "Prep log"),
-    {
-      pageNumber: 7,
-      pageKind: "summary" as const,
-      title: "Week in review",
-      purpose: "Reflect on the week",
-      userInstructions: "Complete on Sunday.",
-      sections: [
-        {
-          id: "summary",
-          heading: "Reflection",
-          fields: [
-            { id: "win", label: "Best win", fieldType: "text" as const },
-          ],
-        },
-      ],
-    },
-    worksheet(8, "Bonus tracker"),
-  ];
-}
-
 const validForgePayload = {
-  listingTitle: "Night-Shift Nurse Meal Prep Planner (Printable PDF)",
-  listingDescription: `Weekly grocery and meal prep planner for night-shift nurses.\n\n${AI_DISCLOSURE_TEXT}`,
+  listingTitle: "Night-Shift Nurse Gift Mug — Meal Prep Theme",
+  listingDescription: `A thoughtful gift mug for night-shift nurses who meal prep.\n\n${AI_DISCLOSURE_TEXT}`,
   seoTags: [
     "night shift nurse",
-    "meal prep planner",
-    "printable pdf",
-    "weekly menu",
-    "grocery list",
-    "instant download",
-    "digital planner",
+    "meal prep gift",
+    "nurse mug",
+    "print on demand",
+    "gift idea",
+    "custom mug",
     "hospital worker",
-    "batch cooking",
-    "meal tracker",
     "shift work",
-    "etsy printable",
-    "wellness planner",
+    "etsy gift",
+    "made to order",
+    "unique design",
+    "nurse appreciation",
+    "wellness gift",
   ],
-  suggestedPrice: 6.99,
-  productStructure: {
-    format: "planner",
-    pages: sellableForgePages(),
+  suggestedPrice: 19.99,
+  podDetails: {
+    blueprintId: 68,
+    printProviderId: 1,
+    variantIds: [33719, 33720],
+    artworkPrompt:
+      "Minimalist line art mug design with meal prep icons, soft teal palette, no logos or characters, print-ready centered composition for night-shift nurses",
+    aestheticStyle: "minimalist-line-art" as const,
   },
   complianceNotes: ["Verify no medical claims in listing copy."],
   aiDisclosure: AI_DISCLOSURE_TEXT,
   coverImagePrompt:
-    "Flat lay meal prep planner cover, soft teal and cream, no logos",
+    "White mug mockup with minimalist meal prep artwork, soft teal and cream, no logos",
   revisionNotes: ["Confirm price tier against niche comps."],
 };
 
@@ -164,34 +81,15 @@ describe("Forge LLM schema", () => {
   it("parses valid mocked Forge output with exactly 13 seo tags", () => {
     const parsed = ForgeLlmResponseSchema.parse(validForgePayload);
     assert.equal(parsed.seoTags.length, 13);
-    assert.ok(parsed.productStructure.pages.length >= FORGE_MIN_PAGES);
+    assert.ok(parsed.podDetails.artworkPrompt.length >= 20);
     assert.ok(parsed.listingDescription.includes(AI_DISCLOSURE_TEXT));
   });
 
-  it("rejects thin 2-page productStructure", () => {
+  it("rejects invalid podDetails (short artwork prompt)", () => {
     assert.throws(() =>
-      ForgeProductStructureSchema.parse({
-        format: "planner",
-        pages: validForgePayload.productStructure.pages.slice(0, 2),
-      }),
-    );
-  });
-
-  it("rejects malformed productStructure (duplicate page numbers)", () => {
-    assert.throws(() =>
-      ForgeLlmResponseSchema.parse({
-        ...validForgePayload,
-        productStructure: {
-          format: "planner",
-          pages: [
-            validForgePayload.productStructure.pages[0],
-            {
-              ...validForgePayload.productStructure.pages[1]!,
-              pageNumber: 1,
-            },
-            ...validForgePayload.productStructure.pages.slice(2),
-          ],
-        },
+      ForgePodDetailsSchema.parse({
+        ...validForgePayload.podDetails,
+        artworkPrompt: "too short",
       }),
     );
   });
@@ -207,16 +105,16 @@ describe("Forge LLM schema", () => {
 });
 
 describe("guardrailedPrice", () => {
-  it("floors prices below $4.99", () => {
-    assert.equal(guardrailedPrice(2.5), 4.99);
+  it("floors prices below $9.99", () => {
+    assert.equal(guardrailedPrice(2.5), 9.99);
   });
 
-  it("caps prices above $19.99 at $14.99", () => {
-    assert.equal(guardrailedPrice(24.99), 14.99);
+  it("caps prices above $149.99 at $49.99", () => {
+    assert.equal(guardrailedPrice(199.99), 49.99);
   });
 
   it("passes through prices in range", () => {
-    assert.equal(guardrailedPrice(6.99), 6.99);
+    assert.equal(guardrailedPrice(19.99), 19.99);
   });
 });
 
@@ -233,9 +131,9 @@ describe("runForgeGeneration", () => {
     assert.equal(result.seoTags.length, 13);
     assert.ok(result.listingDescription.includes(AI_DISCLOSURE_TEXT));
     assert.equal(result.aiDisclosure, AI_DISCLOSURE_TEXT);
-    assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
-    assert.ok(result.productStructure.pages[0]?.userInstructions);
-    assert.equal(result.suggestedPrice, 6.99);
+    assert.equal(result.podDetails.blueprintId, 68);
+    assert.ok(result.podDetails.artworkPrompt.length >= 20);
+    assert.equal(result.suggestedPrice, 19.99);
     assert.equal(result.llmProvider, FORGE_LLM_PROVIDER);
     assert.equal(result.llmModel, "gpt-4o-mini");
     assert.equal(result.promptVersion, FORGE_PROMPT_VERSION);
@@ -243,9 +141,9 @@ describe("runForgeGeneration", () => {
     assert.equal(result.tokenEstimateOutput, 900);
   });
 
-  it("guardrails LLM suggested prices above $19.99", async () => {
+  it("guardrails LLM suggested prices above $149.99", async () => {
     const client = createMockOpenAiClient(
-      JSON.stringify({ ...validForgePayload, suggestedPrice: 24.99 }),
+      JSON.stringify({ ...validForgePayload, suggestedPrice: 199.99 }),
     );
     const idea = await sampleEvaluatedIdea();
     const result = await runForgeGeneration(
@@ -254,10 +152,10 @@ describe("runForgeGeneration", () => {
     );
 
     assert.equal(result.mode, "llm");
-    assert.equal(result.suggestedPrice, 14.99);
+    assert.equal(result.suggestedPrice, 49.99);
   });
 
-  it("guardrails LLM suggested prices below $4.99", async () => {
+  it("guardrails LLM suggested prices below $9.99", async () => {
     const client = createMockOpenAiClient(
       JSON.stringify({ ...validForgePayload, suggestedPrice: 2.99 }),
     );
@@ -268,7 +166,7 @@ describe("runForgeGeneration", () => {
     );
 
     assert.equal(result.mode, "llm");
-    assert.equal(result.suggestedPrice, 4.99);
+    assert.equal(result.suggestedPrice, 9.99);
   });
 
   it("falls back deterministically when forceFallback is set", async () => {
@@ -279,9 +177,9 @@ describe("runForgeGeneration", () => {
     );
 
     assert.equal(result.mode, "fallback");
-    assert.equal(result.suggestedPrice, 9.99);
+    assert.equal(result.suggestedPrice, 19.99);
     assert.equal(result.seoTags.length, 13);
-    assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
+    assert.ok(result.podDetails.blueprintId > 0);
     assert.equal(result.llmProvider, undefined);
     assert.equal(result.llmModel, undefined);
     assert.equal(result.promptVersion, undefined);
@@ -298,7 +196,7 @@ describe("runForgeGeneration", () => {
         idea,
       });
       assert.equal(result.mode, "fallback");
-      assert.ok(result.productStructure.pages.length >= FORGE_MIN_PAGES);
+      assert.ok(result.podDetails.blueprintId > 0);
     } finally {
       if (previous !== undefined) {
         process.env.OPENAI_API_KEY = previous;
@@ -324,7 +222,7 @@ describe("forgeResultToGenerationLlm", () => {
     const insert = mapGenerationToDbInsert({
       productIdeaId: "idea-1",
       productListingId: "listing-1",
-      structure: result.productStructure,
+      podDetails: result.podDetails,
       llm,
       generationStatus: "queued",
       pdf: { storagePath: null, publicUrl: null },
@@ -355,7 +253,7 @@ describe("forgeResultToGenerationLlm", () => {
     const insert = mapGenerationToDbInsert({
       productIdeaId: "idea-1",
       productListingId: "listing-1",
-      structure: result.productStructure,
+      podDetails: result.podDetails,
       llm,
       generationStatus: "queued",
       pdf: { storagePath: null, publicUrl: null },

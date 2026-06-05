@@ -8,7 +8,7 @@ import { generatePixelMarketing } from "@/lib/ajax/pixel/service";
 import {
   buildContentJobScheduleUpdate,
   buildPixelPromoPackage,
-  parseStructure,
+  parseGenerationPayload,
   type PixelPromoInput,
   type PixelPromoMetadata,
   type PixelPromoPackage,
@@ -120,7 +120,7 @@ function promoInputFromJob(job: QueuedJobRow): PixelPromoInput {
   const listing = job.product_listings;
   const idea = firstOrSelf(listing?.product_ideas);
   const generation = pickGeneration(listing?.product_generations);
-  const structure = parseStructure(generation?.structure);
+  const { structure, podDetails } = parseGenerationPayload(generation?.structure);
 
   return {
     jobId: job.id,
@@ -131,6 +131,7 @@ function promoInputFromJob(job: QueuedJobRow): PixelPromoInput {
     ideaDescription: idea?.description ?? null,
     seoKeywords: idea?.seo_keywords ?? null,
     structure,
+    podDetails,
   };
 }
 

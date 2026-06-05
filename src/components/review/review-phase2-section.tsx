@@ -6,7 +6,6 @@ import { ReviewBrainPanel } from "@/components/review/review-brain-panel";
 import { ReviewCompliancePanel } from "@/components/review/review-compliance-panel";
 import { ReviewPdfPanel } from "@/components/review/review-pdf-panel";
 import { ReviewSellabilityPanel } from "@/components/review/review-sellability-panel";
-import { ReviewStructurePreview } from "@/components/review/review-structure-preview";
 import { hasComplianceRisk } from "@/lib/review/display";
 import type { ReviewPhase2Context } from "@/lib/review/types";
 import type { ProductIdea } from "@/lib/ajax/types";
@@ -43,39 +42,43 @@ export function ReviewPhase2Section({
 
   const complianceWarnings = generation?.complianceWarnings ?? [];
   const complianceFlags = generation?.complianceFlags ?? [];
+  const podDetails = generation?.podDetails;
   const aiDisclosure =
-    typeof generation?.structure.metadata?.aiDisclosure === "string"
-      ? generation.structure.metadata.aiDisclosure
+    typeof podDetails?.metadata?.aiDisclosure === "string"
+      ? podDetails.metadata.aiDisclosure
       : null;
   const hasCompliance = hasComplianceRisk({
     warnings: complianceWarnings,
     flags: complianceFlags,
   });
 
-  const structure = generation?.structure;
-  const showStructure =
-    Boolean(structure) &&
-    (structure!.pages.length > 0 || structure!.pageCount > 0);
+  const showPodDetails = Boolean(
+    podDetails &&
+      podDetails.blueprintId > 0 &&
+      podDetails.artworkPrompt.trim(),
+  );
 
-  const showPdf =
+  const showAssetPanel =
     generation ||
     mockMode ||
     Boolean(idea);
 
-  const pdfMockMode = mockMode && !generation?.pdf.storagePath;
+  const podMockMode =
+    mockMode && !generation?.fulfillment?.printifyProductId?.trim();
   const sellabilityInput = {
-    structure: structure ?? null,
+    podDetails: podDetails ?? null,
+    fulfillment: generation?.fulfillment ?? null,
     aiDisclosure,
     complianceWarnings,
     complianceFlags,
     generationStatus: generation?.generationStatus ?? "pending",
-    pdfStoragePath: generation?.pdf.storagePath,
-    mockMode: pdfMockMode,
+    mockMode: podMockMode,
   } as const;
-  const showSellability = showPdf || Boolean(generation) || Boolean(structure);
+  const showSellability =
+    showAssetPanel || Boolean(generation) || showPodDetails;
 
   const hasAnyPanel =
-    brain || hasCompliance || Boolean(aiDisclosure) || showStructure || showPdf;
+    brain || hasCompliance || Boolean(aiDisclosure) || showPodDetails || showAssetPanel;
 
   if (!hasAnyPanel) {
     return (
@@ -85,7 +88,7 @@ export function ReviewPhase2Section({
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
           Phase 2 QC telemetry
         </p>
-        <Phase2EmptyHint label="Product Brain scores and Forge artifacts will appear here after the Phase 2 migration and pipeline run." />
+        <Phase2EmptyHint label="Product Brain scores and Forge artifacts will appear here after the pipeline run." />
       </div>
     );
   }
@@ -136,18 +139,43 @@ export function ReviewPhase2Section({
         </div>
 
         <div className="space-y-4">
-          {showStructure && structure ? (
-            <ReviewStructurePreview structure={structure} />
+          {showPodDetails && podDetails ? (
+            <div className={reviewQcPanelMuted}>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                POD blueprint
+              </p>
+              <dl className="mt-2 space-y-1 text-xs text-[var(--foreground)]">
+                <div>
+                  <dt className="text-[var(--text-muted)]">Blueprint</dt>
+                  <dd>{podDetails.blueprintId}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--text-muted)]">Style</dt>
+                  <dd>{podDetails.aestheticStyle}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--text-muted)]">Variants</dt>
+                  <dd>{podDetails.variantIds.join(", ")}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--text-muted)]">Artwork prompt</dt>
+                  <dd className="text-[var(--text-muted)]">
+                    {podDetails.artworkPrompt.slice(0, 120)}
+                    {podDetails.artworkPrompt.length > 120 ? "…" : ""}
+                  </dd>
+                </div>
+              </dl>
+            </div>
           ) : (
             <div className={reviewQcPanelMuted}>
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                Product structure
+                POD blueprint
               </p>
-              <Phase2EmptyHint label="Forge has not persisted a page structure for this listing yet." />
+              <Phase2EmptyHint label="Forge has not persisted POD details for this listing yet." />
             </div>
           )}
 
-          {showPdf ? (
+          {showAssetPanel ? (
             <ReviewPdfPanel
               generationId={generation?.id ?? null}
               pdf={
@@ -158,8 +186,8 @@ export function ReviewPhase2Section({
               }
               mockupStoragePath={generation?.mockupStoragePath ?? null}
               generationStatus={sellabilityInput.generationStatus}
-              structure={structure ?? null}
-              mockMode={pdfMockMode}
+              structure={null}
+              mockMode={podMockMode}
               onGenerationChange={onGenerationChange}
             />
           ) : null}

@@ -45,6 +45,15 @@ export function demoResult<T>(message: string, data: T): AdapterResult<T> {
   };
 }
 
+export function liveResult<T>(message: string, data: T): AdapterResult<T> {
+  return {
+    mode: "live",
+    message,
+    data,
+    handledAt: new Date().toISOString(),
+  };
+}
+
 /** Base config passed when constructing live adapters later. */
 export type AdapterConfig = {
   mode?: AdapterMode;

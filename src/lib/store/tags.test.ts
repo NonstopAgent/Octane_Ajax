@@ -38,10 +38,12 @@ describe("collectStoreTags", () => {
       userId: "user-1",
       productIdeaId: "idea-1",
       productListingId: "listing-1",
-      structure: {
-        format: "planner",
-        pageCount: 1,
-        pages: [],
+      podDetails: {
+        blueprintId: 68,
+        printProviderId: 1,
+        variantIds: [33719],
+        artworkPrompt: "Test artwork",
+        aestheticStyle: "minimalist-line-art",
         metadata: { tags: ["bundle", "worksheet"] },
       },
       llm: {

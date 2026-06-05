@@ -7,7 +7,6 @@ import {
   runGenerationPdfJob,
 } from "@/lib/product/generation-pdf-runner";
 import { mapGenerationFromDb } from "@/lib/product/mappers";
-import { generateListingMockup } from "@/lib/product/mockup-generator";
 import { buildProductPdfDownloadHref } from "@/lib/review/display";
 import type { Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -66,8 +65,9 @@ export async function POST(_request: Request, context: RouteContext) {
     if (!genLoadError && genRow) {
       const generation = mapGenerationFromDb(genRow);
       const listingId = generation.productListingId;
-      const { structure } = generation;
-      const { format, pageCount } = structure;
+      const { podDetails } = generation;
+      const format = podDetails.aestheticStyle;
+      const blueprintId = podDetails.blueprintId;
 
       const { data: listingRow } = await supabase
         .from(TABLES.LISTINGS)
@@ -86,39 +86,33 @@ export async function POST(_request: Request, context: RouteContext) {
       const listingTitle = listingRow?.title?.trim() || "Untitled product";
       const niche = ideaRow?.niche?.trim() || undefined;
 
-      const mockupStoragePath = await generateListingMockup({
-        supabase,
-        userId: user.id,
-        generationId,
-        listingTitle,
-        structure,
-      });
-
       const mockupMetadata: Json = {
         generationId,
         listingId: listingId ?? null,
         listingTitle,
         niche: niche ?? null,
         format,
-        pageCount,
+        blueprintId,
       };
 
-      if (mockupStoragePath) {
+      if (generation.fulfillment?.artworkUrl) {
         await supabase.from(TABLES.EVENTS).insert({
           user_id: user.id,
           event_type: "mockup_ready",
-          message: "Listing mockup ready for review and Etsy.",
+          message: "POD artwork ready for review.",
           agent_slug: AGENT_SLUGS.FORGE,
           room: ROOM_SLUGS.DESIGN_PRESS,
-          metadata: { ...mockupMetadata, storagePath: mockupStoragePath } as Json,
+          metadata: {
+            ...mockupMetadata,
+            artworkUrl: generation.fulfillment.artworkUrl,
+          } as Json,
         });
       } else {
-        console.error("[generate-pdf] mockup_generation_failed", mockupMetadata);
         await supabase.from(TABLES.EVENTS).insert({
           user_id: user.id,
           event_type: "mockup_generation_failed",
           message:
-            "Mockup generation failed — listing can still be reviewed and published without a hero image.",
+            "Artwork not ready — listing can still be reviewed after POD fulfillment completes.",
           agent_slug: AGENT_SLUGS.FORGE,
           room: ROOM_SLUGS.DESIGN_PRESS,
           metadata: mockupMetadata,

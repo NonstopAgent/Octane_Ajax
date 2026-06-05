@@ -7,7 +7,7 @@ import {
 import { mapGenerationFromDb } from "@/lib/product/mappers";
 import {
   ApprovalBlockedError,
-  assertPdfReadyForApproval,
+  assertPodReadyForApproval,
   assertSellabilityForApproval,
   buildSellabilityInputFromGeneration,
   isDemoReviewBypass,
@@ -207,10 +207,10 @@ export async function approveReview(
   );
 
   try {
-    assertPdfReadyForApproval({
+    assertPodReadyForApproval({
       isDemo,
       generationStatus: generation?.generationStatus,
-      pdfStoragePath: generation?.pdf.storagePath,
+      printifyProductId: generation?.fulfillment?.printifyProductId,
     });
     assertSellabilityForApproval(
       buildSellabilityInputFromGeneration(generation, ideaRawPayload),

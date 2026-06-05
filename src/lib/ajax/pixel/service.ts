@@ -53,12 +53,16 @@ function normalizeHashtags(tags: string[]): string[] {
 
 function promoContextFromInput(input: PixelPromoInput) {
   const structure = input.structure ?? null;
+  const podDetails = input.podDetails ?? null;
   const displayTitle =
     input.listingTitle.trim() ||
     input.ideaTitle?.trim() ||
-    "Your new printable";
+    "Your new product";
   const niche = input.niche?.trim() || null;
-  const format = structure?.format?.trim() || null;
+  const format =
+    podDetails?.aestheticStyle?.trim() ||
+    structure?.format?.trim() ||
+    null;
   const pageCount = structure?.pageCount ?? structure?.pages?.length ?? null;
   const pageTitles =
     structure?.pages

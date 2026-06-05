@@ -1,9 +1,7 @@
-import { PRODUCT_FORMATS } from "@/lib/ajax/product-brain/rules";
 import {
   AI_DISCLOSURE_TEXT,
-  FORGE_MAX_PAGES,
-  FORGE_MIN_PAGES,
   FORGE_PROMPT_VERSION,
+  IP_SAFE_AESTHETIC_STYLES,
 } from "@/lib/ajax/forge/types";
 
 export { FORGE_PROMPT_VERSION };
@@ -13,16 +11,20 @@ NEVER include content that involves:
 - Medical diagnosis, treatment, cures, or clinical claims
 - Legal advice or litigation strategy
 - Financial, investment, tax, or trading advice
-- Copyrighted IP: characters, brands, celebrities, schools, sports teams, franchises
+- Copyrighted IP: characters, brands, celebrities, schools, sports teams, franchises (e.g. Simpsons, Marvel, Disney)
 - Guaranteed results or unverifiable outcome promises
 - Official government forms, bank documents, or institutional letterhead presented as real
 `.trim();
 
-export const FORGE_GENERATION_SYSTEM_PROMPT = `You are Forge, the creation agent for Octane Ajax — a utility-first digital download business (printable planners, trackers, worksheets, checklists, templates, logbooks, bundles).
+const AESTHETIC_LIST = IP_SAFE_AESTHETIC_STYLES.join(", ");
 
-Turn an approved product idea into a complete Etsy-style listing draft and a structured printable product outline. Favor clarity, niche specificity, and real utility for the named buyer.
+export const FORGE_GENERATION_SYSTEM_PROMPT = `You are Forge, the creation agent for Octane Ajax — a print-on-demand (POD) factory for Etsy-style physical gifts (mugs, posters, apparel, etc.).
 
-Etsy printable pricing guidance: single trackers $4.99–$7.99, planners $7.99–$12.99, kits $12.99–$16.99; new shops should price toward the lower end of each band.
+Turn an approved product idea into a complete Etsy listing draft and a Printify product blueprint. Favor niche specificity, giftability, and IP-safe original artwork directions.
+
+Etsy POD pricing guidance: mugs $14.99–$24.99, posters $19.99–$34.99, apparel $24.99–$39.99; new shops should price toward the lower end.
+
+Use ONLY these IP-safe aesthetic styles (no copyrighted character or brand styles): ${AESTHETIC_LIST}.
 
 ${BLOCKED_GUIDANCE}
 
@@ -34,58 +36,26 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
   "listingTitle": "string — Etsy listing title (specific, no copyrighted brands)",
   "listingDescription": "string — buyer-facing description with bullet benefits; MUST include the AI disclosure sentence verbatim",
   "seoTags": ["string", ...] (exactly 13 Etsy tags, no duplicates, niche-specific),
-  "suggestedPrice": number (USD, typical digital download 3.99–14.99),
-  "productStructure": {
-    "format": "one of: ${PRODUCT_FORMATS.join(", ")}",
-    "pages": [
-      {
-        "pageNumber": 1,
-        "pageKind": "cover|instructions|worksheet|summary (optional but recommended)",
-        "title": "string",
-        "purpose": "string — what this page helps the buyer do",
-        "userInstructions": "string — how to print/fill/use this page",
-        "sections": [
-          {
-            "id": "section_id_snake",
-            "heading": "string",
-            "body": "optional helper copy",
-            "fields": [
-              {
-                "id": "field_id",
-                "label": "string",
-                "fieldType": "text|checkbox|number|date|notes",
-                "placeholder": "optional"
-              }
-            ],
-            "table": {
-              "id": "table_id",
-              "headers": ["Col A", "Col B", ...],
-              "rowCount": 6
-            },
-            "checklist": {
-              "id": "list_id",
-              "title": "optional",
-              "items": ["item one", "item two", ...]
-            }
-          }
-        ]
-      }
-    ]
+  "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
+  "podDetails": {
+    "blueprintId": number (Printify blueprint ID — e.g. 68 for 11oz mug, 1 for poster),
+    "printProviderId": number (Printify print provider ID),
+    "variantIds": [number, ...] (1–20 enabled variant IDs for this blueprint),
+    "artworkPrompt": "string — detailed original artwork prompt, 20+ chars, no brands/characters/logos",
+    "aestheticStyle": "one of: ${AESTHETIC_LIST}"
   },
   "complianceNotes": ["string", ...] (policy reminders for human review, may be empty),
   "aiDisclosure": "string — MUST be exactly: ${AI_DISCLOSURE_TEXT}",
-  "coverImagePrompt": "string — safe mockup/cover art prompt (no brands/celebrities)",
+  "coverImagePrompt": "string — safe product mockup prompt (no brands/celebrities)",
   "revisionNotes": ["string", ...] (internal notes for seller review)
 }
 
 Rules:
-- productStructure.pages: ${FORGE_MIN_PAGES}–${FORGE_MAX_PAGES} pages with unique pageNumber values starting at 1
-- Required page types: cover, instructions/how-to-use, at least TWO worksheet pages with rich fields/tables/checklists, and a summary/review page
-- Each page needs a clear title, purpose, and userInstructions
-- Each section needs fields, a table, or a checklist — avoid empty sections
-- Thin 2–3 page outlines are rejected — build a complete sellable printable pack
+- podDetails.artworkPrompt must describe original, IP-safe artwork suitable for print
+- podDetails.aestheticStyle must be one of the allowed IP-safe styles
+- podDetails.variantIds: at least one variant, max 20
 - seoTags: exactly 13 strings
-- Utility-first printable — not physical merch`;
+- Physical print-on-demand product — not a digital PDF download`;
 
 export function buildForgeGenerationUserPrompt(input: {
   runId: string;
@@ -99,7 +69,7 @@ export function buildForgeGenerationUserPrompt(input: {
   keywords: string[];
   reasoning: string;
 }): string {
-  return `Generate a listing + printable structure for cycle ${input.runId.slice(0, 8)}.
+  return `Generate a POD listing + Printify blueprint for cycle ${input.runId.slice(0, 8)}.
 
 Product idea:
 - Concept: ${input.productConcept}
@@ -112,5 +82,5 @@ Product idea:
 - Seed keywords: ${input.keywords.join(", ")}
 - Nova reasoning: ${input.reasoning}
 
-Deliver a cohesive ${FORGE_MIN_PAGES}+ page digital download the buyer can print and use immediately. Include cover, instructions, multiple worksheets, and a summary page.`;
+Deliver a cohesive print-on-demand gift product with original IP-safe artwork, Printify blueprint IDs, and an Etsy-ready listing draft.`;
 }

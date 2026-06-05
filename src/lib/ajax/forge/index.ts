@@ -2,13 +2,15 @@ export {
   AI_DISCLOSURE_TEXT,
   FORGE_PROMPT_VERSION,
   ForgeLlmResponseSchema,
-  ForgeProductStructureSchema,
+  ForgePodDetailsSchema,
+  IP_SAFE_AESTHETIC_STYLES,
   ensureAiDisclosureInCopy,
-  mapForgeStructureToDomain,
+  mapForgePodDetailsToDomain,
   type ForgeGenerationInput,
   type ForgeGenerationMode,
   type ForgeGenerationResult,
   type ForgeLlmResponse,
+  type IpSafeAestheticStyle,
 } from "@/lib/ajax/forge/types";
 
 export {

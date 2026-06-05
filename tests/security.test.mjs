@@ -277,7 +277,7 @@ describe("staged pipeline LLM wiring guard", () => {
     assert.doesNotMatch(simulator, /from ["']@\/lib\/product\/pdf-service/);
     assert.doesNotMatch(simulator, /from ["']@\/lib\/product\/pdf-generator/);
     assert.match(simulator, /review_gate|cycle_paused/i);
-    assert.match(simulator, /pdf_queued/);
+    assert.match(simulator, /pod_fulfillment_queued/);
     assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
     assert.doesNotMatch(legacyRoute, /runAjaxCycle|runNovaStep|runForgeStep/);
 
@@ -289,7 +289,7 @@ describe("staged pipeline LLM wiring guard", () => {
       "utf8",
     );
     assert.match(generatePdfRoute, /runGenerationPdfJob/);
-    assert.match(generatePdfRoute, /generateListingMockup/);
+    assert.doesNotMatch(generatePdfRoute, /generateListingMockup/);
     assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/pdf-generator/);
   });
 });

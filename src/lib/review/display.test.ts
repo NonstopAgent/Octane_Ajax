@@ -12,7 +12,7 @@ import {
   getReviewPdfUiState,
   hasComplianceRisk,
   hasComplianceSellabilityBlock,
-  isPdfOnlySellabilityBlock,
+  isFulfillmentOnlySellabilityBlock,
   resolveApproveApiError,
 } from "@/lib/review/display";
 import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
@@ -117,12 +117,12 @@ describe("review display helpers", () => {
 
   it("disables approve with blocked styling when sellability checklist fails", () => {
     const checklist = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
       aiDisclosure: null,
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "pending",
-      pdfStoragePath: null,
+      fulfillment: null,
     });
     const ui = getReviewApproveUi("needs_revision", {
       sellabilityAllPassed: false,
@@ -138,29 +138,29 @@ describe("review display helpers", () => {
 
   it("lists failed sellability check labels", () => {
     const checklist = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
       aiDisclosure: null,
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "pending",
-      pdfStoragePath: null,
+      fulfillment: null,
     });
     const labels = getFailedSellabilityCheckLabels(checklist);
-    assert.ok(labels.includes("PDF ready"));
-    assert.ok(labels.includes("6+ pages"));
+    assert.ok(labels.includes("Printify draft ready"));
+    assert.ok(labels.includes("Printify blueprint"));
   });
 
-  it("detects PDF-only sellability block", () => {
+  it("detects fulfillment-only sellability block", () => {
     const forge = buildForgeFallbackResult(sampleIdea);
     const forgeLike = evaluateSellabilityChecklist({
-      structure: forge.productStructure,
+      podDetails: forge.podDetails,
       aiDisclosure: forge.aiDisclosure,
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "ready",
-      pdfStoragePath: null,
+      fulfillment: null,
     });
-    assert.equal(isPdfOnlySellabilityBlock(forgeLike), true);
+    assert.equal(isFulfillmentOnlySellabilityBlock(forgeLike), true);
     const ui = getReviewApproveUi("approve_for_generation", {
       sellability: forgeLike,
     });
@@ -169,12 +169,12 @@ describe("review display helpers", () => {
 
   it("shows compliance reject message when compliance check fails", () => {
     const checklist = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
       aiDisclosure: "disclosed",
       complianceWarnings: ["Policy concern"],
       complianceFlags: [],
       generationStatus: "ready",
-      pdfStoragePath: "user/gen.pdf",
+      fulfillment: { printifyProductId: "pfy-prod-abc" },
     });
     assert.equal(hasComplianceSellabilityBlock(checklist), true);
     const ui = getReviewApproveUi("approve_for_generation", {
@@ -197,9 +197,9 @@ describe("review display helpers", () => {
   it("resolves approve API errors including 403 payloads", () => {
     assert.equal(
       resolveApproveApiError(403, {
-        error: "Sellability checklist has failing items: PDF ready",
+        error: "Sellability checklist has failing items: Printify draft ready",
       }),
-      "Sellability checklist has failing items: PDF ready",
+      "Sellability checklist has failing items: Printify draft ready",
     );
     assert.equal(resolveApproveApiError(403, {}), "Approval blocked.");
     assert.equal(resolveApproveApiError(500, {}), "Approval failed.");

@@ -19,19 +19,22 @@ import {
 import type {
   ComplianceFlag,
   ComplianceSeverity,
+  PodDetails,
+  PodFulfillmentSnapshot,
   ProductGeneration,
   ProductIdeaBrainSnapshot,
-  ProductStructure,
 } from "@/lib/product/domain";
 
 function toJson<T>(value: T): Json {
   return value as unknown as Json;
 }
 
-const EMPTY_STRUCTURE: ProductStructure = {
-  format: "unknown",
-  pageCount: 0,
-  pages: [],
+const EMPTY_POD_DETAILS: PodDetails = {
+  blueprintId: 0,
+  printProviderId: 0,
+  variantIds: [],
+  artworkPrompt: "",
+  aestheticStyle: "minimalist-line-art",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -94,37 +97,48 @@ function parseProductBrainValidation(
   };
 }
 
-function parsePageDescription(
-  raw: unknown,
-  index: number,
-): ProductStructure["pages"][number] | null {
+function parseFulfillmentSnapshot(raw: unknown): PodFulfillmentSnapshot | null {
   if (!isRecord(raw)) return null;
-  if (typeof raw.title !== "string" || typeof raw.purpose !== "string") {
-    return null;
-  }
-  const pageNumber =
-    typeof raw.pageNumber === "number" ? raw.pageNumber : index + 1;
-  const sections = Array.isArray(raw.sections) ? raw.sections : [];
   return {
-    pageNumber,
-    title: raw.title,
-    purpose: raw.purpose,
-    userInstructions:
-      typeof raw.userInstructions === "string" ? raw.userInstructions : undefined,
-    sections: sections as ProductStructure["pages"][number]["sections"],
+    artworkUrl:
+      typeof raw.artworkUrl === "string" ? raw.artworkUrl : null,
+    printifyUploadId:
+      typeof raw.printifyUploadId === "string" ? raw.printifyUploadId : null,
+    printifyProductId:
+      typeof raw.printifyProductId === "string" ? raw.printifyProductId : null,
+    printifyStatus:
+      raw.printifyStatus === "draft" || raw.printifyStatus === "published"
+        ? raw.printifyStatus
+        : null,
+    storefrontUrl:
+      typeof raw.storefrontUrl === "string" ? raw.storefrontUrl : null,
+    adapterMode:
+      raw.adapterMode === "demo" || raw.adapterMode === "live"
+        ? raw.adapterMode
+        : null,
   };
 }
 
-function parseProductStructure(raw: unknown): ProductStructure {
-  if (!isRecord(raw)) return EMPTY_STRUCTURE;
-  const rawPages = Array.isArray(raw.pages) ? raw.pages : [];
-  const pages = rawPages
-    .map((page, index) => parsePageDescription(page, index))
-    .filter((page): page is ProductStructure["pages"][number] => page !== null);
+/** Parses POD blueprint from `product_generations.structure` JSONB column. */
+export function parsePodDetails(raw: unknown): PodDetails {
+  if (!isRecord(raw)) return EMPTY_POD_DETAILS;
+
+  const variantIds = Array.isArray(raw.variantIds)
+    ? raw.variantIds.filter((v): v is number => typeof v === "number")
+    : [];
+
   return {
-    format: typeof raw.format === "string" ? raw.format : "unknown",
-    pageCount: typeof raw.pageCount === "number" ? raw.pageCount : pages.length,
-    pages,
+    blueprintId:
+      typeof raw.blueprintId === "number" ? raw.blueprintId : 0,
+    printProviderId:
+      typeof raw.printProviderId === "number" ? raw.printProviderId : 0,
+    variantIds,
+    artworkPrompt:
+      typeof raw.artworkPrompt === "string" ? raw.artworkPrompt : "",
+    aestheticStyle:
+      typeof raw.aestheticStyle === "string"
+        ? raw.aestheticStyle
+        : "minimalist-line-art",
     metadata: isRecord(raw.metadata) ? raw.metadata : undefined,
   };
 }
@@ -180,12 +194,17 @@ export function mapGenerationFromDb(row: DbGeneration): ProductGeneration {
     ? row.generation_status
     : "pending";
 
+  const podDetails = parsePodDetails(row.structure);
+  const fulfillment = parseFulfillmentSnapshot(
+    podDetails.metadata?.fulfillment,
+  );
+
   return {
     id: row.id,
     userId: row.user_id,
     productIdeaId: row.product_idea_id,
     productListingId: row.product_listing_id,
-    structure: parseProductStructure(row.structure),
+    podDetails,
     llm: {
       provider: row.llm_provider,
       model: row.llm_model,
@@ -199,6 +218,7 @@ export function mapGenerationFromDb(row: DbGeneration): ProductGeneration {
       publicUrl: row.pdf_public_url,
     },
     mockupStoragePath: row.mockup_storage_path,
+    fulfillment,
     complianceFlags: parseComplianceFlags(row.compliance_flags),
     complianceWarnings: row.compliance_warnings ?? [],
     createdAt: row.created_at,
@@ -211,7 +231,7 @@ export function mapGenerationToDbInsert(
     ProductGeneration,
     | "productIdeaId"
     | "productListingId"
-    | "structure"
+    | "podDetails"
     | "llm"
     | "generationStatus"
     | "pdf"
@@ -224,7 +244,7 @@ export function mapGenerationToDbInsert(
     user_id: input.userId,
     product_idea_id: input.productIdeaId,
     product_listing_id: input.productListingId,
-    structure: toJson(input.structure),
+    structure: toJson(input.podDetails),
     llm_provider: input.llm.provider,
     llm_model: input.llm.model,
     prompt_version: input.llm.promptVersion,
@@ -244,7 +264,7 @@ export function mapGenerationToDbUpdate(
     Pick<
       ProductGeneration,
       | "productListingId"
-      | "structure"
+      | "podDetails"
       | "llm"
       | "generationStatus"
       | "pdf"
@@ -259,8 +279,8 @@ export function mapGenerationToDbUpdate(
   if (patch.productListingId !== undefined) {
     update.product_listing_id = patch.productListingId;
   }
-  if (patch.structure !== undefined) {
-    update.structure = toJson(patch.structure);
+  if (patch.podDetails !== undefined) {
+    update.structure = toJson(patch.podDetails);
   }
   if (patch.llm) {
     if (patch.llm.provider !== undefined) update.llm_provider = patch.llm.provider;

@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
-import { FORGE_MIN_PAGES } from "@/lib/ajax/forge/types";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import { generateProductPdf } from "@/lib/product/pdf-generator";
+import type { ProductStructure } from "@/lib/product/domain";
 import {
   buildProductPdfStoragePath,
   parseProductPdfStoragePath,
@@ -43,27 +42,55 @@ const sampleIdea: NovaEvaluatedIdea = {
   verdict: "approve_for_generation",
 };
 
-describe("productStructureToDocument", () => {
-  it("maps Forge fallback structure into a sellable printable document", async () => {
-    const forge = buildForgeFallbackResult(sampleIdea);
-    assert.ok(isSellableStructure(forge.productStructure));
-    assert.ok(forge.productStructure.pages.length >= FORGE_MIN_PAGES);
+const sellableLegacyStructure: ProductStructure = {
+  format: "planner",
+  pageCount: 8,
+  pages: Array.from({ length: 8 }, (_, i) => ({
+    pageNumber: i + 1,
+    title: `Page ${i + 1}`,
+    purpose: "Worksheet purpose",
+    userInstructions: "Print and fill.",
+    sections: [
+      {
+        id: `section_${i + 1}`,
+        heading: `Section ${i + 1}`,
+        fields: [{ id: "notes", label: "Notes", fieldType: "notes" as const }],
+      },
+    ],
+    metadata: {
+      pageKind:
+        i === 0
+          ? "cover"
+          : i === 1
+            ? "intro"
+            : i === 7
+              ? "summary"
+              : "worksheet",
+    },
+  })),
+};
 
-    const doc = productStructureToDocument(forge.productStructure, {
-      title: forge.listingTitle,
-      disclosureNote: forge.aiDisclosure,
+describe("productStructureToDocument", () => {
+  it("maps legacy printable structure into a sellable document", async () => {
+    assert.ok(isSellableStructure(sellableLegacyStructure));
+    assert.ok(sellableLegacyStructure.pages.length >= 6);
+
+    const doc = productStructureToDocument(sellableLegacyStructure, {
+      title: sampleIdea.productConcept,
+      disclosureNote:
+        "AI tools assisted in drafting and structuring this product.",
       audience: sampleIdea.targetBuyer,
     });
 
-    assert.ok(doc.pages.length >= FORGE_MIN_PAGES);
-    assert.equal(doc.title, forge.listingTitle);
+    assert.ok(doc.pages.length >= 6);
+    assert.equal(doc.title, sampleIdea.productConcept);
     assert.equal(doc.pages[0]?.kind, "cover");
     assert.ok(doc.disclosureNote?.includes("AI tools assisted"));
 
     const bytes = await generateProductPdf(doc);
     assert.equal(new TextDecoder().decode(bytes.subarray(0, 5)), "%PDF-");
     const loaded = await PDFDocument.load(bytes);
-    assert.ok(loaded.getPageCount() >= FORGE_MIN_PAGES);
+    assert.ok(loaded.getPageCount() >= 6);
   });
 
   it("still maps thin legacy two-page structures", async () => {

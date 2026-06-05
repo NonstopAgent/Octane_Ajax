@@ -28,7 +28,7 @@ export function collectStoreTags(
     pushTagList(tags, idea.rawPayload.tags);
   }
 
-  const meta = generation?.structure.metadata;
+  const meta = generation?.podDetails.metadata;
   if (meta) {
     pushTagList(tags, meta.tags);
     pushTagList(tags, meta.seoTags);

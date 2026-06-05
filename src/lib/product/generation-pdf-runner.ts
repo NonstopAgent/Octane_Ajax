@@ -4,6 +4,7 @@
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import { mapGenerationFromDb } from "@/lib/product/mappers";
 import { generateAndStoreProductPdf } from "@/lib/product/pdf-service";
+import type { ProductStructure } from "@/lib/product/domain";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -127,17 +128,31 @@ export async function runGenerationPdfJob(
       : undefined;
 
   const aiDisclosure =
-    typeof generation.structure.metadata?.aiDisclosure === "string"
-      ? generation.structure.metadata.aiDisclosure
+    typeof generation.podDetails.metadata?.aiDisclosure === "string"
+      ? generation.podDetails.metadata.aiDisclosure
       : undefined;
 
   const listingTitle = listingRow.title?.trim() || "Untitled product";
+
+  // Legacy PDF path — only for rows that still store printable page structures.
+  const legacyPages = (row.structure as { pages?: unknown[] } | null)?.pages;
+  if (!Array.isArray(legacyPages) || legacyPages.length === 0) {
+    return {
+      ok: false,
+      error: "This generation is a POD product — PDF generation is not applicable.",
+    };
+  }
 
   const pdfResult = await generateAndStoreProductPdf({
     supabase,
     userId,
     generationId,
-    structure: generation.structure,
+    structure: {
+      format: "legacy",
+      pageCount: legacyPages.length,
+      pages: legacyPages as ProductStructure["pages"],
+      metadata: generation.podDetails.metadata,
+    },
     listingTitle,
     listingDescription: listingRow.description ?? undefined,
     footerNote: aiDisclosure,

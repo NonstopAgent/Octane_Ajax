@@ -43,26 +43,28 @@ function baseDbGeneration(overrides: Partial<DbGeneration> = {}): DbGeneration {
     product_idea_id: IDEA_ID,
     product_listing_id: null,
     structure: {
-      format: "planner",
-      pageCount: 1,
-      pages: [
-        {
-          pageNumber: 1,
-          title: "Morning routine",
-          purpose: "Step-by-step transitions",
-          sections: [],
+      blueprintId: 68,
+      printProviderId: 1,
+      variantIds: [33719],
+      artworkPrompt:
+        "Original minimalist artwork for parenting niche, no logos or characters",
+      aestheticStyle: "minimalist-line-art",
+      metadata: {
+        fulfillment: {
+          printifyProductId: "pfy-prod-abc",
+          adapterMode: "demo",
         },
-      ],
+      },
     },
     llm_provider: "openai",
     llm_model: "gpt-4o-mini",
-    prompt_version: "forge-structure-v1",
+    prompt_version: "forge-pod-v1",
     token_estimate_input: 1200,
     token_estimate_output: 800,
     generation_status: "ready",
-    pdf_storage_path: "generations/sample.pdf",
+    pdf_storage_path: null,
     pdf_public_url: null,
-    mockup_storage_path: "generations/sample_mockup.jpg",
+    mockup_storage_path: "demo://octane-ajax/artwork/sample.png",
     compliance_flags: [
       {
         code: "ai_disclosure",
@@ -158,17 +160,17 @@ describe("product mappers — Product Brain on product_ideas", () => {
 });
 
 describe("product mappers — product_generations", () => {
-  it("maps generation rows into domain objects with structure and compliance", () => {
+  it("maps generation rows into domain objects with podDetails and compliance", () => {
     const domain = mapGenerationFromDb(baseDbGeneration());
 
     assert.equal(domain.id, GENERATION_ID);
     assert.equal(domain.productIdeaId, IDEA_ID);
     assert.equal(domain.generationStatus, "ready");
-    assert.equal(domain.structure.format, "planner");
-    assert.equal(domain.structure.pageCount, 1);
+    assert.equal(domain.podDetails.blueprintId, 68);
+    assert.equal(domain.podDetails.variantIds.length, 1);
+    assert.equal(domain.fulfillment?.printifyProductId, "pfy-prod-abc");
     assert.equal(domain.llm.model, "gpt-4o-mini");
-    assert.equal(domain.pdf.storagePath, "generations/sample.pdf");
-    assert.equal(domain.mockupStoragePath, "generations/sample_mockup.jpg");
+    assert.equal(domain.mockupStoragePath, "demo://octane-ajax/artwork/sample.png");
     assert.equal(domain.complianceFlags.length, 1);
     assert.equal(domain.complianceFlags[0]?.code, "ai_disclosure");
     assert.deepEqual(domain.complianceWarnings, [
@@ -190,7 +192,7 @@ describe("product mappers — product_generations", () => {
       userId: USER_ID,
       productIdeaId: domain.productIdeaId,
       productListingId: domain.productListingId,
-      structure: domain.structure,
+      podDetails: domain.podDetails,
       llm: domain.llm,
       generationStatus: "queued",
       pdf: domain.pdf,

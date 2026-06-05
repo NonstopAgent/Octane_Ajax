@@ -2,20 +2,32 @@ import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   AI_DISCLOSURE_TEXT,
   ensureAiDisclosureInCopy,
-  mapForgeStructureToDomain,
+  mapForgePodDetailsToDomain,
   type ForgeGenerationResult,
-  type ForgeLlmProductStructure,
+  type ForgeLlmPodDetails,
 } from "@/lib/ajax/forge/types";
-const FALLBACK_PRICE = 9.99;
+
+const FALLBACK_PRICE = 19.99;
+
+/** Default Printify mug blueprint for deterministic fallback (demo-safe). */
+const FALLBACK_POD: ForgeLlmPodDetails = {
+  blueprintId: 68,
+  printProviderId: 1,
+  variantIds: [33719, 33720],
+  artworkPrompt:
+    "Minimal flat illustration with soft neutral palette, niche-specific iconography, no logos, no characters, print-ready centered composition",
+  aestheticStyle: "minimalist-line-art",
+};
 
 function padSeoTags(keywords: string[], concept: string): string[] {
   const base = [
     ...keywords.map((k) => k.trim()).filter(Boolean),
-    "printable",
-    "digital download",
-    "instant download",
-    "planner pdf",
-    "etsy printable",
+    "print on demand",
+    "gift idea",
+    "unique design",
+    "custom mug",
+    "etsy gift",
+    "made to order",
   ];
   const nicheTokens = concept
     .toLowerCase()
@@ -31,225 +43,11 @@ function padSeoTags(keywords: string[], concept: string): string[] {
   return merged.slice(0, 13);
 }
 
-function buildSellableFallbackStructure(
-  idea: NovaEvaluatedIdea,
-): ForgeLlmProductStructure {
-  const concept = idea.productConcept;
-  return {
-    format: idea.format,
-    pages: [
-      {
-        pageNumber: 1,
-        pageKind: "cover",
-        title: concept,
-        purpose: "Cover — orient the buyer to this printable pack",
-        userInstructions: "Print or save this PDF. Start with the how-to page.",
-        sections: [
-          {
-            id: "cover_meta",
-            heading: "What's inside",
-            body: `A ${idea.format} for ${idea.targetBuyer}: ${idea.problemSolved}`,
-            fields: [
-              {
-                id: "owner",
-                label: "Prepared for",
-                fieldType: "text",
-                placeholder: "Your name (optional)",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        pageNumber: 2,
-        pageKind: "instructions",
-        title: "How to use this download",
-        purpose: "Explain print settings and workflow",
-        userInstructions:
-          "Read once before your first session. Duplicate worksheet pages as needed.",
-        sections: [
-          {
-            id: "how_to",
-            heading: "Quick start",
-            body: "Print at 100% on US Letter or A4. Use pencil or PDF markup.",
-            checklist: {
-              id: "start_checklist",
-              title: "Before you begin",
-              items: [
-                "Choose your start date",
-                "Gather pens or digital markup tool",
-                "Pick one worksheet to try first",
-                "Set a 15-minute review reminder",
-              ],
-            },
-          },
-        ],
-      },
-      {
-        pageNumber: 3,
-        pageKind: "worksheet",
-        title: "Weekly focus",
-        purpose: "Capture the primary goal for the week",
-        userInstructions: "Complete at the start of each week.",
-        sections: [
-          {
-            id: "week_focus",
-            heading: "This week's priority",
-            fields: [
-              { id: "goal", label: "Primary goal", fieldType: "text" },
-              { id: "why", label: "Why it matters", fieldType: "notes" },
-              {
-                id: "metric",
-                label: "How you'll measure progress",
-                fieldType: "text",
-              },
-            ],
-            table: {
-              id: "week_days",
-              headers: ["Day", "Focus block", "Done?"],
-              rowCount: 7,
-            },
-          },
-        ],
-      },
-      {
-        pageNumber: 4,
-        pageKind: "worksheet",
-        title: "Daily log — Mon–Wed",
-        purpose: "Track actions mid-week",
-        userInstructions: "Fill one row per day. Add notes in the last column.",
-        sections: [
-          {
-            id: "daily_log_a",
-            heading: "Daily entries",
-            table: {
-              id: "log_a",
-              headers: ["Date", "Action", "Outcome", "Notes"],
-              rowCount: 6,
-            },
-            checklist: {
-              id: "habits_a",
-              items: [
-                "Morning check-in",
-                "Midday reset",
-                "Evening shutdown",
-              ],
-            },
-          },
-        ],
-      },
-      {
-        pageNumber: 5,
-        pageKind: "worksheet",
-        title: "Daily log — Thu–Sun",
-        purpose: "Continue tracking through the week",
-        userInstructions: "Duplicate this page if you need more rows.",
-        sections: [
-          {
-            id: "daily_log_b",
-            heading: "Daily entries",
-            table: {
-              id: "log_b",
-              headers: ["Date", "Action", "Outcome", "Notes"],
-              rowCount: 6,
-            },
-            fields: [
-              { id: "wins", label: "Small wins", fieldType: "notes" },
-              { id: "blockers", label: "Blockers", fieldType: "notes" },
-            ],
-          },
-        ],
-      },
-      {
-        pageNumber: 6,
-        pageKind: "worksheet",
-        title: "Resource & notes",
-        purpose: "Capture links, supplies, and reminders",
-        userInstructions: "Use during the week as a scratch pad.",
-        sections: [
-          {
-            id: "resources",
-            heading: "Resources",
-            fields: Array.from({ length: 6 }, (_, i) => ({
-              id: `res_${i + 1}`,
-              label: `Item ${i + 1}`,
-              fieldType: "text" as const,
-            })),
-            checklist: {
-              id: "supplies",
-              title: "Supplies / tools",
-              items: [
-                "Notebook or binder",
-                "Printer paper",
-                "Pen or stylus",
-                "Folder for completed weeks",
-              ],
-            },
-          },
-        ],
-      },
-      {
-        pageNumber: 7,
-        pageKind: "worksheet",
-        title: "Troubleshooting",
-        purpose: "Note what to adjust when stuck",
-        userInstructions: "Fill when something isn't working.",
-        sections: [
-          {
-            id: "troubleshoot",
-            heading: "If you're stuck",
-            fields: [
-              { id: "symptom", label: "What's not working?", fieldType: "notes" },
-              { id: "tried", label: "What you tried", fieldType: "notes" },
-              { id: "next", label: "Next experiment", fieldType: "text" },
-            ],
-          },
-        ],
-      },
-      {
-        pageNumber: 8,
-        pageKind: "summary",
-        title: "Week in review",
-        purpose: "Reflect and plan the next cycle",
-        userInstructions: "Complete at week end. Keep for your records.",
-        sections: [
-          {
-            id: "review",
-            heading: "Reflection",
-            fields: [
-              { id: "best", label: "Best outcome this week", fieldType: "text" },
-              {
-                id: "adjust",
-                label: "One change for next week",
-                fieldType: "notes",
-              },
-              {
-                id: "rating",
-                label: "Overall week (1–10)",
-                fieldType: "number",
-              },
-            ],
-            checklist: {
-              id: "closeout",
-              title: "Close-out",
-              items: [
-                "Archive or file this week",
-                "Schedule next week's focus block",
-                "Celebrate one win",
-              ],
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-/** Deterministic Forge output when LLM is unavailable (preserves legacy demo pricing). */
+/** Deterministic Forge output when LLM is unavailable. */
 export function buildForgeFallbackResult(
   idea: NovaEvaluatedIdea,
 ): ForgeGenerationResult {
-  const listingTitle = idea.productConcept;
+  const listingTitle = `${idea.productConcept} — Print-on-Demand Gift`;
   const listingDescription = ensureAiDisclosureInCopy(
     [
       idea.problemSolved,
@@ -257,19 +55,25 @@ export function buildForgeFallbackResult(
       `Designed for: ${idea.targetBuyer}`,
       "",
       "What's included:",
-      "- 8-page printable PDF pack (cover, instructions, worksheets, review)",
-      "- Tables, checklists, and fillable fields",
+      "- Professionally printed physical product (made to order)",
+      "- Original artwork tailored to this niche",
+      "- Ships via Printify fulfillment network",
       "",
       idea.reasoning,
     ].join("\n"),
   );
 
-  const structure = mapForgeStructureToDomain(
-    buildSellableFallbackStructure(idea),
+  const artworkPrompt = `Original ${FALLBACK_POD.aestheticStyle} artwork for ${idea.niche}: ${idea.productConcept}. ${idea.problemSolved}. No copyrighted characters, brands, or logos.`;
+
+  const podDetails = mapForgePodDetailsToDomain(
+    {
+      ...FALLBACK_POD,
+      artworkPrompt,
+    },
     {
       aiDisclosure: AI_DISCLOSURE_TEXT,
       forgeMode: "fallback",
-      coverImagePrompt: `Minimal flat cover for a ${idea.format} about ${idea.niche}, soft neutral palette, no logos or characters`,
+      coverImagePrompt: `Product mockup for ${idea.format} about ${idea.niche}, soft neutral palette, no logos or characters`,
     },
   );
 
@@ -279,10 +83,10 @@ export function buildForgeFallbackResult(
     listingDescription,
     seoTags: padSeoTags(idea.keywords, idea.productConcept),
     suggestedPrice: FALLBACK_PRICE,
-    productStructure: structure,
+    podDetails,
     complianceNotes: [],
     aiDisclosure: AI_DISCLOSURE_TEXT,
-    coverImagePrompt: String(structure.metadata?.coverImagePrompt ?? ""),
+    coverImagePrompt: String(podDetails.metadata?.coverImagePrompt ?? ""),
     revisionNotes: ["Deterministic Forge fallback (no LLM)."],
   };
 }

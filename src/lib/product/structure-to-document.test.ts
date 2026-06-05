@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { FORGE_MIN_PAGES } from "@/lib/ajax/forge/types";
 import type { ProductStructure } from "@/lib/product/domain";
 import {
   isSellableStructure,
   productStructureToDocument,
 } from "@/lib/product/structure-to-document";
+
+const MIN_SELLABLE_PAGES = 6;
 
 function structureWithPageCount(count: number): ProductStructure {
   const pages = Array.from({ length: count }, (_, i) => ({
@@ -29,14 +30,14 @@ function structureWithPageCount(count: number): ProductStructure {
 }
 
 describe("sellability structure checks", () => {
-  it("aligns sellable threshold with Forge minimum pages", () => {
-    assert.equal(FORGE_MIN_PAGES, 6);
+  it("aligns sellable threshold with minimum pages", () => {
+    assert.equal(MIN_SELLABLE_PAGES, 6);
     assert.equal(
-      isSellableStructure(structureWithPageCount(FORGE_MIN_PAGES - 1)),
+      isSellableStructure(structureWithPageCount(MIN_SELLABLE_PAGES - 1)),
       false,
     );
     assert.equal(
-      isSellableStructure(structureWithPageCount(FORGE_MIN_PAGES)),
+      isSellableStructure(structureWithPageCount(MIN_SELLABLE_PAGES)),
       true,
     );
   });

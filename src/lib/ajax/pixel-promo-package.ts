@@ -1,4 +1,4 @@
-import type { ProductStructure } from "@/lib/product/domain";
+import type { PodDetails, ProductStructure } from "@/lib/product/domain";
 import type {
   Json,
   TablesUpdate,
@@ -49,6 +49,7 @@ export type PixelPromoInput = {
   ideaDescription?: string | null;
   seoKeywords?: string[] | null;
   structure?: ProductStructure | null;
+  podDetails?: PodDetails | null;
 };
 
 const DEMO_HASHTAGS = [
@@ -82,11 +83,31 @@ function uniqueHashtags(tags: string[], limit = 12): string[] {
   return out;
 }
 
+function parsePodDetails(raw: unknown): PodDetails | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as PodDetails;
+  if (typeof s.blueprintId !== "number") return null;
+  return s;
+}
+
 function parseStructure(raw: unknown): ProductStructure | null {
   if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.blueprintId === "number") return null;
   const s = raw as ProductStructure;
   if (!Array.isArray(s.pages)) return null;
   return s;
+}
+
+function parseGenerationPayload(raw: unknown): {
+  structure: ProductStructure | null;
+  podDetails: PodDetails | null;
+} {
+  const podDetails = parsePodDetails(raw);
+  if (podDetails) {
+    return { structure: null, podDetails };
+  }
+  return { structure: parseStructure(raw), podDetails: null };
 }
 
 function extractPageTitles(structure: ProductStructure | null): string[] {
@@ -100,7 +121,11 @@ function extractPageTitles(structure: ProductStructure | null): string[] {
 function buildHashtags(input: PixelPromoInput): string[] {
   const fromNiche = input.niche ? slugHashtag(input.niche) : null;
   const fromFormat =
-    input.structure?.format ? slugHashtag(input.structure.format) : null;
+    input.podDetails?.aestheticStyle
+      ? slugHashtag(input.podDetails.aestheticStyle)
+      : input.structure?.format
+        ? slugHashtag(input.structure.format)
+        : null;
   const fromSeo = (input.seoKeywords ?? [])
     .map((kw) => slugHashtag(kw))
     .filter((t): t is string => Boolean(t));
@@ -130,27 +155,37 @@ function benefitLines(pageTitles: string[], format: string | null): string[] {
  */
 export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackage {
   const structure = input.structure ?? null;
+  const podDetails = input.podDetails ?? null;
   const displayTitle =
     input.listingTitle.trim() ||
     input.ideaTitle?.trim() ||
-    "Your new printable";
+    "Your new product";
   const niche = input.niche?.trim() || null;
-  const format = structure?.format?.trim() || null;
+  const format =
+    podDetails?.aestheticStyle?.trim() ||
+    structure?.format?.trim() ||
+    null;
   const pageCount = structure?.pageCount ?? structure?.pages?.length ?? null;
   const pageTitles = extractPageTitles(structure);
-  const hashtags = buildHashtags({ ...input, structure });
+  const hashtags = buildHashtags({ ...input, structure, podDetails });
   const hashtagLine = hashtags.join(" ");
 
-  const audience = niche ? `${niche} fans` : "busy planners";
-  const formatLabel = format ?? "printable download";
+  const audience = niche ? `${niche} fans` : "gift shoppers";
+  const formatLabel = podDetails ? "print-on-demand gift" : format ?? "printable download";
 
   const shortCaption = [
     `✨ ${displayTitle} — ${formatLabel} for ${audience}.`,
-    pageCount ? `${pageCount} pages, instant download.` : "Instant download.",
+    podDetails ? "Made to order, ships fast." : pageCount ? `${pageCount} pages, instant download.` : "Instant download.",
     hashtagLine,
   ].join("\n");
 
-  const benefits = benefitLines(pageTitles, format);
+  const benefits = podDetails
+    ? [
+        `• Original ${podDetails.aestheticStyle} artwork`,
+        "• Print-on-demand — no inventory needed",
+        "• Ships via Printify fulfillment",
+      ]
+    : benefitLines(pageTitles, format);
   const longCaption = [
     `${displayTitle}`,
     "",
@@ -187,13 +222,21 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
     .join(" ");
 
   const problem = niche ?? "your routine";
-  const tiktokHookIdeas = [
-    `POV: you finally fixed ${problem} with one ${formatLabel}.`,
-    `Stop scrolling if you need ${displayTitle} this week.`,
-    `I printed this in 2 minutes — here's what's inside 👀`,
-    `The ${pageCount ?? "multi"}-page version nobody told you about.`,
-    `Demo drop: ${displayTitle} (link in bio).`,
-  ];
+  const tiktokHookIdeas = podDetails
+    ? [
+        `POV: you found the perfect ${problem} gift.`,
+        `This ${formatLabel} is going viral in ${problem} — here's why.`,
+        `Made-to-order drop: ${displayTitle} 👀`,
+        `Stop scrolling if you need a ${niche ?? "unique"} gift this week.`,
+        `Demo drop: ${displayTitle} (link in bio).`,
+      ]
+    : [
+        `POV: you finally fixed ${problem} with one ${formatLabel}.`,
+        `Stop scrolling if you need ${displayTitle} this week.`,
+        `I printed this in 2 minutes — here's what's inside 👀`,
+        `The ${pageCount ?? "multi"}-page version nobody told you about.`,
+        `Demo drop: ${displayTitle} (link in bio).`,
+      ];
 
   const scheduledFor = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const assetUrl = `demo://octane-ajax/promo/${input.jobId}/slideshow.mp4`;
@@ -247,4 +290,4 @@ export function buildContentJobScheduleUpdate(
   return base;
 }
 
-export { parseStructure };
+export { parseStructure, parseGenerationPayload };

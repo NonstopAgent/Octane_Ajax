@@ -16,7 +16,7 @@ import {
   normalizeProductCategory,
   normalizeProductFormat,
 } from "@/lib/ajax/nova/types";
-import { scheduleGenerationPdfAfterForge } from "@/lib/product/generation-pdf-runner";
+import { schedulePodFulfillmentAfterForge } from "@/lib/product/generation-pod-runner";
 import { mapGenerationToDbInsert, mapIdeaBrainFromDb } from "@/lib/product/mappers";
 import type { ProductIdea as DbIdea } from "@/lib/supabase/database.types";
 import {
@@ -669,7 +669,7 @@ async function executeForgeStep(
     userId,
     productIdeaId: selectedRow.id,
     productListingId: listingRow.id,
-    structure: forgeResult.productStructure,
+    podDetails: forgeResult.podDetails,
     llm: forgeResultToGenerationLlm(forgeResult),
     generationStatus: "queued",
     pdf: { storagePath: null, publicUrl: null },
@@ -693,10 +693,10 @@ async function executeForgeStep(
 
   events.push(
     await insertEvent(supabase, userId, {
-      event_type: "pdf_queued",
+      event_type: "pod_fulfillment_queued",
       agent_slug: AGENT_SLUGS.FORGE,
       room: ROOM_SLUGS.DESIGN_PRESS,
-      message: "PDF generation queued — printable asset will build in the background.",
+      message: "POD fulfillment queued — artwork and Printify draft will build in the background.",
       metadata: {
         generationId: generationRow.id,
         listingId: listingRow.id,
@@ -705,7 +705,7 @@ async function executeForgeStep(
     }),
   );
 
-  scheduleGenerationPdfAfterForge(
+  schedulePodFulfillmentAfterForge(
     supabase,
     userId,
     generationRow.id,

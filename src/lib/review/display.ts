@@ -108,13 +108,16 @@ export function getFailedSellabilityCheckLabels(
   return checklist.checks.filter((c) => !c.passed).map((c) => c.label);
 }
 
-/** True when the only failing sellability check is PDF readiness. */
-export function isPdfOnlySellabilityBlock(
+/** True when the only failing sellability check is Printify draft readiness. */
+export function isFulfillmentOnlySellabilityBlock(
   checklist: SellabilityChecklist,
 ): boolean {
   const failed = checklist.checks.filter((c) => !c.passed);
-  return failed.length === 1 && failed[0]?.id === "pdf_ready";
+  return failed.length === 1 && failed[0]?.id === "fulfillment_ready";
 }
+
+/** @deprecated Use isFulfillmentOnlySellabilityBlock */
+export const isPdfOnlySellabilityBlock = isFulfillmentOnlySellabilityBlock;
 
 export function hasComplianceSellabilityBlock(
   checklist: SellabilityChecklist,
@@ -145,7 +148,7 @@ function sellabilityBlockedUi(
     tone: "blocked",
     approvalBlockedHeading: "Approval blocked because:",
     blockedCheckLabels: getFailedSellabilityCheckLabels(checklist),
-    showGeneratePdfAction: isPdfOnlySellabilityBlock(checklist),
+    showGeneratePdfAction: isFulfillmentOnlySellabilityBlock(checklist),
     complianceBlockMessage: hasComplianceSellabilityBlock(checklist)
       ? COMPLIANCE_APPROVAL_BLOCK_MESSAGE
       : null,

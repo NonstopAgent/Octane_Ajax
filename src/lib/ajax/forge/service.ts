@@ -11,7 +11,7 @@ import {
 import {
   ensureAiDisclosureInCopy,
   ForgeLlmResponseSchema,
-  mapForgeStructureToDomain,
+  mapForgePodDetailsToDomain,
   type ForgeGenerationInput,
   type ForgeGenerationResult,
   AI_DISCLOSURE_TEXT,
@@ -27,9 +27,10 @@ export type ForgeGenerationOptions = {
   forceFallback?: boolean;
 };
 
+/** POD retail price guardrails (USD). */
 export function guardrailedPrice(suggestedPrice: number): number {
-  if (suggestedPrice < 4.99) return 4.99;
-  if (suggestedPrice > 19.99) return 14.99;
+  if (suggestedPrice < 9.99) return 9.99;
+  if (suggestedPrice > 149.99) return 49.99;
   return suggestedPrice;
 }
 
@@ -42,7 +43,7 @@ function mapLlmResponseToResult(
     ? data.aiDisclosure.trim()
     : AI_DISCLOSURE_TEXT;
 
-  const structure = mapForgeStructureToDomain(data.productStructure, {
+  const podDetails = mapForgePodDetailsToDomain(data.podDetails, {
     aiDisclosure,
     coverImagePrompt: data.coverImagePrompt.trim(),
     seoTags: data.seoTags.map((t) => t.trim()),
@@ -60,7 +61,7 @@ function mapLlmResponseToResult(
     listingDescription: ensureAiDisclosureInCopy(data.listingDescription),
     seoTags: data.seoTags.map((t) => t.trim()),
     suggestedPrice: guardrailedPrice(data.suggestedPrice),
-    productStructure: structure,
+    podDetails,
     complianceNotes,
     aiDisclosure,
     coverImagePrompt: data.coverImagePrompt.trim(),
@@ -109,7 +110,7 @@ async function fetchLlmForgeOutput(
 
 /**
  * Forge generation: LLM when configured, otherwise deterministic fallback.
- * Output is Zod-validated; malformed productStructure is rejected (with retry via completeJson).
+ * Output is Zod-validated; malformed podDetails is rejected (with retry via completeJson).
  */
 export async function runForgeGeneration(
   input: ForgeGenerationInput,

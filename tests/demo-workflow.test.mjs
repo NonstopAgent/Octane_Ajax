@@ -155,14 +155,14 @@ describe("demo workflow wiring", () => {
     assert.match(display, /filterComplianceFlags/);
   });
 
-  it("simulator queues PDF async without bypassing review gate", () => {
+  it("simulator queues POD fulfillment async without bypassing review gate", () => {
     const simulator = readFileSync(
       join(ROOT, "src/lib/ajax/simulator.ts"),
       "utf8",
     );
     assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
-    assert.match(simulator, /pdf_queued/);
-    assert.match(simulator, /scheduleGenerationPdfAfterForge/);
+    assert.match(simulator, /pod_fulfillment_queued/);
+    assert.match(simulator, /schedulePodFulfillmentAfterForge/);
     assert.match(simulator, /generationStatus:\s*"queued"/);
     assert.match(simulator, /cycle_paused/);
     assert.match(simulator, /pending_review/);
@@ -203,7 +203,7 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(panel, /createServiceClient/);
   });
 
-  it("approve review enforces PDF and sellability guards", () => {
+  it("approve review enforces POD and sellability guards", () => {
     const service = readFileSync(
       join(ROOT, "src/lib/review/service.ts"),
       "utf8",
@@ -212,7 +212,7 @@ describe("demo workflow wiring", () => {
       join(ROOT, "src/lib/review/approval-guards.ts"),
       "utf8",
     );
-    assert.match(service, /assertPdfReadyForApproval/);
+    assert.match(service, /assertPodReadyForApproval/);
     assert.match(service, /assertSellabilityForApproval/);
     assert.match(guards, /isDemoReviewBypass/);
     assert.match(guards, /raw\.simulated === true/);

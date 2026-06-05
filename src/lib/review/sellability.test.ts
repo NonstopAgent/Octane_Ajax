@@ -4,7 +4,7 @@ import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import { AI_DISCLOSURE_FLAG_CODE } from "@/lib/review/display";
 import { evaluateSellabilityChecklist } from "@/lib/review/sellability";
-import type { ComplianceFlag, ProductStructure } from "@/lib/product/domain";
+import type { ComplianceFlag, PodDetails } from "@/lib/product/domain";
 
 const sampleIdea: NovaEvaluatedIdea = {
   niche: "meal prep",
@@ -41,92 +41,66 @@ function check(
 describe("sellability checklist", () => {
   it("passes all checks for a complete forge fallback generation", () => {
     const forge = buildForgeFallbackResult(sampleIdea);
-    const structure = forge.productStructure;
+    const podDetails = forge.podDetails;
 
     const checklist = evaluateSellabilityChecklist({
-      structure,
+      podDetails,
+      fulfillment: { printifyProductId: "pfy-prod-abc123" },
       aiDisclosure: forge.aiDisclosure,
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "ready",
-      pdfStoragePath: "user/gen.pdf",
     });
 
     assert.equal(checklist.allPassed, true);
     assert.equal(checklist.passedCount, checklist.totalCount);
   });
 
-  it("fails thin structures and missing page roles", () => {
-    const thin: ProductStructure = {
-      format: "letter",
-      pageCount: 2,
-      pages: [
-        {
-          pageNumber: 1,
-          title: "Only cover",
-          purpose: "Cover",
-          sections: [{ id: "a", heading: "Cover" }],
-          metadata: { pageKind: "cover" },
-        },
-        {
-          pageNumber: 2,
-          title: "Only worksheet",
-          purpose: "Work",
-          sections: [{ id: "b", heading: "Sheet" }],
-          metadata: { pageKind: "worksheet" },
-        },
-      ],
+  it("fails incomplete podDetails", () => {
+    const incomplete: PodDetails = {
+      blueprintId: 0,
+      printProviderId: 0,
+      variantIds: [],
+      artworkPrompt: "short",
+      aestheticStyle: "",
     };
 
     const checklist = evaluateSellabilityChecklist({
-      structure: thin,
+      podDetails: incomplete,
+      fulfillment: { printifyProductId: "pfy-prod-abc123" },
       aiDisclosure: "Disclosed",
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "ready",
-      pdfStoragePath: "path.pdf",
     });
 
-    assert.equal(check(checklist, "min_six_pages")?.passed, false);
-    assert.equal(check(checklist, "worksheet_pages")?.passed, false);
-    assert.equal(check(checklist, "instructions_page")?.passed, false);
-    assert.equal(check(checklist, "summary_page")?.passed, false);
+    assert.equal(check(checklist, "pod_blueprint")?.passed, false);
+    assert.equal(check(checklist, "pod_artwork_prompt")?.passed, false);
+    assert.equal(check(checklist, "pod_aesthetic_style")?.passed, false);
   });
 
-  it("treats intro metadata as instructions page", () => {
-    const structure: ProductStructure = {
-      format: "letter",
-      pageCount: 6,
-      pages: Array.from({ length: 6 }, (_, i) => ({
-        pageNumber: i + 1,
-        title: `Page ${i + 1}`,
-        purpose: "Purpose",
-        sections: [{ id: `s${i}`, heading: "Section" }],
-        metadata: {
-          pageKind:
-            i === 0
-              ? "cover"
-              : i === 1
-                ? "intro"
-                : i === 5
-                  ? "summary"
-                  : "worksheet",
-        },
-      })),
+  it("passes blueprint checks for valid podDetails", () => {
+    const podDetails: PodDetails = {
+      blueprintId: 68,
+      printProviderId: 1,
+      variantIds: [33719],
+      artworkPrompt:
+        "Original minimalist artwork for meal prep niche, no logos or characters",
+      aestheticStyle: "minimalist-line-art",
     };
 
     const checklist = evaluateSellabilityChecklist({
-      structure,
+      podDetails,
+      fulfillment: { printifyProductId: "pfy-prod-ok" },
       aiDisclosure: "AI used",
       complianceWarnings: [],
       complianceFlags: [],
       generationStatus: "ready",
-      pdfStoragePath: "ok.pdf",
     });
 
-    assert.equal(check(checklist, "instructions_page")?.passed, true);
-    assert.equal(check(checklist, "min_six_pages")?.passed, true);
-    assert.equal(check(checklist, "worksheet_pages")?.passed, true);
+    assert.equal(check(checklist, "pod_blueprint")?.passed, true);
+    assert.equal(check(checklist, "pod_artwork_prompt")?.passed, true);
+    assert.equal(check(checklist, "pod_aesthetic_style")?.passed, true);
   });
 
   it("ignores ai_disclosure flag for compliance check", () => {
@@ -137,22 +111,22 @@ describe("sellability checklist", () => {
     };
 
     const clear = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
+      fulfillment: null,
       aiDisclosure: "Present",
       complianceWarnings: [],
       complianceFlags: [aiFlag],
       generationStatus: "pending",
-      pdfStoragePath: null,
     });
     assert.equal(check(clear, "no_compliance_warnings")?.passed, true);
 
     const blocked = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
+      fulfillment: null,
       aiDisclosure: "Present",
       complianceWarnings: ["Verify medical claims."],
       complianceFlags: [aiFlag],
       generationStatus: "pending",
-      pdfStoragePath: null,
     });
     assert.equal(check(blocked, "no_compliance_warnings")?.passed, false);
   });
@@ -166,19 +140,19 @@ describe("sellability checklist", () => {
     };
 
     const clear = evaluateSellabilityChecklist({
-      structure: null,
+      podDetails: null,
+      fulfillment: null,
       aiDisclosure: "Present",
       complianceWarnings: [],
       complianceFlags: [reviewNoteFlag],
       generationStatus: "pending",
-      pdfStoragePath: null,
     });
     assert.equal(check(clear, "no_compliance_warnings")?.passed, true);
   });
 
-  it("requires ready status and storage path for PDF ready", () => {
+  it("requires ready status and printify product id for fulfillment ready", () => {
     const base = {
-      structure: null,
+      podDetails: null,
       aiDisclosure: null,
       complianceWarnings: [] as string[],
       complianceFlags: [] as ComplianceFlag[],
@@ -188,10 +162,10 @@ describe("sellability checklist", () => {
       check(
         evaluateSellabilityChecklist({
           ...base,
+          fulfillment: null,
           generationStatus: "ready",
-          pdfStoragePath: null,
         }),
-        "pdf_ready",
+        "fulfillment_ready",
       )?.passed,
       false,
     );
@@ -200,10 +174,10 @@ describe("sellability checklist", () => {
       check(
         evaluateSellabilityChecklist({
           ...base,
+          fulfillment: { printifyProductId: "pfy-prod-abc" },
           generationStatus: "ready",
-          pdfStoragePath: "user/file.pdf",
         }),
-        "pdf_ready",
+        "fulfillment_ready",
       )?.passed,
       true,
     );
@@ -212,13 +186,13 @@ describe("sellability checklist", () => {
       check(
         evaluateSellabilityChecklist({
           ...base,
+          fulfillment: null,
           generationStatus: "ready",
-          pdfStoragePath: "user/file.pdf",
           mockMode: true,
         }),
-        "pdf_ready",
+        "fulfillment_ready",
       )?.passed,
-      false,
+      true,
     );
   });
 });

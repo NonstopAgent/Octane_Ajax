@@ -26,7 +26,13 @@ const generation: ProductGeneration = {
   productListingId: "listing-1",
   productIdeaId: "idea-1",
   generationStatus: "ready",
-  structure: { format: "planner", pageCount: 1, pages: [] },
+  structure: {
+    blueprintId: 68,
+    printProviderId: 1,
+    variantIds: [33719],
+    artworkPrompt: "Test artwork prompt for POD product listing",
+    aestheticStyle: "minimalist-line-art",
+  },
   complianceFlags: [],
   complianceWarnings: [],
   llm: {

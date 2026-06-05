@@ -17,7 +17,7 @@ export class ApprovalBlockedError extends Error {
   }
 }
 
-/** Demo / simulated pipeline — PDF and sellability gates do not block approval. */
+/** Demo / simulated pipeline — fulfillment and sellability gates do not block approval. */
 export function isDemoReviewBypass(input: {
   ideaRawPayload?: Record<string, unknown> | null;
 }): boolean {
@@ -28,22 +28,38 @@ export function isDemoReviewBypass(input: {
   return false;
 }
 
+export function assertFulfillmentReadyForApproval(input: {
+  isDemo: boolean;
+  generationStatus: GenerationStatus | null | undefined;
+  printifyProductId: string | null | undefined;
+}): void {
+  if (input.isDemo) return;
+
+  const status = input.generationStatus;
+  const productId = input.printifyProductId?.trim();
+
+  if (status !== "ready" || !productId) {
+    throw new ApprovalBlockedError(
+      "Printify product draft is not ready yet — wait a moment and try again.",
+      403,
+    );
+  }
+}
+
+/** Alias for POD pipeline approval gate. */
+export const assertPodReadyForApproval = assertFulfillmentReadyForApproval;
+
+/** @deprecated Use assertFulfillmentReadyForApproval for POD pipeline. */
 export function assertPdfReadyForApproval(input: {
   isDemo: boolean;
   generationStatus: GenerationStatus | null | undefined;
   pdfStoragePath: string | null | undefined;
 }): void {
-  if (input.isDemo) return;
-
-  const status = input.generationStatus;
-  const path = input.pdfStoragePath?.trim();
-
-  if (status !== "ready" || !path) {
-    throw new ApprovalBlockedError(
-      "PDF is not ready yet — wait a moment and try again, or regenerate.",
-      403,
-    );
-  }
+  assertFulfillmentReadyForApproval({
+    isDemo: input.isDemo,
+    generationStatus: input.generationStatus,
+    printifyProductId: input.pdfStoragePath,
+  });
 }
 
 export function assertSellabilityForApproval(
@@ -70,18 +86,19 @@ export function buildSellabilityInputFromGeneration(
   ideaRawPayload: Record<string, unknown> | null | undefined,
 ): SellabilityInput {
   const isDemo = isDemoReviewBypass({ ideaRawPayload });
-  const pdfMockMode = isDemo && !generation?.pdf.storagePath?.trim();
+  const fulfillmentMockMode =
+    isDemo && !generation?.fulfillment?.printifyProductId?.trim();
 
   return {
-    structure: generation?.structure ?? null,
+    podDetails: generation?.podDetails ?? null,
+    fulfillment: generation?.fulfillment ?? null,
     aiDisclosure:
-      typeof generation?.structure.metadata?.aiDisclosure === "string"
-        ? generation.structure.metadata.aiDisclosure
+      typeof generation?.podDetails.metadata?.aiDisclosure === "string"
+        ? generation.podDetails.metadata.aiDisclosure
         : null,
     complianceWarnings: generation?.complianceWarnings ?? [],
     complianceFlags: generation?.complianceFlags ?? [],
     generationStatus: generation?.generationStatus ?? "pending",
-    pdfStoragePath: generation?.pdf.storagePath,
-    mockMode: pdfMockMode,
+    mockMode: fulfillmentMockMode,
   };
 }

@@ -66,6 +66,26 @@ export interface ProductStructure {
   metadata?: Record<string, unknown>;
 }
 
+/** Print-on-demand blueprint stored in `product_generations.structure` (Phase 1 pivot). */
+export interface PodDetails {
+  blueprintId: number;
+  printProviderId: number;
+  variantIds: number[];
+  artworkPrompt: string;
+  aestheticStyle: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Fulfillment metadata persisted after Printify product creation. */
+export interface PodFulfillmentSnapshot {
+  artworkUrl?: string | null;
+  printifyUploadId?: string | null;
+  printifyProductId?: string | null;
+  printifyStatus?: "draft" | "published" | null;
+  storefrontUrl?: string | null;
+  adapterMode?: "demo" | "live" | null;
+}
+
 export type ComplianceSeverity = "info" | "warning" | "block";
 
 export interface ComplianceFlag {
@@ -98,11 +118,13 @@ export interface ProductGeneration {
   userId: string;
   productIdeaId: string;
   productListingId: string | null;
-  structure: ProductStructure;
+  /** Stored in DB `structure` column — POD blueprint from Forge. */
+  podDetails: PodDetails;
   llm: LlmRunMetadata;
   generationStatus: GenerationStatus;
   pdf: PdfAssetPlaceholders;
   mockupStoragePath: string | null;
+  fulfillment?: PodFulfillmentSnapshot | null;
   complianceFlags: ComplianceFlag[];
   complianceWarnings: string[];
   createdAt: string;

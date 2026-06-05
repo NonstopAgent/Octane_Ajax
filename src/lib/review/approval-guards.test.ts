@@ -4,7 +4,7 @@ import { buildForgeFallbackResult } from "@/lib/ajax/forge/fallback";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   ApprovalBlockedError,
-  assertPdfReadyForApproval,
+  assertPodReadyForApproval,
   assertSellabilityForApproval,
   isDemoReviewBypass,
 } from "@/lib/review/approval-guards";
@@ -42,38 +42,41 @@ describe("review approval guards", () => {
     assert.equal(isDemoReviewBypass({ ideaRawPayload: null }), false);
   });
 
-  it("blocks approval when PDF is not ready", () => {
+  it("blocks approval when Printify product is not ready", () => {
     assert.throws(
       () =>
-        assertPdfReadyForApproval({
+        assertPodReadyForApproval({
           isDemo: false,
           generationStatus: "queued",
-          pdfStoragePath: null,
+          printifyProductId: null,
         }),
       (err: unknown) => {
         assert.ok(err instanceof ApprovalBlockedError);
-        assert.match((err as ApprovalBlockedError).message, /PDF is not ready/i);
+        assert.match(
+          (err as ApprovalBlockedError).message,
+          /Printify product draft is not ready/i,
+        );
         return true;
       },
     );
   });
 
-  it("allows approval when PDF is ready with storage path", () => {
+  it("allows approval when Printify product is ready", () => {
     assert.doesNotThrow(() =>
-      assertPdfReadyForApproval({
+      assertPodReadyForApproval({
         isDemo: false,
         generationStatus: "ready",
-        pdfStoragePath: "user/gen.pdf",
+        printifyProductId: "pfy-prod-abc",
       }),
     );
   });
 
-  it("skips PDF guard in demo bypass mode", () => {
+  it("skips POD guard in demo bypass mode", () => {
     assert.doesNotThrow(() =>
-      assertPdfReadyForApproval({
+      assertPodReadyForApproval({
         isDemo: true,
         generationStatus: "queued",
-        pdfStoragePath: null,
+        printifyProductId: null,
       }),
     );
   });
@@ -83,12 +86,12 @@ describe("review approval guards", () => {
       () =>
         assertSellabilityForApproval(
           {
-            structure: null,
+            podDetails: null,
+            fulfillment: null,
             aiDisclosure: null,
             complianceWarnings: [],
             complianceFlags: [],
             generationStatus: "pending",
-            pdfStoragePath: null,
           },
           false,
         ),
@@ -108,12 +111,12 @@ describe("review approval guards", () => {
     assert.doesNotThrow(() =>
       assertSellabilityForApproval(
         {
-          structure: forge.productStructure,
+          podDetails: forge.podDetails,
+          fulfillment: { printifyProductId: "pfy-prod-abc" },
           aiDisclosure: forge.aiDisclosure,
           complianceWarnings: [],
           complianceFlags: [],
           generationStatus: "ready",
-          pdfStoragePath: "user/gen.pdf",
         },
         false,
       ),
@@ -124,12 +127,12 @@ describe("review approval guards", () => {
     assert.doesNotThrow(() =>
       assertSellabilityForApproval(
         {
-          structure: null,
+          podDetails: null,
+          fulfillment: null,
           aiDisclosure: null,
           complianceWarnings: ["blocked"],
           complianceFlags: [],
           generationStatus: "pending",
-          pdfStoragePath: null,
         },
         true,
       ),
