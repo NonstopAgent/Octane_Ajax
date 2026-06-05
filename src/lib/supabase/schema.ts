@@ -87,7 +87,18 @@ export const FACTORY_ROOMS = {
   REVIEW_GATE: "review_gate",
   MEDIA_STUDIO: "media_studio",
   STOREFRONT: "storefront",
+  PERSONALIZATION_BAY: "personalization_bay",
 } as const;
+
+export const ORDER_QUEUE_STATUSES = [
+  "pending_personalization",
+  "processing_artwork",
+  "fulfillment_ready",
+  "failed",
+] as const;
+
+export type OrderQueueStatusDb =
+  (typeof ORDER_QUEUE_STATUSES)[number];
 
 export type FactoryRoom = (typeof FACTORY_ROOMS)[keyof typeof FACTORY_ROOMS];
 
@@ -102,4 +113,5 @@ export const TABLES = {
   EVENTS: "factory_events",
   CONTENT_JOBS: "content_jobs",
   ETSY_CREDENTIALS: "etsy_credentials",
+  ORDER_QUEUE: "order_queue",
 } as const;

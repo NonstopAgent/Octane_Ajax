@@ -14,7 +14,8 @@ export type RoomSlug =
   | "design_press"
   | "review_gate"
   | "media_studio"
-  | "storefront";
+  | "storefront"
+  | "personalization_bay";
 
 export interface AjaxAgent {
   id: string;

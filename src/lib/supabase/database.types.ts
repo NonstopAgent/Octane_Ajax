@@ -569,6 +569,72 @@ export interface Database {
           },
         ];
       };
+      order_queue: {
+        Row: {
+          id: string;
+          user_id: string;
+          etsy_order_id: string;
+          listing_id: string | null;
+          customer_photo_url: string;
+          style_prompt: string;
+          status: string;
+          printify_product_id: string | null;
+          printify_upload_id: string | null;
+          artwork_url: string | null;
+          error_message: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          etsy_order_id: string;
+          listing_id?: string | null;
+          customer_photo_url: string;
+          style_prompt: string;
+          status?: string;
+          printify_product_id?: string | null;
+          printify_upload_id?: string | null;
+          artwork_url?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          etsy_order_id?: string;
+          listing_id?: string | null;
+          customer_photo_url?: string;
+          style_prompt?: string;
+          status?: string;
+          printify_product_id?: string | null;
+          printify_upload_id?: string | null;
+          artwork_url?: string | null;
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_queue_listing_id_fkey";
+            columns: ["listing_id"];
+            isOneToOne: false;
+            referencedRelation: "product_listings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_queue_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -595,3 +661,4 @@ export type ReviewQueueItem = Tables<"review_queue">;
 export type AgentFeedback = Tables<"agent_feedback">;
 export type FactoryEvent = Tables<"factory_events">;
 export type ContentJob = Tables<"content_jobs">;
+export type OrderQueue = Tables<"order_queue">;

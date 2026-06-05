@@ -7,6 +7,7 @@ export const ROOM_SLUGS = {
   REVIEW_GATE: "review_gate",
   MEDIA_STUDIO: "media_studio",
   STOREFRONT: "storefront",
+  PERSONALIZATION_BAY: "personalization_bay",
 } as const;
 
 import type { RoomSlug } from "@/lib/ajax/types";
@@ -92,6 +93,7 @@ export const ROOM_DISPLAY_NAMES: Record<RoomSlug, string> = {
   review_gate: "Review Gate",
   media_studio: "Media Studio",
   storefront: "Storefront",
+  personalization_bay: "Personalization Bay",
 };
 
 export function getAgentDisplayName(slug: AgentSlug | string): string {
