@@ -3,9 +3,60 @@ import {
   mapEventFromDb,
   mapTaskFromDb,
 } from "@/lib/ajax/mappers";
+import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
+import type { FactoryEvent } from "@/lib/ajax/types";
 import type { FactorySnapshot } from "@/lib/factory/types";
+import type { OrderQueue } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
+
+function mapOrderQueueRow(row: OrderQueue): OrderQueueRow {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    etsy_order_id: row.etsy_order_id,
+    listing_id: row.listing_id,
+    customer_photo_url: row.customer_photo_url,
+    style_prompt: row.style_prompt,
+    status: row.status as OrderQueueRow["status"],
+    printify_product_id: row.printify_product_id,
+    printify_upload_id: row.printify_upload_id,
+    artwork_url: row.artwork_url,
+    error_message: row.error_message,
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+/** Initial payload for the agent sweatshop floor (events + order queue). */
+export async function fetchSweatshopSnapshot(
+  supabase: Supabase,
+  userId: string,
+): Promise<{ events: FactoryEvent[]; orders: OrderQueueRow[] }> {
+  const [eventsResult, ordersResult] = await Promise.all([
+    supabase
+      .from(TABLES.EVENTS)
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(60),
+    supabase
+      .from(TABLES.ORDER_QUEUE)
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(16),
+  ]);
+
+  if (eventsResult.error) throw eventsResult.error;
+  if (ordersResult.error) throw ordersResult.error;
+
+  return {
+    events: (eventsResult.data ?? []).map(mapEventFromDb),
+    orders: (ordersResult.data ?? []).map(mapOrderQueueRow),
+  };
+}
 
 /** Loads agents, recent events, active tasks, and metric counts for the factory UI. */
 export async function fetchFactorySnapshot(

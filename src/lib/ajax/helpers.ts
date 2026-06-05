@@ -19,7 +19,30 @@ const EVENT_TYPE_MESSAGES: Record<string, (event: FactoryEvent) => string> = {
   content_scheduled: () => "Pixel scheduled marketing content.",
   cycle_started: () => "Ajax cycle started. Factory online.",
   cycle_completed: () => "Ajax cycle completed.",
+  order_webhook_received: (e) =>
+    `Etsy order ${orderIdLabel(e)} ingested into personalization queue.`,
+  order_personalization_started: (e) =>
+    `Portrait generation started for order ${orderIdLabel(e)}.`,
+  order_fulfillment_ready: (e) =>
+    `Artwork ready — order ${orderIdLabel(e)} awaiting Printify submission.`,
+  order_personalization_failed: (e) =>
+    `Personalization failed for order ${orderIdLabel(e)}.`,
+  order_production_started: (e) =>
+    `Printify production run started for order ${orderIdLabel(e)}.`,
+  order_production_submitted: (e) =>
+    `Order ${orderIdLabel(e)} submitted to Printify production.`,
+  order_production_failed: (e) =>
+    `Printify submission failed for order ${orderIdLabel(e)}.`,
 };
+
+function orderIdLabel(event: FactoryEvent): string {
+  const meta = event.metadata ?? {};
+  const id =
+    (typeof meta.etsy_order_id === "string" && meta.etsy_order_id) ||
+    (typeof meta.order_id === "string" && meta.order_id) ||
+    null;
+  return id ? `#${id}` : "—";
+}
 
 function agentLabel(slug: AgentSlug | string | null | undefined): string {
   if (!slug) return "An agent";

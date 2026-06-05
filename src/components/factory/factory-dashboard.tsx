@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import { AgentStatusPanel } from "@/components/factory/agent-status-panel";
 import { ControlPanel } from "@/components/factory/control-panel";
-import { EventFeed } from "@/components/factory/event-feed";
 import { FactoryMap } from "@/components/factory/factory-map";
 import { LiveStatusBar } from "@/components/factory/live-status-bar";
 import { MetricsStrip } from "@/components/factory/metrics-strip";
@@ -287,7 +286,32 @@ export function FactoryDashboard({
         />
       </div>
 
-      <EventFeed events={snapshot.events} />
+      <section className="machine-log flex max-h-[28rem] flex-col">
+        <header className="machine-log-header shrink-0">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+            Machine log
+          </h2>
+          <p className="text-[10px] text-[var(--text-muted)]">
+            Moved to{" "}
+            <Link href="/factory" className="text-[var(--accent-blue)] hover:underline">
+              Factory sweatshop
+            </Link>{" "}
+            for live order ticker.
+          </p>
+        </header>
+        <ul className="machine-log-body min-h-0 flex-1 space-y-1">
+          {snapshot.events.length === 0 && (
+            <li className="machine-log-line text-center text-[var(--text-muted)]">
+              [idle] Awaiting factory events.
+            </li>
+          )}
+          {snapshot.events.slice(0, 8).map((event) => (
+            <li key={event.id} className="machine-log-line text-xs">
+              {event.eventType.replace(/_/g, ".")}
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

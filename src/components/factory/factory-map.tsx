@@ -1,6 +1,6 @@
 "use client";
 
-import { RoomStation } from "@/components/factory/room-station";
+import { PipelineRoomStation } from "@/components/factory/pipeline-room-station";
 import { PIPELINE_STAGES, ROOM_SLUGS } from "@/lib/ajax/constants";
 import type { AjaxAgent } from "@/lib/ajax/types";
 import type { RoomSlug } from "@/lib/ajax/types";
@@ -41,7 +41,7 @@ export function FactoryMap({ agents, pendingReviews }: FactoryMapProps) {
             isReview && (pendingReviews > 0 || forgeAtReview);
 
           return (
-            <RoomStation
+            <PipelineRoomStation
               key={stage.id}
               stageId={stage.id}
               roomSlug={stage.roomSlug}

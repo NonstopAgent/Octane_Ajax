@@ -1,5 +1,5 @@
-import { FactoryDashboard } from "@/components/factory/factory-dashboard";
-import { fetchFactorySnapshot } from "@/lib/factory/queries";
+import { FactorySweatshop } from "@/components/factory/factory-sweatshop";
+import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
 import { createClient } from "@/lib/supabase/server";
 
 function configReady() {
@@ -12,7 +12,12 @@ function configReady() {
 export default async function FactoryPage() {
   const ready = configReady();
   let isAuthenticated = false;
-  let initialSnapshot = null;
+  let initialEvents: Awaited<
+    ReturnType<typeof fetchSweatshopSnapshot>
+  >["events"] = [];
+  let initialOrders: Awaited<
+    ReturnType<typeof fetchSweatshopSnapshot>
+  >["orders"] = [];
 
   if (ready) {
     try {
@@ -23,19 +28,21 @@ export default async function FactoryPage() {
 
       if (user) {
         isAuthenticated = true;
-        const snapshot = await fetchFactorySnapshot(supabase, user.id);
-        initialSnapshot = snapshot;
+        const snapshot = await fetchSweatshopSnapshot(supabase, user.id);
+        initialEvents = snapshot.events;
+        initialOrders = snapshot.orders;
       }
     } catch (err) {
-      console.error("[factory page] failed to load snapshot", err);
+      console.error("[factory page] failed to load sweatshop snapshot", err);
     }
   }
 
   return (
-    <FactoryDashboard
-      initialSnapshot={initialSnapshot}
+    <FactorySweatshop
       isAuthenticated={isAuthenticated}
       configReady={ready}
+      initialEvents={initialEvents}
+      initialOrders={initialOrders}
     />
   );
 }
