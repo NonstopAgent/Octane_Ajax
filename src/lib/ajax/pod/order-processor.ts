@@ -7,14 +7,20 @@ import {
   runPersonalizationAgent,
 } from "@/lib/ajax/pod/personalization-agent";
 import {
+  OrderFulfillmentError,
+  resolveListingPodContext,
+  runOrderProductionFulfillment,
+} from "@/lib/ajax/pod/order-fulfillment";
+import {
   type EtsyOrderWebhookPayload,
   type OrderQueueRow,
   type OrderQueueStatus,
   ORDER_ROOM_SLUG,
   assertOrderStatusTransition,
+  demoShippingForOrder,
   extractPersonalizationFromWebhook,
+  extractShippingFromWebhook,
   isValidCustomerPhotoUrl,
-  isUuid,
   sanitizeStylePrompt,
 } from "@/lib/ajax/pod/order-types";
 import type { Json } from "@/lib/supabase/database.types";
@@ -99,6 +105,31 @@ export async function resolveOperatorUserId(
   return operator.id;
 }
 
+async function resolveInternalListingId(
+  supabase: Supabase,
+  userId: string,
+  etsyListingId: string | null,
+): Promise<string | null> {
+  if (!etsyListingId?.trim()) return null;
+
+  const listingId = etsyListingId.trim();
+  const { data, error } = await supabase
+    .from(TABLES.LISTINGS)
+    .select("id")
+    .eq("user_id", userId)
+    .or(
+      `gumroad_product_id.eq.${listingId},external_listing_id.eq.${listingId}`,
+    )
+    .maybeSingle();
+
+  if (error) {
+    console.error("[order-processor] listing lookup failed", error);
+    return null;
+  }
+
+  return data?.id ?? null;
+}
+
 function mapOrderRow(row: Record<string, unknown>): OrderQueueRow {
   return {
     id: String(row.id),
@@ -153,10 +184,19 @@ export async function insertOrderFromWebhook(
     throw new OrderProcessorError(sanitized.reason, 400);
   }
 
-  const internalListingId =
-    extracted.listingId && isUuid(extracted.listingId)
-      ? extracted.listingId
-      : null;
+  const internalListingId = await resolveInternalListingId(
+    supabase,
+    userId,
+    extracted.listingId,
+  );
+
+  const shipping =
+    extractShippingFromWebhook(payload) ??
+    demoShippingForOrder(extracted.etsyOrderId);
+
+  const listingContext = internalListingId
+    ? await resolveListingPodContext(supabase, userId, extracted.listingId)
+    : null;
 
   const insert: OrderQueueInsert = {
     user_id: userId,
@@ -170,6 +210,9 @@ export async function insertOrderFromWebhook(
       stylePreset: sanitized.preset,
       webhookSource: "etsy",
       etsyListingId: extracted.listingId,
+      quantity: extracted.quantity,
+      etsyShipping: shipping,
+      podDetails: listingContext?.podDetails ?? null,
     } as Json,
   };
 
@@ -305,8 +348,12 @@ export async function processOrderQueueEntry(
 
   const order = mapOrderRow(row as Record<string, unknown>);
 
-  if (order.status === "fulfillment_ready") {
+  if (order.status === "production_submitted") {
     return { ok: true, order, alreadyReady: true };
+  }
+
+  if (order.status === "fulfillment_ready") {
+    return submitProductionForOrder(supabase, userId, orderId, order);
   }
 
   if (order.status === "failed") {
@@ -362,7 +409,7 @@ export async function processOrderQueueEntry(
       },
     });
 
-    return { ok: true, order: fulfilled };
+    return submitProductionForOrder(supabase, userId, orderId, fulfilled);
   } catch (err) {
     const message =
       err instanceof PersonalizationAgentError
@@ -401,6 +448,123 @@ export async function processOrderQueueEntry(
       ok: false,
       error: message,
       step: err instanceof PersonalizationAgentError ? err.step : undefined,
+      order: failed,
+    };
+  }
+}
+
+async function submitProductionForOrder(
+  supabase: Supabase,
+  userId: string,
+  orderId: string,
+  order: OrderQueueRow,
+): Promise<OrderProcessResult> {
+  const listingContext = order.listing_id
+    ? await resolveListingPodContext(
+        supabase,
+        userId,
+        typeof order.metadata.etsyListingId === "string"
+          ? order.metadata.etsyListingId
+          : null,
+      )
+    : typeof order.metadata.etsyListingId === "string"
+      ? await resolveListingPodContext(
+          supabase,
+          userId,
+          order.metadata.etsyListingId,
+        )
+      : null;
+
+  await insertFactoryEvent(supabase, userId, {
+    event_type: "order_production_started",
+    message: `Submitting Printify production for Etsy order ${order.etsy_order_id}.`,
+    metadata: { orderId, etsyOrderId: order.etsy_order_id },
+  });
+
+  try {
+    const production = await runOrderProductionFulfillment(
+      supabase,
+      userId,
+      {
+        order,
+        listingContext,
+        quantity:
+          typeof order.metadata.quantity === "number"
+            ? order.metadata.quantity
+            : 1,
+      },
+    );
+
+    const submitted = await updateOrderStatus(
+      supabase,
+      userId,
+      orderId,
+      "fulfillment_ready",
+      {
+        status: "production_submitted",
+        printify_product_id: production.printifyProductId,
+        metadata: {
+          printifyOrderId: production.printifyOrderId,
+          productionSubmittedAt: new Date().toISOString(),
+          productionAdapterModes: production.adapterModes,
+          productionVariantId: production.variantId,
+          productionQuantity: production.quantity,
+        },
+      },
+    );
+
+    await insertFactoryEvent(supabase, userId, {
+      event_type: "order_production_submitted",
+      message: `Printify production submitted for Etsy order ${order.etsy_order_id}.`,
+      metadata: {
+        orderId,
+        etsyOrderId: order.etsy_order_id,
+        printifyProductId: production.printifyProductId,
+        printifyOrderId: production.printifyOrderId,
+        adapterModes: production.adapterModes,
+      },
+    });
+
+    return { ok: true, order: submitted };
+  } catch (err) {
+    const message =
+      err instanceof OrderFulfillmentError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : "Printify production submission failed.";
+
+    const failed = await updateOrderStatus(
+      supabase,
+      userId,
+      orderId,
+      "fulfillment_ready",
+      {
+        status: "failed",
+        error_message: message,
+        metadata: {
+          failedAt: new Date().toISOString(),
+          step:
+            err instanceof OrderFulfillmentError ? err.step : "production",
+        },
+      },
+    );
+
+    await insertFactoryEvent(supabase, userId, {
+      event_type: "order_production_failed",
+      message: `Printify production failed for Etsy order ${order.etsy_order_id} — manual review required.`,
+      metadata: {
+        orderId,
+        etsyOrderId: order.etsy_order_id,
+        error: message,
+        step: err instanceof OrderFulfillmentError ? err.step : "production",
+      },
+    });
+
+    return {
+      ok: false,
+      error: message,
+      step: err instanceof OrderFulfillmentError ? err.step : "production",
       order: failed,
     };
   }

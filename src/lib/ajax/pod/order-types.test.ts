@@ -6,7 +6,9 @@ import {
   blockInfringingTerms,
   canTransitionOrderStatus,
   extractPersonalizationFromWebhook,
+  extractShippingFromWebhook,
   isValidCustomerPhotoUrl,
+  normalizeEtsyWebhookPayload,
   sanitizeStylePrompt,
 } from "@/lib/ajax/pod/order-types";
 
@@ -60,16 +62,17 @@ describe("order-types IP guardrails", () => {
 });
 
 describe("order-types state machine", () => {
-  it("defines four order queue statuses", () => {
+  it("defines five order queue statuses", () => {
     assert.deepEqual(ORDER_QUEUE_STATUSES, [
       "pending_personalization",
       "processing_artwork",
       "fulfillment_ready",
+      "production_submitted",
       "failed",
     ]);
   });
 
-  it("allows pending → processing → fulfillment_ready", () => {
+  it("allows pending → processing → fulfillment_ready → production_submitted", () => {
     assert.equal(
       canTransitionOrderStatus("pending_personalization", "processing_artwork"),
       true,
@@ -78,18 +81,24 @@ describe("order-types state machine", () => {
       canTransitionOrderStatus("processing_artwork", "fulfillment_ready"),
       true,
     );
+    assert.equal(
+      canTransitionOrderStatus("fulfillment_ready", "production_submitted"),
+      true,
+    );
     assert.doesNotThrow(() => {
       assertOrderStatusTransition("pending_personalization", "processing_artwork");
       assertOrderStatusTransition("processing_artwork", "fulfillment_ready");
+      assertOrderStatusTransition("fulfillment_ready", "production_submitted");
     });
   });
 
-  it("allows failure from pending or processing", () => {
+  it("allows failure from pending, processing, or fulfillment_ready", () => {
     assert.equal(
       canTransitionOrderStatus("pending_personalization", "failed"),
       true,
     );
     assert.equal(canTransitionOrderStatus("processing_artwork", "failed"), true);
+    assert.equal(canTransitionOrderStatus("fulfillment_ready", "failed"), true);
   });
 
   it("blocks invalid transitions", () => {
@@ -102,7 +111,7 @@ describe("order-types state machine", () => {
       false,
     );
     assert.throws(() => {
-      assertOrderStatusTransition("fulfillment_ready", "failed");
+      assertOrderStatusTransition("production_submitted", "failed");
     }, /Invalid order status transition/);
   });
 });
@@ -147,5 +156,81 @@ describe("order-types webhook extraction", () => {
   it("accepts demo photo URLs for scaffold mode", () => {
     assert.equal(isValidCustomerPhotoUrl("demo://octane-ajax/photos/test.png"), true);
     assert.equal(isValidCustomerPhotoUrl("not-a-url"), false);
+  });
+
+  it("extracts personalization from live Etsy receipt transaction variations", () => {
+    const extracted = extractPersonalizationFromWebhook({
+      receipt_id: 2847392011,
+      buyer_email: "buyer@example.com",
+      name: "Jane Doe",
+      first_line: "42 Oak Ave",
+      city: "Portland",
+      state: "OR",
+      zip: "97201",
+      country_iso: "US",
+      transactions: [
+        {
+          listing_id: 1884455667,
+          quantity: 2,
+          variations: [
+            {
+              formatted_name: "Customer Photo Upload",
+              formatted_value: "https://cdn.etsy.com/uploads/photo.jpg",
+            },
+            {
+              formatted_name: "Choose Art Style",
+              formatted_value: "renaissance",
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(extracted.etsyOrderId, "2847392011");
+    assert.equal(extracted.listingId, "1884455667");
+    assert.equal(extracted.quantity, 2);
+    assert.equal(
+      extracted.customerPhotoUrl,
+      "https://cdn.etsy.com/uploads/photo.jpg",
+    );
+    assert.equal(extracted.rawStyle, "renaissance");
+  });
+
+  it("unwraps nested Etsy event envelopes", () => {
+    const normalized = normalizeEtsyWebhookPayload({
+      data: {
+        receipt_id: 1001,
+        personalization: {
+          photo_url: "demo://nested.png",
+          style: "watercolor",
+        },
+      },
+    });
+
+    assert.equal(normalized.receipt_id, 1001);
+    const extracted = extractPersonalizationFromWebhook(normalized);
+    assert.equal(extracted.customerPhotoUrl, "demo://nested.png");
+  });
+
+  it("extracts shipping from Etsy receipt fields", () => {
+    const shipping = extractShippingFromWebhook({
+      receipt_id: 999,
+      buyer_email: "ship@example.com",
+      name: "Alex Rivera",
+      first_line: "10 Main St",
+      second_line: "Apt 4",
+      city: "Austin",
+      state: "TX",
+      zip: "78701",
+      country_iso: "US",
+    });
+
+    assert.ok(shipping);
+    assert.equal(shipping!.firstName, "Alex");
+    assert.equal(shipping!.lastName, "Rivera");
+    assert.equal(shipping!.email, "ship@example.com");
+    assert.equal(shipping!.address1, "10 Main St");
+    assert.equal(shipping!.city, "Austin");
+    assert.equal(shipping!.country, "US");
   });
 });

@@ -94,6 +94,7 @@ export const ORDER_QUEUE_STATUSES = [
   "pending_personalization",
   "processing_artwork",
   "fulfillment_ready",
+  "production_submitted",
   "failed",
 ] as const;
 

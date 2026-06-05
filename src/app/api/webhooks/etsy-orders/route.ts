@@ -1,9 +1,14 @@
 /**
  * POST /api/webhooks/etsy-orders
  *
- * Room 2 entry point: Etsy order webhook → order_queue → personalization agent.
- * Accepts mock Etsy payloads in demo mode; optional HMAC validation when
- * ETSY_WEBHOOK_SECRET is configured.
+ * Room 2 entry point: Etsy order webhook → order_queue → personalization → Printify.
+ *
+ * Live Etsy receipts: `receipt_id`, buyer/shipping fields, `transactions[]` with
+ * `listing_id` and variation personalization (photo URL, style). Event wrappers
+ * (`data`, `receipt`) are normalized in order-types.
+ *
+ * HMAC-SHA256 via `x-etsy-signature` when ETSY_WEBHOOK_SECRET is set; mock payloads
+ * accepted without verification for local dev.
  */
 export const maxDuration = 60;
 

@@ -1,6 +1,16 @@
 /**
  * Server-only: POD fulfillment after Forge — artwork → Printify product draft.
+ *
+ * Room 2 personalized orders use `@/lib/ajax/pod/order-fulfillment` after
+ * personalization uploads artwork to Printify.
  */
+export {
+  OrderFulfillmentError,
+  mapEtsyShippingToPrintify,
+  resolveListingPodContext,
+  resolveShippingFromOrderMetadata,
+  runOrderProductionFulfillment,
+} from "@/lib/ajax/pod/order-fulfillment";
 import {
   imageGeneratorAdapter,
   printifyAdapter,

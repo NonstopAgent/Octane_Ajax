@@ -48,6 +48,40 @@ export type PrintifyPublishedProduct = {
   storefrontUrl: string;
 };
 
+export type PrintifyShippingAddress = {
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  country: string;
+  region?: string | null;
+  address1: string;
+  address2?: string | null;
+  city: string;
+  zip: string;
+};
+
+export type PrintifyOrderLineItem = {
+  productId: string;
+  variantId: number;
+  quantity: number;
+};
+
+export type PrintifyOrderInput = {
+  externalId: string;
+  lineItems: PrintifyOrderLineItem[];
+  shippingAddress: PrintifyShippingAddress;
+  /** Printify shipping_method id (1 = standard). */
+  shippingMethod?: number;
+  sendShippingNotification?: boolean;
+};
+
+export type PrintifyOrder = {
+  orderId: string;
+  externalId: string;
+  status: string;
+};
+
 export interface PrintifyAdapter {
   uploadArtwork(
     input: PrintifyArtworkInput,
@@ -58,6 +92,9 @@ export interface PrintifyAdapter {
   publishProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyPublishedProduct>>;
+  submitOrder(
+    input: PrintifyOrderInput,
+  ): Promise<AdapterResult<PrintifyOrder>>;
 }
 
 export type PrintifyAdapterOptions = AdapterConfig & {
@@ -99,6 +136,30 @@ type PrintifyProductResponse = {
   title?: string;
 };
 
+type PrintifyOrderResponse = {
+  id?: string;
+  external_id?: string;
+  status?: string;
+};
+
+function mapShippingAddress(
+  address: PrintifyShippingAddress,
+): Record<string, string> {
+  const payload: Record<string, string> = {
+    first_name: address.firstName,
+    last_name: address.lastName,
+    country: address.country,
+    address1: address.address1,
+    city: address.city,
+    zip: address.zip,
+  };
+  if (address.email) payload.email = address.email;
+  if (address.phone) payload.phone = address.phone;
+  if (address.region) payload.region = address.region;
+  if (address.address2) payload.address2 = address.address2;
+  return payload;
+}
+
 async function fetchImageAsBase64(
   imageUrl: string,
   fetchImpl: typeof fetch,
@@ -138,6 +199,15 @@ export function createDemoPrintifyAdapter(
         externalId: `ext-${productId}`,
         status: "published",
         storefrontUrl: `https://demo.printify.com/products/${productId}`,
+      });
+    },
+
+    async submitOrder(input) {
+      const orderId = `pfy-ord-${crypto.randomUUID().slice(0, 8)}`;
+      return demoResult("Printify fulfillment order simulated.", {
+        orderId,
+        externalId: input.externalId,
+        status: "pending",
       });
     },
   };
@@ -286,6 +356,42 @@ export function createLivePrintifyAdapter(
         externalId: productId,
         status: "published",
         storefrontUrl: `https://printify.com/app/products/${productId}`,
+      });
+    },
+
+    async submitOrder(input) {
+      const orderPayload = {
+        external_id: input.externalId,
+        line_items: input.lineItems.map((item) => ({
+          product_id: item.productId,
+          variant_id: item.variantId,
+          quantity: item.quantity,
+        })),
+        shipping_method: input.shippingMethod ?? 1,
+        send_shipping_notification: input.sendShippingNotification ?? false,
+        address_to: mapShippingAddress(input.shippingAddress),
+      };
+
+      const response = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/orders.json`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(orderPayload),
+        },
+      );
+
+      const payload = (await response.json()) as PrintifyOrderResponse;
+      if (!response.ok || !payload.id) {
+        throw new Error(
+          `Printify submit order failed (${response.status}): ${JSON.stringify(payload)}`,
+        );
+      }
+
+      return liveResult("Printify fulfillment order submitted.", {
+        orderId: payload.id,
+        externalId: payload.external_id ?? input.externalId,
+        status: payload.status ?? "pending",
       });
     },
   };
