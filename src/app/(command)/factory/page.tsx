@@ -1,6 +1,7 @@
 import { FactorySweatshop } from "@/components/factory/factory-sweatshop";
 import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
 import { createClient } from "@/lib/supabase/server";
+import type { VisMetrics } from "@/components/factory/factory-vis-map";
 
 function configReady() {
   return Boolean(
@@ -9,18 +10,17 @@ function configReady() {
   );
 }
 
+const EMPTY_METRICS: VisMetrics = {
+  productIdeas: 0,
+  pendingReviews: 0,
+  scheduledContent: 0,
+  publishedListings: 0,
+};
+
 export default async function FactoryPage() {
   const ready = configReady();
   let isAuthenticated = false;
-  let initialEvents: Awaited<
-    ReturnType<typeof fetchSweatshopSnapshot>
-  >["events"] = [];
-  let initialOrders: Awaited<
-    ReturnType<typeof fetchSweatshopSnapshot>
-  >["orders"] = [];
-  let initialTikTokQueue: Awaited<
-    ReturnType<typeof fetchSweatshopSnapshot>
-  >["tiktokQueue"] = [];
+  let snapshot: Awaited<ReturnType<typeof fetchSweatshopSnapshot>> | null = null;
 
   if (ready) {
     try {
@@ -31,13 +31,10 @@ export default async function FactoryPage() {
 
       if (user) {
         isAuthenticated = true;
-        const snapshot = await fetchSweatshopSnapshot(supabase, user.id);
-        initialEvents = snapshot.events;
-        initialOrders = snapshot.orders;
-        initialTikTokQueue = snapshot.tiktokQueue;
+        snapshot = await fetchSweatshopSnapshot(supabase, user.id);
       }
     } catch (err) {
-      console.error("[factory page] failed to load sweatshop snapshot", err);
+      console.error("[factory page] failed to load snapshot", err);
     }
   }
 
@@ -45,9 +42,11 @@ export default async function FactoryPage() {
     <FactorySweatshop
       isAuthenticated={isAuthenticated}
       configReady={ready}
-      initialEvents={initialEvents}
-      initialOrders={initialOrders}
-      initialTikTokQueue={initialTikTokQueue}
+      initialEvents={snapshot?.events ?? []}
+      initialOrders={snapshot?.orders ?? []}
+      initialTikTokQueue={snapshot?.tiktokQueue ?? []}
+      initialAgents={snapshot?.agents ?? []}
+      initialMetrics={snapshot?.metrics ?? EMPTY_METRICS}
     />
   );
 }

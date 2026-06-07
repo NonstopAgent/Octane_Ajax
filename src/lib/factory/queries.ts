@@ -3,6 +3,7 @@ import {
   mapEventFromDb,
   mapTaskFromDb,
 } from "@/lib/ajax/mappers";
+import type { AjaxAgent } from "@/lib/ajax/types";
 import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
 import type { TikTokQueueRow } from "@/lib/ajax/tiktok/types";
 import { mapTikTokQueueRow } from "@/lib/ajax/tiktok/types";
@@ -31,16 +32,34 @@ function mapOrderQueueRow(row: OrderQueue): OrderQueueRow {
   };
 }
 
-/** Initial payload for the agent sweatshop floor (events + order queue + tiktok). */
-export async function fetchSweatshopSnapshot(
-  supabase: Supabase,
-  userId: string,
-): Promise<{
+export type SweatshopSnapshot = {
   events: FactoryEvent[];
   orders: OrderQueueRow[];
   tiktokQueue: TikTokQueueRow[];
-}> {
-  const [eventsResult, ordersResult, tiktokResult] = await Promise.all([
+  agents: AjaxAgent[];
+  metrics: {
+    productIdeas: number;
+    pendingReviews: number;
+    scheduledContent: number;
+    publishedListings: number;
+  };
+};
+
+/** Full factory floor payload — agents, metrics, events, orders, tiktok queue. */
+export async function fetchSweatshopSnapshot(
+  supabase: Supabase,
+  userId: string,
+): Promise<SweatshopSnapshot> {
+  const [
+    eventsResult,
+    ordersResult,
+    tiktokResult,
+    agentsResult,
+    ideasResult,
+    reviewsResult,
+    jobsResult,
+    listingsResult,
+  ] = await Promise.all([
     supabase
       .from(TABLES.EVENTS)
       .select("*")
@@ -60,11 +79,32 @@ export async function fetchSweatshopSnapshot(
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(12),
+    supabase.from(TABLES.AGENTS).select("*").order("slug"),
+    supabase
+      .from(TABLES.IDEAS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId),
+    supabase
+      .from(TABLES.REVIEW_QUEUE)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "pending"),
+    supabase
+      .from(TABLES.CONTENT_JOBS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "scheduled"),
+    supabase
+      .from(TABLES.LISTINGS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "published"),
   ]);
 
   if (eventsResult.error) throw eventsResult.error;
   if (ordersResult.error) throw ordersResult.error;
   if (tiktokResult.error) throw tiktokResult.error;
+  if (agentsResult.error) throw agentsResult.error;
 
   return {
     events: (eventsResult.data ?? []).map(mapEventFromDb),
@@ -72,6 +112,13 @@ export async function fetchSweatshopSnapshot(
     tiktokQueue: (tiktokResult.data ?? []).map((row) =>
       mapTikTokQueueRow(row as TikTokQueue),
     ),
+    agents: (agentsResult.data ?? []).map(mapAgentFromDb),
+    metrics: {
+      productIdeas: ideasResult.count ?? 0,
+      pendingReviews: reviewsResult.count ?? 0,
+      scheduledContent: jobsResult.count ?? 0,
+      publishedListings: listingsResult.count ?? 0,
+    },
   };
 }
 
