@@ -17,6 +17,8 @@ const EVENT_TYPE_MESSAGES: Record<string, (event: FactoryEvent) => string> = {
     "Listing approved. Pixel schedules demo content and publishes to the demo storefront.",
   review_rejected: () => "Listing rejected. Feedback saved for agents.",
   content_scheduled: () => "Pixel scheduled marketing content.",
+  tiktok_package_queued: () =>
+    "Pixel queued a TikTok slideshow for the marketing bay.",
   cycle_started: () => "Ajax cycle started. Factory online.",
   cycle_completed: () => "Ajax cycle completed.",
   order_webhook_received: (e) =>

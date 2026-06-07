@@ -2,10 +2,20 @@ import type OpenAI from "openai";
 import { z } from "zod";
 import {
   buildPixelMarketingUserPrompt,
+  buildPixelTikTokUserPrompt,
   PIXEL_MARKETING_JSON_INSTRUCTIONS,
   PIXEL_MARKETING_SYSTEM_PROMPT,
   PIXEL_PROMPT_VERSION,
+  PIXEL_TIKTOK_JSON_INSTRUCTIONS,
+  PIXEL_TIKTOK_SYSTEM_PROMPT,
 } from "@/lib/ajax/pixel/prompts";
+import {
+  buildTikTokQueuePackage,
+  extractMockupUrls,
+  mapLlmToTikTokQueuePackage,
+  type TikTokMockupSources,
+  type TikTokQueuePackage,
+} from "@/lib/ajax/pixel/tiktok-package";
 import {
   buildPixelPromoPackage,
   parseStructure,
@@ -28,6 +38,24 @@ export const PixelMarketingLlmSchema = z.object({
 });
 
 export type PixelMarketingLlmOutput = z.infer<typeof PixelMarketingLlmSchema>;
+
+export const TikTokSlideshowLlmSchema = z.object({
+  hook: z.string().min(1),
+  body: z.string().min(1),
+  cta: z.string().min(1),
+  hashtags: z.array(z.string().min(1)).min(3).max(5),
+  slideshowScript: z
+    .array(
+      z.object({
+        image_index: z.number().int().min(0),
+        overlay_text: z.string().min(1),
+      }),
+    )
+    .min(3)
+    .max(5),
+});
+
+export type TikTokSlideshowLlmOutput = z.infer<typeof TikTokSlideshowLlmSchema>;
 
 export type PixelMarketingOptions = {
   client?: OpenAI;
@@ -169,6 +197,66 @@ export async function generatePixelMarketing(
   }
 
   return buildPixelPromoPackage(input);
+}
+
+async function fetchLlmTikTokPackage(
+  input: PixelPromoInput,
+  promo: PixelPromoPackage,
+  mockupSources: TikTokMockupSources,
+  options?: PixelMarketingOptions,
+): Promise<TikTokQueuePackage> {
+  const ctx = promoContextFromInput(input);
+  const mockupUrls = extractMockupUrls({
+    ...mockupSources,
+    podDetails: input.podDetails ?? null,
+    structure: input.structure ?? null,
+  });
+
+  const result = await completeJson({
+    messages: [
+      { role: "system", content: PIXEL_TIKTOK_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: buildPixelTikTokUserPrompt({
+          listingTitle: ctx.displayTitle,
+          listingDescription: input.listingDescription,
+          niche: input.niche,
+          mockupCount: mockupUrls.length,
+          pageTitles: ctx.pageTitles,
+        }),
+      },
+    ],
+    schema: TikTokSlideshowLlmSchema,
+    jsonInstructions: PIXEL_TIKTOK_JSON_INSTRUCTIONS,
+    options: { temperature: 0.8, maxTokens: 1200 },
+    client: options?.client,
+  });
+
+  return mapLlmToTikTokQueuePackage(input, promo, mockupSources, result.data);
+}
+
+/**
+ * TikTok slideshow package: LLM when configured, otherwise deterministic templates.
+ */
+export async function generateTikTokQueuePackage(
+  input: PixelPromoInput,
+  promo: PixelPromoPackage,
+  mockupSources: TikTokMockupSources,
+  options?: PixelMarketingOptions,
+): Promise<TikTokQueuePackage> {
+  const useLlm =
+    !options?.forceFallback &&
+    (options?.client != null || isOpenAiConfigured());
+
+  if (useLlm) {
+    try {
+      return await fetchLlmTikTokPackage(input, promo, mockupSources, options);
+    } catch {
+      // LLM failure → deterministic fallback
+    }
+  }
+
+  return buildTikTokQueuePackage(input, promo, mockupSources);
 }
 
 export { parseStructure };

@@ -635,6 +635,60 @@ export interface Database {
           },
         ];
       };
+      tiktok_queue: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_generation_id: string;
+          status: string;
+          caption: string;
+          hashtags: string[];
+          mockup_urls: string[];
+          slideshow_script: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          product_generation_id: string;
+          status?: string;
+          caption: string;
+          hashtags?: string[];
+          mockup_urls?: string[];
+          slideshow_script?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          product_generation_id?: string;
+          status?: string;
+          caption?: string;
+          hashtags?: string[];
+          mockup_urls?: string[];
+          slideshow_script?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_queue_product_generation_id_fkey";
+            columns: ["product_generation_id"];
+            isOneToOne: false;
+            referencedRelation: "product_generations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tiktok_queue_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -662,3 +716,4 @@ export type AgentFeedback = Tables<"agent_feedback">;
 export type FactoryEvent = Tables<"factory_events">;
 export type ContentJob = Tables<"content_jobs">;
 export type OrderQueue = Tables<"order_queue">;
+export type TikTokQueue = Tables<"tiktok_queue">;

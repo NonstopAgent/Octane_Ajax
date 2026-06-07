@@ -101,6 +101,15 @@ export const ORDER_QUEUE_STATUSES = [
 export type OrderQueueStatusDb =
   (typeof ORDER_QUEUE_STATUSES)[number];
 
+export const TIKTOK_QUEUE_STATUSES = [
+  "pending",
+  "approved",
+  "posted",
+  "rejected",
+] as const;
+
+export type TikTokQueueStatusDb = (typeof TIKTOK_QUEUE_STATUSES)[number];
+
 export type FactoryRoom = (typeof FACTORY_ROOMS)[keyof typeof FACTORY_ROOMS];
 
 export const TABLES = {
@@ -115,4 +124,5 @@ export const TABLES = {
   CONTENT_JOBS: "content_jobs",
   ETSY_CREDENTIALS: "etsy_credentials",
   ORDER_QUEUE: "order_queue",
+  TIKTOK_QUEUE: "tiktok_queue",
 } as const;

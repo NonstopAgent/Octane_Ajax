@@ -18,6 +18,9 @@ export default async function FactoryPage() {
   let initialOrders: Awaited<
     ReturnType<typeof fetchSweatshopSnapshot>
   >["orders"] = [];
+  let initialTikTokQueue: Awaited<
+    ReturnType<typeof fetchSweatshopSnapshot>
+  >["tiktokQueue"] = [];
 
   if (ready) {
     try {
@@ -31,6 +34,7 @@ export default async function FactoryPage() {
         const snapshot = await fetchSweatshopSnapshot(supabase, user.id);
         initialEvents = snapshot.events;
         initialOrders = snapshot.orders;
+        initialTikTokQueue = snapshot.tiktokQueue;
       }
     } catch (err) {
       console.error("[factory page] failed to load sweatshop snapshot", err);
@@ -43,6 +47,7 @@ export default async function FactoryPage() {
       configReady={ready}
       initialEvents={initialEvents}
       initialOrders={initialOrders}
+      initialTikTokQueue={initialTikTokQueue}
     />
   );
 }

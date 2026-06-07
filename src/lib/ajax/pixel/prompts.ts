@@ -1,4 +1,4 @@
-export const PIXEL_PROMPT_VERSION = "pixel-marketing-v1";
+export const PIXEL_PROMPT_VERSION = "pixel-marketing-v2";
 
 export const PIXEL_MARKETING_SYSTEM_PROMPT = `You are Pixel, the marketing agent for Octane Ajax. Generate compelling social media marketing copy for digital download products sold on Etsy. Be specific, benefit-focused, and use hooks that stop scrollers.
 
@@ -21,6 +21,22 @@ export const PIXEL_MARKETING_JSON_INSTRUCTIONS = `Return JSON with this exact sh
   "tiktokHookIdeas": ["string", "string", "string"] — exactly 3 scroll-stopping video hook ideas,
   "hashtags": ["string", ...] — 8-12 relevant hashtags (no # prefix; the code adds it)
 }`;
+
+export const PIXEL_TIKTOK_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
+{
+  "hook": "string — viral scroll-stopping hook (1 sentence)",
+  "body": "string — short benefit-focused body (1-2 sentences)",
+  "cta": "string — call to action with link-in-bio tone",
+  "hashtags": ["string", ...] — exactly 3-5 relevant hashtags (no # prefix),
+  "slideshowScript": [
+    { "image_index": 0, "overlay_text": "string" },
+    ...
+  ] — 3-5 slides referencing mockup image_index (0-based) and overlay text
+}`;
+
+export const PIXEL_TIKTOK_SYSTEM_PROMPT = `${PIXEL_MARKETING_SYSTEM_PROMPT}
+
+You also craft TikTok photo-slideshow posts: punchy hook, concise body, clear CTA, and 3-5 slides with on-image overlay text.`;
 
 export function buildPixelMarketingUserPrompt(input: {
   listingTitle: string;
@@ -57,5 +73,33 @@ export function buildPixelMarketingUserPrompt(input: {
     ...lines,
     "",
     "Match the tone to the niche. Keep claims factual and compliant.",
+  ].join("\n");
+}
+
+export function buildPixelTikTokUserPrompt(input: {
+  listingTitle: string;
+  listingDescription?: string | null;
+  niche?: string | null;
+  mockupCount?: number;
+  pageTitles?: string[];
+}): string {
+  const lines = [
+    `Product: ${input.listingTitle}`,
+    input.listingDescription
+      ? `Listing description: ${input.listingDescription}`
+      : null,
+    input.niche ? `Niche / audience: ${input.niche}` : null,
+    input.mockupCount != null ? `Mockup images available: ${input.mockupCount}` : null,
+    input.pageTitles?.length
+      ? `Page highlights: ${input.pageTitles.join(", ")}`
+      : null,
+  ].filter(Boolean);
+
+  return [
+    "Generate a TikTok photo-slideshow package for this product.",
+    "",
+    ...lines,
+    "",
+    "Use image_index 0 through mockupCount-1. Keep overlay text short and punchy.",
   ].join("\n");
 }

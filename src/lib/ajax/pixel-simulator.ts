@@ -4,7 +4,9 @@ import {
   mapEventFromDb,
   mapListingFromDb,
 } from "@/lib/ajax/mappers";
-import { generatePixelMarketing } from "@/lib/ajax/pixel/service";
+import { generatePixelMarketing, generateTikTokQueuePackage } from "@/lib/ajax/pixel/service";
+import type { TikTokMockupSources } from "@/lib/ajax/pixel/tiktok-package";
+import { buildTikTokQueuePackage } from "@/lib/ajax/pixel/tiktok-package";
 import {
   buildContentJobScheduleUpdate,
   buildPixelPromoPackage,
@@ -47,8 +49,11 @@ export class NoQueuedContentError extends Error {
 }
 
 type QueuedGenerationRow = {
+  id: string;
   structure: unknown;
   generation_status: string;
+  mockup_storage_path: string | null;
+  pdf_public_url: string | null;
   created_at?: string;
 };
 
@@ -64,6 +69,7 @@ type QueuedListingRow = {
   title: string | null;
   status: string;
   description: string | null;
+  mockup_url: string | null;
   product_ideas: QueuedIdeaRow | QueuedIdeaRow[] | null;
   product_generations: QueuedGenerationRow | QueuedGenerationRow[] | null;
 };
@@ -116,22 +122,36 @@ function pickGeneration(
   })[0];
 }
 
-function promoInputFromJob(job: QueuedJobRow): PixelPromoInput {
+function promoInputFromJob(job: QueuedJobRow): {
+  input: PixelPromoInput;
+  generationId: string | null;
+  mockupSources: TikTokMockupSources;
+} {
   const listing = job.product_listings;
   const idea = firstOrSelf(listing?.product_ideas);
   const generation = pickGeneration(listing?.product_generations);
   const { structure, podDetails } = parseGenerationPayload(generation?.structure);
 
   return {
-    jobId: job.id,
-    listingTitle: listing?.title ?? idea?.title ?? "Approved product",
-    listingDescription: listing?.description ?? idea?.description ?? null,
-    niche: idea?.niche ?? null,
-    ideaTitle: idea?.title ?? null,
-    ideaDescription: idea?.description ?? null,
-    seoKeywords: idea?.seo_keywords ?? null,
-    structure,
-    podDetails,
+    input: {
+      jobId: job.id,
+      listingTitle: listing?.title ?? idea?.title ?? "Approved product",
+      listingDescription: listing?.description ?? idea?.description ?? null,
+      niche: idea?.niche ?? null,
+      ideaTitle: idea?.title ?? null,
+      ideaDescription: idea?.description ?? null,
+      seoKeywords: idea?.seo_keywords ?? null,
+      structure,
+      podDetails,
+    },
+    generationId: generation?.id ?? null,
+    mockupSources: {
+      listingMockupUrl: listing?.mockup_url ?? null,
+      generationMockupPath: generation?.mockup_storage_path ?? null,
+      generationPdfUrl: generation?.pdf_public_url ?? null,
+      podDetails,
+      structure,
+    },
   };
 }
 
@@ -213,6 +233,7 @@ export async function runPixelMarketing(
         title,
         status,
         description,
+        mockup_url,
         product_ideas (
           niche,
           title,
@@ -220,8 +241,11 @@ export async function runPixelMarketing(
           seo_keywords
         ),
         product_generations (
+          id,
           structure,
           generation_status,
+          mockup_storage_path,
+          pdf_public_url,
           created_at
         )
       )
@@ -258,12 +282,28 @@ export async function runPixelMarketing(
   await sleep(1500);
 
   for (const job of jobs) {
-    const promoInput = promoInputFromJob(job);
+    const { input: promoInput, generationId, mockupSources } =
+      promoInputFromJob(job);
     let promo: PixelPromoPackage;
     try {
       promo = await generatePixelMarketing(promoInput);
     } catch {
       promo = buildPixelPromoPackage(promoInput);
+    }
+
+    let tiktokPackage;
+    try {
+      tiktokPackage = await generateTikTokQueuePackage(
+        promoInput,
+        promo,
+        mockupSources,
+      );
+    } catch {
+      tiktokPackage = buildTikTokQueuePackage(
+        promoInput,
+        promo,
+        mockupSources,
+      );
     }
 
     const { data: jobRow, error: jobError } = await supabase
@@ -317,6 +357,45 @@ export async function runPixelMarketing(
         },
       }),
     );
+
+    if (generationId) {
+      const { data: tiktokRow, error: tiktokError } = await supabase
+        .from(TABLES.TIKTOK_QUEUE)
+        .insert({
+          user_id: userId,
+          product_generation_id: generationId,
+          status: "pending",
+          caption: tiktokPackage.caption,
+          hashtags: tiktokPackage.hashtags,
+          mockup_urls: tiktokPackage.mockupUrls,
+          slideshow_script: tiktokPackage.slideshowScript,
+        })
+        .select("id")
+        .single();
+
+      if (tiktokError) {
+        throw new PixelSimulatorError(
+          `Failed to queue TikTok package for generation ${generationId}.`,
+          tiktokError,
+        );
+      }
+
+      events.push(
+        await insertEvent(supabase, userId, {
+          event_type: "tiktok_package_queued",
+          agent_slug: AGENT_SLUGS.PIXEL,
+          room: ROOM_SLUGS.MEDIA_STUDIO,
+          message: "Pixel queued a TikTok slideshow for manual posting.",
+          metadata: {
+            tiktokQueueId: tiktokRow.id,
+            productGenerationId: generationId,
+            listingId: job.listing_id,
+            slideCount: tiktokPackage.slideshowScript.length,
+          },
+        }),
+      );
+    }
+
     await sleep(700);
   }
 

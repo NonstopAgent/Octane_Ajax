@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { EventFeed } from "@/components/factory/event-feed";
 import { RoomStation } from "@/components/factory/room-station";
+import { TikTokQueuePanel } from "@/components/factory/tiktok-queue-panel";
 import { CommandHeader } from "@/components/layout/command-header";
 import type { FactoryEvent } from "@/lib/ajax/types";
+import type { TikTokQueueRow } from "@/lib/ajax/tiktok/types";
 import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
 
 type FactorySweatshopProps = {
@@ -12,6 +14,7 @@ type FactorySweatshopProps = {
   configReady: boolean;
   initialEvents: FactoryEvent[];
   initialOrders: OrderQueueRow[];
+  initialTikTokQueue: TikTokQueueRow[];
 };
 
 export function FactorySweatshop({
@@ -19,6 +22,7 @@ export function FactorySweatshop({
   configReady,
   initialEvents,
   initialOrders,
+  initialTikTokQueue,
 }: FactorySweatshopProps) {
   const realtimeEnabled = configReady && isAuthenticated;
 
@@ -65,7 +69,7 @@ export function FactorySweatshop({
           <>
             Obsidian chrome floor monitor — live{" "}
             <span className="font-mono text-amber-400/90">factory_events</span>{" "}
-            ticker and Room 2 personalization queue.{" "}
+            ticker, Room 2 personalization, and TikTok marketing bay.{" "}
             <Link
               href="/dashboard"
               className="font-mono text-emerald-400/90 hover:underline"
@@ -74,12 +78,16 @@ export function FactorySweatshop({
             </Link>
           </>
         }
-        sysline="SYS.AJAX.SWEATSHOP :: ROOM.02.PERSONALIZATION"
+        sysline="SYS.AJAX.SWEATSHOP :: ROOM.02.PERSONALIZATION :: ROOM.03.TIKTOK"
       />
 
       <div className="grid gap-4 lg:grid-cols-5 lg:gap-6">
-        <div className="lg:col-span-2">
+        <div className="space-y-4 lg:col-span-2">
           <RoomStation enabled={realtimeEnabled} initialOrders={initialOrders} />
+          <TikTokQueuePanel
+            enabled={realtimeEnabled}
+            initialItems={initialTikTokQueue}
+          />
         </div>
         <div className="lg:col-span-3">
           <EventFeed enabled={realtimeEnabled} initialEvents={initialEvents} />

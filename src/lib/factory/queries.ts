@@ -4,9 +4,11 @@ import {
   mapTaskFromDb,
 } from "@/lib/ajax/mappers";
 import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
+import type { TikTokQueueRow } from "@/lib/ajax/tiktok/types";
+import { mapTikTokQueueRow } from "@/lib/ajax/tiktok/types";
 import type { FactoryEvent } from "@/lib/ajax/types";
 import type { FactorySnapshot } from "@/lib/factory/types";
-import type { OrderQueue } from "@/lib/supabase/database.types";
+import type { OrderQueue, TikTokQueue } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -29,12 +31,16 @@ function mapOrderQueueRow(row: OrderQueue): OrderQueueRow {
   };
 }
 
-/** Initial payload for the agent sweatshop floor (events + order queue). */
+/** Initial payload for the agent sweatshop floor (events + order queue + tiktok). */
 export async function fetchSweatshopSnapshot(
   supabase: Supabase,
   userId: string,
-): Promise<{ events: FactoryEvent[]; orders: OrderQueueRow[] }> {
-  const [eventsResult, ordersResult] = await Promise.all([
+): Promise<{
+  events: FactoryEvent[];
+  orders: OrderQueueRow[];
+  tiktokQueue: TikTokQueueRow[];
+}> {
+  const [eventsResult, ordersResult, tiktokResult] = await Promise.all([
     supabase
       .from(TABLES.EVENTS)
       .select("*")
@@ -47,14 +53,25 @@ export async function fetchSweatshopSnapshot(
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(16),
+    supabase
+      .from(TABLES.TIKTOK_QUEUE)
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(12),
   ]);
 
   if (eventsResult.error) throw eventsResult.error;
   if (ordersResult.error) throw ordersResult.error;
+  if (tiktokResult.error) throw tiktokResult.error;
 
   return {
     events: (eventsResult.data ?? []).map(mapEventFromDb),
     orders: (ordersResult.data ?? []).map(mapOrderQueueRow),
+    tiktokQueue: (tiktokResult.data ?? []).map((row) =>
+      mapTikTokQueueRow(row as TikTokQueue),
+    ),
   };
 }
 

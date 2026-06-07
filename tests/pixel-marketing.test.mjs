@@ -40,6 +40,14 @@ describe("pixel marketing wiring", () => {
     assert.match(pixel, /assetUrl:\s*promo\.assetUrl/);
   });
 
+  it("queues TikTok slideshow packages after Pixel marketing", () => {
+    assert.match(pixel, /generateTikTokQueuePackage/);
+    assert.match(pixel, /TABLES\.TIKTOK_QUEUE/);
+    assert.match(pixel, /event_type:\s*"tiktok_package_queued"/);
+    assert.match(pixel, /status:\s*"pending"/);
+    assert.match(pixel, /slideshow_script:\s*tiktokPackage\.slideshowScript/);
+  });
+
   it("publishes listings after scheduling (demo storefront only)", () => {
     assert.match(pixel, /status:\s*"published"/);
     assert.match(pixel, /demo storefront/i);
