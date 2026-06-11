@@ -1,8 +1,12 @@
 import { z } from "zod";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
+import {
+  getPrintifyCatalogEntry,
+  PRINTIFY_CATALOG_KEYS,
+} from "@/lib/ajax/pod/printify-catalog";
 import type { PodDetails } from "@/lib/product/domain";
 
-export const FORGE_PROMPT_VERSION = "forge-pod-v1";
+export const FORGE_PROMPT_VERSION = "forge-pod-catalog-v2";
 
 export const AI_DISCLOSURE_TEXT =
   "AI tools assisted in drafting and structuring this product. The seller reviewed and customized the final listing.";
@@ -26,9 +30,12 @@ export type IpSafeAestheticStyle = (typeof IP_SAFE_AESTHETIC_STYLES)[number];
 export type ForgeGenerationMode = "llm" | "fallback";
 
 export const ForgePodDetailsSchema = z.object({
-  blueprintId: z.number().int().positive(),
-  printProviderId: z.number().int().positive(),
-  variantIds: z.array(z.number().int().positive()).min(1).max(20),
+  /**
+   * Pre-approved Printify product key. The LLM never outputs raw
+   * blueprint/provider/variant IDs — the backend resolves this key against
+   * `printify-catalog.ts`, guaranteeing structurally valid Printify calls.
+   */
+  catalogKey: z.enum(PRINTIFY_CATALOG_KEYS),
   artworkPrompt: z.string().min(20),
   aestheticStyle: z.enum(IP_SAFE_AESTHETIC_STYLES),
 });
@@ -73,17 +80,27 @@ export type ForgeGenerationResult = {
   tokenEstimateOutput?: number;
 };
 
+/**
+ * Resolve the LLM's catalogKey to exact, known-good Printify IDs.
+ * The persisted PodDetails shape is unchanged — the rest of the pipeline
+ * (fulfillment, review UI, sellability) keeps working on real IDs.
+ */
 export function mapForgePodDetailsToDomain(
   raw: ForgeLlmPodDetails,
   metadata?: Record<string, unknown>,
 ): PodDetails {
+  const entry = getPrintifyCatalogEntry(raw.catalogKey);
   return {
-    blueprintId: raw.blueprintId,
-    printProviderId: raw.printProviderId,
-    variantIds: raw.variantIds,
+    blueprintId: entry.blueprintId,
+    printProviderId: entry.printProviderId,
+    variantIds: entry.variantIds,
     artworkPrompt: raw.artworkPrompt.trim(),
     aestheticStyle: raw.aestheticStyle,
-    metadata,
+    metadata: {
+      ...metadata,
+      catalogKey: entry.key,
+      catalogLabel: entry.label,
+    },
   };
 }
 

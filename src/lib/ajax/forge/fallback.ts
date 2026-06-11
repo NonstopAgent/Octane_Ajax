@@ -4,20 +4,13 @@ import {
   ensureAiDisclosureInCopy,
   mapForgePodDetailsToDomain,
   type ForgeGenerationResult,
-  type ForgeLlmPodDetails,
 } from "@/lib/ajax/forge/types";
+import {
+  catalogKeyForFormat,
+  getPrintifyCatalogEntry,
+} from "@/lib/ajax/pod/printify-catalog";
 
-const FALLBACK_PRICE = 19.99;
-
-/** Default Printify mug blueprint for deterministic fallback (demo-safe). */
-const FALLBACK_POD: ForgeLlmPodDetails = {
-  blueprintId: 68,
-  printProviderId: 1,
-  variantIds: [33719, 33720],
-  artworkPrompt:
-    "Minimal flat illustration with soft neutral palette, niche-specific iconography, no logos, no characters, print-ready centered composition",
-  aestheticStyle: "minimalist-line-art",
-};
+const FALLBACK_AESTHETIC = "minimalist-line-art" as const;
 
 function padSeoTags(keywords: string[], concept: string): string[] {
   const base = [
@@ -63,17 +56,21 @@ export function buildForgeFallbackResult(
     ].join("\n"),
   );
 
-  const artworkPrompt = `Original ${FALLBACK_POD.aestheticStyle} artwork for ${idea.niche}: ${idea.productConcept}. ${idea.problemSolved}. No copyrighted characters, brands, or logos.`;
+  const catalogKey = catalogKeyForFormat(idea.format);
+  const catalogEntry = getPrintifyCatalogEntry(catalogKey);
+
+  const artworkPrompt = `Original ${FALLBACK_AESTHETIC} artwork for ${idea.niche}: ${idea.productConcept}. ${idea.problemSolved}. No copyrighted characters, brands, or logos.`;
 
   const podDetails = mapForgePodDetailsToDomain(
     {
-      ...FALLBACK_POD,
+      catalogKey,
       artworkPrompt,
+      aestheticStyle: FALLBACK_AESTHETIC,
     },
     {
       aiDisclosure: AI_DISCLOSURE_TEXT,
       forgeMode: "fallback",
-      coverImagePrompt: `Product mockup for ${idea.format} about ${idea.niche}, soft neutral palette, no logos or characters`,
+      coverImagePrompt: `Product mockup for ${catalogEntry.label} about ${idea.niche}, soft neutral palette, no logos or characters`,
     },
   );
 
@@ -82,7 +79,7 @@ export function buildForgeFallbackResult(
     listingTitle,
     listingDescription,
     seoTags: padSeoTags(idea.keywords, idea.productConcept),
-    suggestedPrice: FALLBACK_PRICE,
+    suggestedPrice: catalogEntry.defaultPriceCents / 100,
     podDetails,
     complianceNotes: [],
     aiDisclosure: AI_DISCLOSURE_TEXT,

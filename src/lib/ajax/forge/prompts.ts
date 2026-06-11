@@ -3,6 +3,10 @@ import {
   FORGE_PROMPT_VERSION,
   IP_SAFE_AESTHETIC_STYLES,
 } from "@/lib/ajax/forge/types";
+import {
+  formatCatalogForPrompt,
+  PRINTIFY_CATALOG_KEYS,
+} from "@/lib/ajax/pod/printify-catalog";
 
 export { FORGE_PROMPT_VERSION };
 
@@ -20,7 +24,10 @@ const AESTHETIC_LIST = IP_SAFE_AESTHETIC_STYLES.join(", ");
 
 export const FORGE_GENERATION_SYSTEM_PROMPT = `You are Forge, the creation agent for Octane Ajax — a print-on-demand (POD) factory for Etsy-style physical gifts (mugs, posters, apparel, etc.).
 
-Turn an approved product idea into a complete Etsy listing draft and a Printify product blueprint. Favor niche specificity, giftability, and IP-safe original artwork directions.
+Turn an approved product idea into a complete Etsy listing draft and a Printify product selection. Favor niche specificity, giftability, and IP-safe original artwork directions.
+
+You MUST select the product from this pre-approved catalog (you never output raw Printify IDs):
+${formatCatalogForPrompt()}
 
 Etsy POD pricing guidance: mugs $14.99–$24.99, posters $19.99–$34.99, apparel $24.99–$39.99; new shops should price toward the lower end.
 
@@ -38,9 +45,7 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
   "seoTags": ["string", ...] (exactly 13 Etsy tags, no duplicates, niche-specific),
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
   "podDetails": {
-    "blueprintId": number (Printify blueprint ID — e.g. 68 for 11oz mug, 1 for poster),
-    "printProviderId": number (Printify print provider ID),
-    "variantIds": [number, ...] (1–20 enabled variant IDs for this blueprint),
+    "catalogKey": "one of: ${PRINTIFY_CATALOG_KEYS.join(", ")} — pick the pre-approved product that best fits the concept",
     "artworkPrompt": "string — detailed original artwork prompt, 20+ chars, no brands/characters/logos",
     "aestheticStyle": "one of: ${AESTHETIC_LIST}"
   },
@@ -51,9 +56,9 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
 }
 
 Rules:
+- podDetails.catalogKey must be exactly one of the pre-approved catalog keys
 - podDetails.artworkPrompt must describe original, IP-safe artwork suitable for print
 - podDetails.aestheticStyle must be one of the allowed IP-safe styles
-- podDetails.variantIds: at least one variant, max 20
 - seoTags: exactly 13 strings
 - Physical print-on-demand product — not a digital PDF download`;
 
@@ -82,5 +87,5 @@ Product idea:
 - Seed keywords: ${input.keywords.join(", ")}
 - Nova reasoning: ${input.reasoning}
 
-Deliver a cohesive print-on-demand gift product with original IP-safe artwork, Printify blueprint IDs, and an Etsy-ready listing draft.`;
+Deliver a cohesive print-on-demand gift product with original IP-safe artwork, the best-fitting catalogKey, and an Etsy-ready listing draft.`;
 }

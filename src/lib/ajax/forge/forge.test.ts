@@ -39,9 +39,7 @@ const validForgePayload = {
   ],
   suggestedPrice: 19.99,
   podDetails: {
-    blueprintId: 68,
-    printProviderId: 1,
-    variantIds: [33719, 33720],
+    catalogKey: "MUG_11OZ" as const,
     artworkPrompt:
       "Minimalist line art mug design with meal prep icons, soft teal palette, no logos or characters, print-ready centered composition for night-shift nurses",
     aestheticStyle: "minimalist-line-art" as const,
@@ -179,9 +177,14 @@ describe("runForgeGeneration", () => {
     );
 
     assert.equal(result.mode, "fallback");
-    assert.equal(result.suggestedPrice, 19.99);
+    // Fallback price comes from the Printify catalog entry for the idea's format.
+    assert.ok(result.suggestedPrice >= 9.99 && result.suggestedPrice <= 49.99);
     assert.equal(result.seoTags.length, 13);
     assert.ok(result.podDetails.blueprintId > 0);
+    assert.ok(
+      typeof result.podDetails.metadata?.catalogKey === "string",
+      "fallback podDetails must record the catalogKey",
+    );
     assert.equal(result.llmProvider, undefined);
     assert.equal(result.llmModel, undefined);
     assert.equal(result.promptVersion, undefined);
