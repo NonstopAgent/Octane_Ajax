@@ -4,11 +4,8 @@ import { useCallback, useState } from "react";
 import { EventFeed } from "@/components/factory/event-feed";
 import { RoomStation } from "@/components/factory/room-station";
 import { TikTokQueuePanel } from "@/components/factory/tiktok-queue-panel";
-import {
-  FactoryVisMap,
-  type VisAgent,
-  type VisMetrics,
-} from "@/components/factory/factory-vis-map";
+import { type VisAgent, type VisMetrics } from "@/components/factory/factory-vis-map";
+import { FactoryFloor3D } from "@/components/factory/factory-floor-3d";
 import type { AjaxAgent, FactoryEvent } from "@/lib/ajax/types";
 import type { TikTokQueueRow } from "@/lib/ajax/tiktok/types";
 import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
@@ -265,8 +262,8 @@ export function FactorySweatshop({
     <div className="space-y-4">
       <ToastBanner toast={toast} />
 
-      {/* Primary visual: factory floor map */}
-      <FactoryVisMap
+      {/* Primary visual: 3D factory floor command center */}
+      <FactoryFloor3D
         agents={visAgents}
         metrics={metrics}
         running={running}

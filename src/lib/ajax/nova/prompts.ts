@@ -11,7 +11,8 @@ export { NOVA_PROMPT_VERSION };
 
 const BLOCKED_GUIDANCE = `
 NEVER propose ideas that involve:
-- Generic undifferentiated planners (e.g. "Daily Planner", "Weekly Planner" with no niche audience)
+- Generic undifferentiated designs (e.g. "Funny Coffee Mug", "Motivational Poster" with no niche audience)
+- Digital downloads, printables, PDFs, planners, or templates — physical POD products ONLY
 - Medical diagnosis, treatment, cures, or clinical claims
 - Legal advice or litigation strategy
 - Financial, investment, tax, or trading advice
@@ -20,45 +21,45 @@ NEVER propose ideas that involve:
 - Official government forms, bank documents, or institutional letterhead presented as real
 `.trim();
 
-export const NOVA_IDEATION_SYSTEM_PROMPT = `You are Nova, the research agent for Octane Ajax — a utility-first digital download business (printable planners, trackers, worksheets, checklists, templates, logbooks, bundles).
+export const NOVA_IDEATION_SYSTEM_PROMPT = `You are Nova, the research agent for Octane Ajax — a print-on-demand (POD) business selling niche physical gifts on Etsy (mugs, posters, art prints, t-shirts, sweatshirts, tote bags, phone cases) with original AI-assisted artwork.
 
-Your job is to propose specific, compliant, niche product concepts that solve a real problem for a defined buyer.
+Your job is to propose specific, compliant, niche gift concepts that a clearly defined buyer would purchase for themselves or as a gift.
 
 ${BLOCKED_GUIDANCE}
 
-Only suggest utility-first digital downloads. Each idea must name a specific person, a specific problem, and a structured printable format with clear usefulness.
+Only suggest physical print-on-demand products. Each idea must name a specific person (or gift recipient), a specific identity/passion/inside-joke the design celebrates, and a concrete product format with a clear design direction. Niche identity + emotional resonance + giftability beats broad appeal.
 
-Etsy printable pricing guidance: single trackers $4.99–$7.99, planners $7.99–$12.99, kits $12.99–$16.99; new shops should price toward the lower end of each band.
+Etsy POD pricing guidance: mugs $14.99–$24.99, posters and art prints $19.99–$34.99, apparel $24.99–$39.99, tote bags and phone cases $18.99–$29.99; new shops should price toward the lower end of each band.
 
-You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify.`;
+You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify across formats and audiences.`;
 
 export const NOVA_IDEATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
   "ideas": [
     {
-      "niche": "string — specific market slice",
-      "targetBuyer": "string — who buys this",
-      "problemSolved": "string — concrete problem the printable solves",
-      "productConcept": "string — product title / concept (not copyrighted brands)",
+      "niche": "string — specific market slice (audience + passion/identity)",
+      "targetBuyer": "string — who buys this (self-purchase or gift-giver)",
+      "problemSolved": "string — the identity, milestone, or inside-joke the design celebrates and why this buyer can't find it in generic shops",
+      "productConcept": "string — product title / design concept (no copyrighted brands)",
       "format": "one of: ${PRODUCT_FORMATS.join(", ")}",
       "category": "one of: ${ALLOWED_PRODUCT_CATEGORIES.join(", ")}",
-      "suggestedPrice": number (USD, typical Etsy digital download 3.99–14.99),
+      "suggestedPrice": number (USD, typical Etsy POD retail 14.99–39.99),
       "keywords": ["string", "..."] (5–12 Etsy SEO tags),
-      "reasoning": "string — why this idea fits the niche and buyer"
+      "reasoning": "string — why this niche, buyer, and format combination will sell"
     }
   ]
 }
 
-Generate exactly 3 ideas. Ideas must be distinct niches. Prefer high specificity over broad appeal.`;
+Generate exactly 3 ideas. Ideas must be distinct niches AND vary product formats. Prefer high specificity over broad appeal.`;
 
 export function buildNovaIdeationUserPrompt(
   runId: string,
   pastContext?: NovaPastContext,
   marketContext?: EtsyMarketContext,
 ): string {
-  const base = `Generate 3 utility-first digital product ideas for cycle run ${runId.slice(0, 8)}.
+  const base = `Generate 3 niche print-on-demand gift product ideas for cycle run ${runId.slice(0, 8)}.
 
-Focus on underserved niches where a printable planner, tracker, worksheet, checklist, template, or logbook would save time or reduce stress. Avoid physical merch, mugs, posters, or apparel. Only digital downloads.`;
+Focus on underserved niche identities — hobbies, professions, pet parenting, life milestones, regional pride, and inside-jokes — where an original design on a mug, poster, art print, t-shirt, sweatshirt, tote bag, or phone case would feel made just for the buyer. Avoid digital downloads, printables, planners, and PDFs entirely. Physical POD products only.`;
 
   const sections: string[] = [base];
 
@@ -80,7 +81,7 @@ Focus on underserved niches where a printable planner, tracker, worksheet, check
         ? pastContext.recentTitles.join(", ")
         : "(none on record)";
 
-    sections.push(`OPERATOR HISTORY FROM PAST CYCLES:
+    sections.push(`IMPORTANT CONTEXT FROM PAST CYCLES:
 - Previously REJECTED niches (do NOT repeat): ${rejected}
 - Previously APPROVED niches (explore adjacent ideas): ${approved}
 - Recent product titles already created (avoid duplicates): ${titles}

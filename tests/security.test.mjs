@@ -281,15 +281,15 @@ describe("staged pipeline LLM wiring guard", () => {
     assert.doesNotMatch(simulator, /generateAndStoreProductPdf/);
     assert.doesNotMatch(legacyRoute, /runAjaxCycle|runNovaStep|runForgeStep/);
 
-    const generatePdfRoute = readFileSync(
-      join(
-        ROOT,
-        "app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+    // PDF generation pipeline is retired — the route must not exist.
+    assert.throws(() =>
+      readFileSync(
+        join(
+          ROOT,
+          "app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+        ),
+        "utf8",
       ),
-      "utf8",
     );
-    assert.match(generatePdfRoute, /runGenerationPdfJob/);
-    assert.doesNotMatch(generatePdfRoute, /generateListingMockup/);
-    assert.doesNotMatch(generatePdfRoute, /from ["']@\/lib\/product\/pdf-generator/);
   });
 });

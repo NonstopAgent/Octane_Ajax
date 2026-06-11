@@ -17,7 +17,6 @@ describe("demo workflow wiring", () => {
     "src/app/api/ajax/run-pixel/route.ts",
     "src/app/api/ajax/factory-snapshot/route.ts",
     "src/app/api/ajax/product-generations/[id]/pdf-download/route.ts",
-    "src/app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
   ];
 
   for (const route of routes) {
@@ -169,37 +168,36 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(simulator, /runPixel|pixel-simulator/i);
   });
 
-  it("generate-pdf route delegates to generation PDF runner", () => {
-    const route = readFileSync(
-      join(
-        ROOT,
-        "src/app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+  it("PDF generation pipeline is fully retired", () => {
+    assert.throws(() =>
+      readFileSync(
+        join(
+          ROOT,
+          "src/app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+        ),
+        "utf8",
       ),
-      "utf8",
     );
-    const runner = readFileSync(
-      join(ROOT, "src/lib/product/generation-pdf-runner.ts"),
-      "utf8",
+    assert.throws(() =>
+      readFileSync(
+        join(ROOT, "src/lib/product/generation-pdf-runner.ts"),
+        "utf8",
+      ),
     );
-    assert.match(route, /runGenerationPdfJob/);
-    assert.match(route, /maxDuration\s*=\s*60/);
-    assert.match(route, /downloadPath/);
-    assert.match(runner, /generateAndStoreProductPdf/);
-    assert.match(runner, /pdf_generation_failed/);
-    assert.match(runner, /scheduleGenerationPdfAfterForge/);
-    assert.match(runner, /pdf_auto_triggered/);
-    assert.doesNotMatch(route, /createServiceClient/);
+    assert.throws(() =>
+      readFileSync(join(ROOT, "src/lib/product/pdf-service.ts"), "utf8"),
+    );
   });
 
-  it("review PDF panel triggers generate-pdf manually", () => {
+  it("review asset panel is POD-first with no manual PDF generation", () => {
     const panel = readFileSync(
       join(ROOT, "src/components/review/review-pdf-panel.tsx"),
       "utf8",
     );
-    assert.match(panel, /Generate PDF/);
-    assert.match(panel, /Retry PDF generation/);
-    assert.match(panel, /PDF generating/);
-    assert.match(panel, /buildProductPdfGenerateHref/);
+    assert.match(panel, /Product assets/);
+    assert.match(panel, /Printify product draft are created automatically/);
+    assert.doesNotMatch(panel, /Generate PDF/);
+    assert.doesNotMatch(panel, /buildProductPdfGenerateHref/);
     assert.doesNotMatch(panel, /createServiceClient/);
   });
 

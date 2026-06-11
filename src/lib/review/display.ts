@@ -98,7 +98,6 @@ export type ReviewApproveUi = {
   tone: "approve" | "caution" | "blocked";
   approvalBlockedHeading: string | null;
   blockedCheckLabels: string[];
-  showGeneratePdfAction: boolean;
   complianceBlockMessage: string | null;
 };
 
@@ -148,7 +147,6 @@ function sellabilityBlockedUi(
     tone: "blocked",
     approvalBlockedHeading: "Approval blocked because:",
     blockedCheckLabels: getFailedSellabilityCheckLabels(checklist),
-    showGeneratePdfAction: isFulfillmentOnlySellabilityBlock(checklist),
     complianceBlockMessage: hasComplianceSellabilityBlock(checklist)
       ? COMPLIANCE_APPROVAL_BLOCK_MESSAGE
       : null,
@@ -171,7 +169,6 @@ export function getReviewApproveUi(
       tone: "blocked",
       approvalBlockedHeading: null,
       blockedCheckLabels: [],
-      showGeneratePdfAction: false,
       complianceBlockMessage: null,
     };
   }
@@ -193,7 +190,6 @@ export function getReviewApproveUi(
       tone: "blocked",
       approvalBlockedHeading: "Approval blocked because:",
       blockedCheckLabels: [],
-      showGeneratePdfAction: false,
       complianceBlockMessage: null,
     };
   }
@@ -208,7 +204,6 @@ export function getReviewApproveUi(
       tone: "caution",
       approvalBlockedHeading: null,
       blockedCheckLabels: [],
-      showGeneratePdfAction: false,
       complianceBlockMessage: null,
     };
   }
@@ -221,7 +216,6 @@ export function getReviewApproveUi(
     tone: "approve",
     approvalBlockedHeading: null,
     blockedCheckLabels: [],
-    showGeneratePdfAction: false,
     complianceBlockMessage: null,
   };
 }
@@ -250,10 +244,6 @@ export function buildProductPdfDownloadHref(generationId: string): string {
 
 export function buildProductMockupDownloadHref(generationId: string): string {
   return `/api/ajax/product-generations/${generationId}/mockup-download`;
-}
-
-export function buildProductPdfGenerateHref(generationId: string): string {
-  return `/api/ajax/product-generations/${generationId}/generate-pdf`;
 }
 
 export function collectComplianceMessages(input: {

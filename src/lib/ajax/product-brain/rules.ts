@@ -9,16 +9,21 @@ export const ALLOWED_PRODUCT_CATEGORIES: readonly ProductCategory[] = [
   "parenting_support",
   "student_tools",
   "creator_tools",
+  "pet_lovers",
+  "occupation_gifts",
+  "hobby_leisure",
+  "humor_novelty",
+  "seasonal_holiday",
 ] as const;
 
 export const PRODUCT_FORMATS = [
-  "planner",
-  "tracker",
-  "worksheet",
-  "checklist",
-  "template",
-  "logbook",
-  "bundle",
+  "mug",
+  "poster",
+  "art_print",
+  "tshirt",
+  "sweatshirt",
+  "tote_bag",
+  "phone_case",
 ] as const;
 
 export interface BlockedContentRule {
@@ -88,6 +93,17 @@ const GENERIC_PRODUCT_TITLES = [
   "to do list",
   "calendar template",
   "printable planner",
+  "funny mug",
+  "coffee mug",
+  "custom mug",
+  "funny t-shirt",
+  "custom t-shirt",
+  "graphic tee",
+  "motivational poster",
+  "wall art",
+  "cute sticker",
+  "tote bag",
+  "phone case",
 ];
 
 const LONG_TAIL_SIGNAL_WORDS = [
@@ -104,6 +120,22 @@ const LONG_TAIL_SIGNAL_WORDS = [
   "iep",
   "sensory",
   "executive function",
+  "dog mom",
+  "dog dad",
+  "cat mom",
+  "cat dad",
+  "for nurses",
+  "night shift",
+  "plant lady",
+  "chicken math",
+  "hobby farm",
+  "rescue dog",
+  "for beekeepers",
+  "for gardeners",
+  "retirement gift",
+  "new parents",
+  "for crocheters",
+  "for quilters",
 ];
 
 const VAGUE_BUYER_PHRASES = [
@@ -126,16 +158,24 @@ const URGENCY_SIGNAL_WORDS = [
   "daily battle",
   "meltdown",
   "burnout",
+  "last minute",
+  "birthday",
+  "anniversary",
+  "graduation",
+  "retirement",
+  "holiday season",
+  "mother's day",
+  "father's day",
 ];
 
 const CONCRETE_FORMAT_WORDS: Record<string, string[]> = {
-  planner: ["planner", "schedule", "routine", "agenda"],
-  tracker: ["tracker", "track", "log", "habit"],
-  worksheet: ["worksheet", "exercise", "practice"],
-  checklist: ["checklist", "steps", "tasks"],
-  template: ["template", "fillable", "printable"],
-  logbook: ["logbook", "journal", "record"],
-  bundle: ["bundle", "kit", "pack"],
+  mug: ["mug", "coffee", "cup", "drinkware"],
+  poster: ["poster", "wall art", "print", "decor"],
+  art_print: ["art print", "print", "wall art", "illustration", "artwork"],
+  tshirt: ["t-shirt", "tshirt", "tee", "shirt", "apparel"],
+  sweatshirt: ["sweatshirt", "hoodie", "crewneck", "apparel"],
+  tote_bag: ["tote", "bag", "carryall"],
+  phone_case: ["phone case", "case", "phone cover"],
 };
 
 /** Concatenate searchable product copy for rule and scoring passes. */

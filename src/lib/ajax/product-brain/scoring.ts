@@ -114,7 +114,7 @@ export function explainProductScore(score: ProductBrainScore): string {
     `Urgency: ${score.urgency}/100 — how pressing the problem feels`,
     `Specificity: ${score.specificity}/100 — niche focus vs generic positioning`,
     `Buyer clarity: ${score.buyerClarity}/100 — how clearly the target buyer is defined`,
-    `Usefulness: ${score.usefulness}/100 — practical utility of the printable format`,
+    `Usefulness: ${score.usefulness}/100 — giftability and resonance of the product format`,
     `Competition risk: ${score.competitionRisk}/100 — lower is better (crowded/generic niches score higher)`,
     `Compliance risk: ${score.complianceRisk}/100 — policy/trademark/medical claim exposure`,
   ];
@@ -122,7 +122,7 @@ export function explainProductScore(score: ProductBrainScore): string {
   if (score.complianceRisk >= 50) {
     lines.push("Compliance flags detected — idea should be blocked or revised before generation.");
   } else if (score.totalScore >= 70 && score.competitionRisk <= 45) {
-    lines.push("Strong utility-first positioning — good candidate for generation.");
+    lines.push("Strong niche-gift positioning — good candidate for generation.");
   } else {
     lines.push("Idea needs more buyer/problem specificity before generation.");
   }

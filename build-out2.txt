@@ -1,0 +1,63 @@
+
+> octane-ajax@0.1.0 build
+> next build
+
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env.local
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.8s
+  Running TypeScript ...
+  Finished TypeScript in 8.4s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/21) ...
+  Generating static pages using 7 workers (5/21) 
+  Generating static pages using 7 workers (10/21) 
+  Generating static pages using 7 workers (15/21) 
+✓ Generating static pages using 7 workers (21/21) in 237ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /agents
+├ ƒ /api/ajax/agent-memory
+├ ƒ /api/ajax/factory-snapshot
+├ ƒ /api/ajax/listings/[id]/gumroad-url
+├ ƒ /api/ajax/listings/[id]/publish
+├ ƒ /api/ajax/listings/[id]/publish-gumroad
+├ ƒ /api/ajax/product-generations/[id]/generate-pdf
+├ ƒ /api/ajax/product-generations/[id]/mockup-download
+├ ƒ /api/ajax/product-generations/[id]/pdf-download
+├ ƒ /api/ajax/reset-demo
+├ ƒ /api/ajax/review-queue
+├ ƒ /api/ajax/review/approve
+├ ƒ /api/ajax/review/reject
+├ ƒ /api/ajax/run-cycle
+├ ƒ /api/ajax/run-forge
+├ ƒ /api/ajax/run-nova
+├ ƒ /api/ajax/run-pixel
+├ ƒ /api/auth/etsy/callback
+├ ƒ /api/auth/etsy/connect
+├ ƒ /api/cron/run-nova
+├ ƒ /api/octane-engineer
+├ ƒ /api/webhooks/etsy-orders
+├ ƒ /auth/callback
+├ ƒ /dashboard
+├ ƒ /factory
+├ ○ /login
+├ ƒ /marketing
+├ ƒ /operator-store
+├ ƒ /operator-store/[listingId]
+├ ƒ /review
+├ ƒ /settings
+├ ƒ /settings/etsy-connect
+└ ƒ /store
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

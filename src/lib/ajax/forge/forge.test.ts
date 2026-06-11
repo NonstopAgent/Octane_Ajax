@@ -141,7 +141,9 @@ describe("runForgeGeneration", () => {
     assert.equal(result.tokenEstimateOutput, 900);
   });
 
-  it("guardrails LLM suggested prices above $149.99", async () => {
+  it("falls back when LLM suggested price violates the schema cap", async () => {
+    // ForgeLlmResponseSchema rejects prices above $149.99, so an
+    // out-of-range LLM price triggers the deterministic fallback.
     const client = createMockOpenAiClient(
       JSON.stringify({ ...validForgePayload, suggestedPrice: 199.99 }),
     );
@@ -151,8 +153,8 @@ describe("runForgeGeneration", () => {
       { client },
     );
 
-    assert.equal(result.mode, "llm");
-    assert.equal(result.suggestedPrice, 49.99);
+    assert.equal(result.mode, "fallback");
+    assert.ok(result.suggestedPrice <= 49.99);
   });
 
   it("guardrails LLM suggested prices below $9.99", async () => {

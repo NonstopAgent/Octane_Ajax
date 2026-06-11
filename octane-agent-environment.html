@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Octane Ajax — Agent Environment (Logan)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#070512; --panel:#0c0a1a; --panel2:#100d22; --line:rgba(124,92,255,.22);
+    --txt:#eae6ff; --muted:#9b93c4; --muted2:#6a6394;
+    --cyan:#36e0ff; --pink:#ff5cc8; --orange:#ff8a3c; --amber:#ffc24a; --green:#58f2a0; --purple:#9b6cff; --teal:#22d3ee; --red:#ff6b81;
+    --px:'Press Start 2P',monospace; --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{ background:
+      radial-gradient(1100px 520px at 50% -8%, rgba(124,92,255,.10), transparent 60%),
+      radial-gradient(800px 460px at 88% 112%, rgba(255,92,200,.07), transparent 60%), var(--bg);
+    color:var(--txt); font-family:var(--sans); min-height:100vh; padding:22px 16px 46px; display:flex; justify-content:center; -webkit-font-smoothing:antialiased }
+  .stage{ width:100%; max-width:1200px }
+  .cap{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted2); text-align:center; margin-bottom:12px }
+  .cap b{ color:var(--cyan) }
+
+  .console{ position:relative; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    background:linear-gradient(160deg,#0c0a1c,#070510);
+    box-shadow:0 0 0 1px rgba(124,92,255,.06), 0 40px 120px -40px #000, 0 0 90px -34px rgba(124,92,255,.35), inset 0 1px 0 rgba(124,92,255,.10) }
+  .console::after{ content:""; position:absolute; inset:0; pointer-events:none; z-index:30;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 3px),
+      radial-gradient(140% 120% at 50% 0%, transparent 62%, rgba(0,0,0,.5) 100%) }
+
+  /* HUD */
+  .hud{ position:relative; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:11px 15px; border-bottom:1px solid var(--line); background:linear-gradient(90deg, rgba(124,92,255,.12), transparent 60%) }
+  .brand{ display:flex; align-items:center; gap:11px }
+  .mark{ width:32px;height:32px;border-radius:8px;position:relative;flex:0 0 auto;background:conic-gradient(from 130deg,var(--cyan),#7b3dff 40%,var(--pink) 70%,var(--cyan));box-shadow:0 0 18px rgba(124,92,255,.6),inset 0 0 10px rgba(0,0,0,.5) }
+  .mark::before{ content:"A";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--px);font-size:11px;color:#0a0420 }
+  .brand h1{ margin:0;font-family:var(--px);font-size:13px;letter-spacing:.04em;color:#dff7ff;text-shadow:0 0 14px rgba(54,224,255,.6),0 2px 0 #5a1a6b }
+  .brand .sub{ margin-top:4px;font-family:var(--mono);font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted) }
+  .hud-mid{ display:flex;align-items:center;gap:13px;flex-wrap:wrap }
+  .lights{ display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:rgba(0,0,0,.35) }
+  .lights .lbl{ font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--muted2);text-transform:uppercase }
+  .dot{ width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.16) }
+  .dot.on{ background:var(--cyan);box-shadow:0 0 10px var(--cyan) }
+  .dot.warn{ background:var(--amber);box-shadow:0 0 10px var(--amber);animation:blink 1.3s infinite }
+  .phase{ font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--pink);text-shadow:0 0 10px rgba(255,92,200,.6);display:none }
+  .phase.show{ display:inline;animation:blink 1s infinite }
+  .sess{ font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--muted2);text-transform:uppercase }
+  .sess b{ color:var(--cyan) }
+  .operator{ display:flex;align-items:center;gap:9px;padding:5px 12px 5px 5px;border:1px solid var(--line);border-radius:999px;background:linear-gradient(90deg,rgba(54,224,255,.10),rgba(0,0,0,.25)) }
+  .avatar{ width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-family:var(--px);font-size:9px;color:#04222b;background:radial-gradient(circle at 30% 25%,#a8f0ff,var(--cyan) 60%,#0a6e86);box-shadow:0 0 14px rgba(54,224,255,.5) }
+  .op-meta{ line-height:1.2 }
+  .op-meta .name{ font-size:12px;font-weight:700 }
+  .op-meta .role{ font-family:var(--mono);font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan) }
+
+  /* main */
+  .main{ position:relative;z-index:10;display:grid;grid-template-columns:1fr 322px }
+  @media (max-width:920px){ .main{ grid-template-columns:1fr } }
+
+  .scene{ position:relative;background:#05030e;border-right:1px solid var(--line); overflow:hidden }
+  .scene canvas{ display:block;width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges }
+  /* neon room signs + bubbles overlay */
+  .ov{ position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:12 }
+  .sign{ font-family:var(--px);font-size:8px;letter-spacing:.02em;padding:3px 6px;border-radius:4px;white-space:nowrap;
+    background:rgba(6,4,16,.7);border:1px solid currentColor;text-shadow:0 0 8px currentColor;box-shadow:0 0 12px -2px currentColor, inset 0 0 8px -4px currentColor }
+  .bubble{ font-family:var(--mono);font-size:9.5px;font-weight:600;color:#0a0420;background:#eae6ff;padding:4px 7px;border-radius:7px;white-space:nowrap;
+    box-shadow:0 3px 0 rgba(0,0,0,.4);opacity:0;transition:opacity .25s, transform .25s;transform:translate(-50%,-40%) scale(.9) }
+  .bubble::after{ content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#eae6ff;border-bottom:0 }
+  .bubble.show{ opacity:1;transform:translate(-50%,-50%) scale(1) }
+
+  /* side dashboard */
+  .side{ background:linear-gradient(180deg,#0b0918,#080614);display:flex;flex-direction:column;min-height:440px }
+  .side h3{ margin:0;padding:9px 13px;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);
+    border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(54,224,255,.08),transparent);display:flex;justify-content:space-between;align-items:center }
+  .side h3 .lv{ display:flex;align-items:center;gap:5px;font-size:8px;letter-spacing:.12em;color:var(--green) }
+  .side h3 .lv i{ width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);font-style:normal;animation:blink 1.6s infinite }
+  .agents{ padding:10px 11px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line) }
+  .acard{ border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.28);padding:8px 10px }
+  .acard .top{ display:flex;align-items:center;gap:8px }
+  .acard .ic{ width:18px;height:18px;border-radius:5px;flex:0 0 auto;box-shadow:0 0 8px currentColor;position:relative }
+  .acard .nm{ font-size:11.5px;font-weight:700 }
+  .acard .rl{ font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2) }
+  .acard .pill{ margin-left:auto;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted) }
+  .acard .pill.work{ color:var(--cyan);border-color:rgba(54,224,255,.4);background:rgba(54,224,255,.1);animation:blink 1.6s infinite }
+  .acard .pill.wait{ color:var(--amber);border-color:rgba(255,194,74,.4);background:rgba(255,194,74,.1) }
+  .acard .stats{ display:flex;gap:12px;margin-top:7px;align-items:center }
+  .acard .st{ font-family:var(--mono);font-size:9px;color:var(--muted) }
+  .acard .st b{ color:var(--txt) }
+  .acard .tkbar{ flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:2px }
+  .acard .tkbar i{ display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,var(--purple),var(--cyan));transition:width .5s }
+  .kpis{ display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line) }
+  .kpi{ background:#0a0817;padding:8px 11px }
+  .kpi .k{ font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2) }
+  .kpi .v{ font-family:var(--px);font-size:15px;margin-top:5px;color:#eaf6ff }
+  .kpi .v .u{ font-family:var(--mono);font-size:9px;color:var(--muted) }
+  .audit{ flex:1;display:flex;flex-direction:column;min-height:150px }
+  .audit .log{ flex:1;overflow:hidden;padding:7px 7px;display:flex;flex-direction:column;gap:0 }
+  .ln{ font-family:var(--mono);font-size:9.5px;line-height:1.55;padding:2px 7px;border-left:2px solid transparent;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:fade .3s }
+  .ln .ts{ color:var(--cyan);opacity:.8 } .ln .tag{ font-weight:700 }
+  .ln.cyan .tag{color:var(--cyan)} .ln.orange .tag{color:var(--orange)} .ln.amber .tag{color:var(--amber)} .ln.green .tag{color:var(--green)} .ln.pink .tag{color:var(--pink)} .ln.red .tag{color:var(--red)}
+  .ln.fresh{ border-left-color:var(--green);background:rgba(88,242,160,.06) }
+
+  /* controls */
+  .controls{ position:relative;z-index:20;display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line);background:rgba(0,0,0,.55) }
+  .btn{ font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:9px 15px;border-radius:7px;cursor:pointer;border:1px solid;background:transparent;color:#fff;display:inline-flex;align-items:center;gap:7px;transition:filter .15s,transform .08s,box-shadow .2s }
+  .btn:active:not(:disabled){ transform:translateY(1px) }
+  .btn:disabled{ opacity:.4;cursor:not-allowed }
+  .btn.primary{ border-color:rgba(255,138,60,.7);color:#160a04;background:linear-gradient(180deg,#ffa05a,#e0590f);box-shadow:0 0 18px -4px rgba(255,138,60,.6) }
+  .btn.primary:hover:not(:disabled){ filter:brightness(1.08) }
+  .btn.approve{ border-color:rgba(88,242,160,.6);color:#bff7d6;background:rgba(88,242,160,.12) }
+  .btn.approve.ready{ animation:glowg 1.2s infinite }
+  .btn.secondary{ border-color:rgba(54,224,255,.45);color:var(--cyan);background:rgba(54,224,255,.08) }
+  .btn.ghost{ border-color:var(--line);color:var(--muted) }
+  .spin{ width:10px;height:10px;border:1.6px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite }
+  .tick{ margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 200px }
+  .tick .tl{ font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.14em;color:var(--cyan);opacity:.7;flex:0 0 auto }
+  .tick .tt{ font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+
+  .foot{ text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted2);margin-top:13px }
+  .foot b{ color:var(--muted) }
+
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fade{from{opacity:0;transform:translateX(5px)}to{opacity:1}}
+  @keyframes glowg{0%,100%{box-shadow:0 0 8px -2px rgba(88,242,160,.5)}50%{box-shadow:0 0 22px 0 rgba(88,242,160,.6)}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="cap">Agent Environment · <b>Octane Ajax</b> · the agents live on your floor — personalized for Logan</div>
+  <div class="console">
+    <div class="hud">
+      <div class="brand"><div class="mark"></div><div><h1>OCTANE AJAX</h1><div class="sub">Solo-Operator Agent Floor</div></div></div>
+      <div class="hud-mid">
+        <div class="lights"><span class="lbl">Agents</span><span class="dot" id="d-nova"></span><span class="dot" id="d-forge"></span><span class="dot" id="d-pixel"></span></div>
+        <span class="phase" id="phase">▶ STANDBY</span>
+        <span class="sess">SESSION <b id="sess">00:00</b></span>
+      </div>
+      <div class="operator"><div class="avatar">LA</div><div class="op-meta"><div class="name">Logan Alvarez</div><div class="role">Operator · Owner · @lilchulo</div></div></div>
+    </div>
+
+    <div class="main">
+      <div class="scene" id="scene">
+        <canvas id="cv" width="640" height="360"></canvas>
+        <!-- neon signs + bubbles injected by JS -->
+      </div>
+
+      <div class="side">
+        <h3>Agents <span class="lv"><i></i>LIVE</span></h3>
+        <div class="agents" id="agents"></div>
+        <div class="kpis">
+          <div class="kpi"><div class="k">Ideas</div><div class="v" id="k-ideas">0</div></div>
+          <div class="kpi"><div class="k">In Review</div><div class="v" id="k-rev">0</div></div>
+          <div class="kpi"><div class="k">Published</div><div class="v" id="k-pub">0</div></div>
+          <div class="kpi"><div class="k">Revenue</div><div class="v"><span class="u">$</span><span id="k-money">0</span></div></div>
+        </div>
+        <div class="audit">
+          <h3 style="border-top:1px solid var(--line)">Audit Log <span class="lv" style="color:var(--muted2)">IMMUTABLE</span></h3>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="b-run">▶ Run Cycle</button>
+      <button class="btn approve" id="b-app" disabled>✓ Approve</button>
+      <button class="btn secondary" id="b-pix">▶ Run Pixel</button>
+      <button class="btn ghost" id="b-rst">⟳ Reset</button>
+      <div class="tick"><span class="tl">FLOOR</span><span class="tt" id="tick">Floor online — agents idle. Press Run Cycle.</span></div>
+    </div>
+  </div>
+  <div class="foot">Agents move between rooms, work, and report via floating logs · Review Gate is <b>mandatory</b> — nothing ships without Logan's approval.</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d"); ctx.imageSmoothingEnabled=false;
+const W=640,H=360, scene=document.getElementById("scene");
+const $=(id)=>document.getElementById(id);
+const P={cyan:"#36e0ff",pink:"#ff5cc8",orange:"#ff8a3c",amber:"#ffc24a",green:"#58f2a0",purple:"#9b6cff",teal:"#22d3ee"};
+
+// Rooms: interior footprint + accent + agent
+const ROOMS=[
+  {id:"research",name:"RESEARCH LAB",agent:"nova",ac:P.cyan,  x:24, y:74, w:176,h:120, desk:"l"},
+  {id:"forge",   name:"DESIGN PRESS",agent:"forge",ac:P.orange,x:232,y:74, w:176,h:120, desk:"l"},
+  {id:"review",  name:"REVIEW GATE", agent:"human",ac:P.amber, x:440,y:74, w:176,h:120, desk:"c"},
+  {id:"pixel",   name:"MEDIA STUDIO",agent:"pixel",ac:P.teal,  x:128,y:214,w:176,h:120, desk:"l"},
+  {id:"store",   name:"STOREFRONT",  agent:null,   ac:P.green, x:336,y:214,w:280,h:120, desk:"r"},
+];
+const RM=Object.fromEntries(ROOMS.map(r=>[r.id,r]));
+function cx(r){return r.x+r.w/2;} function cy(r){return r.y+r.h/2;}
+
+// Conduits (floor cabling) between room centers
+const PATHS={
+  c1:[[200,134],[232,134]],
+  c2:[[408,134],[440,134]],
+  c3:[[528,194],[528,250],[304,250],[304,260]],   // review -> media (down/left)
+  c4:[[304,274],[336,274]],                         // media -> store
+};
+
+// ---------- pixel helpers ----------
+function R(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,Math.max(1,w|0),Math.max(1,h|0)); }
+function glow(x,y,r,c,a){ ctx.save(); ctx.globalCompositeOperation="lighter"; const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,c); g.addColorStop(1,"rgba(0,0,0,0)"); ctx.globalAlpha=a==null?1:a; ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill(); ctx.restore(); }
+function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return "rgba("+(n>>16&255)+","+(n>>8&255)+","+(n&255)+","+a+")"; }
+
+// ---------- background: skyline window + walls + floor ----------
+let stars=[]; for(let i=0;i<46;i++) stars.push([Math.random()*W, Math.random()*52, Math.random()]);
+function drawBack(t){
+  R(0,0,W,H,"#0a0718");
+  // window strip with city
+  R(0,0,W,56,"#0c0a22");
+  const sky=ctx.createLinearGradient(0,0,0,56); sky.addColorStop(0,"#160d33"); sky.addColorStop(1,"#241046"); ctx.fillStyle=sky; ctx.fillRect(0,0,W,56);
+  for(const s of stars){ const tw=0.5+0.5*Math.sin(t/600+s[2]*9); R(s[0],s[1],1,1,hexA("#bfe9ff",0.3+0.5*tw*s[2])); }
+  glow(540,16,26,hexA(P.cyan,.5),.5); R(534,10,12,12,"#bfe9ff"); R(536,12,8,8,"#7fc8 e".replace(' ',''),); // moon
+  // buildings
+  const B=[[16,30,18,26,P.purple],[40,22,14,34,P.cyan],[58,34,20,22,P.pink],[120,26,16,30,P.cyan],[150,18,12,38,P.purple],[210,30,22,26,P.pink],[250,24,14,32,P.cyan],[330,28,18,28,P.purple],[366,20,12,36,P.pink],[430,30,20,26,P.cyan],[470,24,14,32,P.purple],[560,28,16,28,P.pink],[592,22,14,34,P.cyan]];
+  for(const b of B){ R(b[0],b[1],b[2],56-b[1],"#0b0820"); R(b[0],b[1],b[2],2,hexA(b[4],.8));
+    for(let yy=b[1]+4;yy<54;yy+=5)for(let xx=b[0]+2;xx<b[0]+b[2]-2;xx+=4){ if(Math.random()>.55) R(xx,yy,2,2,hexA(b[4], .35+0.4*Math.sin(t/700+xx))); } }
+  R(0,55,W,2,hexA(P.pink,.5));
+  // floor base
+  const fl=ctx.createLinearGradient(0,57,0,H); fl.addColorStop(0,"#120e26"); fl.addColorStop(1,"#0a0718"); ctx.fillStyle=fl; ctx.fillRect(0,57,W,H-57);
+  // neon floor grid
+  for(let x=0;x<=W;x+=32) R(x,57,1,H-57,hexA(P.purple,.08));
+  for(let y=64;y<=H;y+=32) R(0,y,W,1,hexA(P.purple,.08));
+}
+
+// ---------- room shell + props ----------
+function tiled(r){ for(let yy=r.y; yy<r.y+r.h; yy+=12) for(let xx=r.x; xx<r.x+r.w; xx+=12){ const odd=((xx/12|0)+(yy/12|0))&1; R(xx,yy,12,12, odd?"#161031":"#120c28"); } }
+function roomShell(r,state,t){
+  // floor
+  tiled(r);
+  // soft accent floor wash when active
+  if(state==="active"){ ctx.save(); ctx.globalAlpha=.10; R(r.x,r.y,r.w,r.h,r.ac); ctx.restore(); }
+  if(state==="alert"){ ctx.save(); ctx.globalAlpha=.12; R(r.x,r.y,r.w,r.h,P.amber); ctx.restore(); }
+  // walls (back + side, thin)
+  R(r.x,r.y,r.w,3,"#070414"); // top wall shadow
+  // neon border
+  const on = state!=="idle"; const col = state==="alert"?P.amber:r.ac;
+  ctx.save(); ctx.globalAlpha = on? (0.8+0.2*Math.sin(t/200)) : .5; ctx.strokeStyle=col; ctx.lineWidth=1; ctx.strokeRect(r.x+.5,r.y+.5,r.w-1,r.h-1); ctx.restore();
+  if(on) glow(cx(r),r.y, r.w*0.5, hexA(col,.25),.5);
+  // corner brackets
+  ctx.strokeStyle=hexA(col,.8); ctx.lineWidth=1; const s=7;
+  ctx.beginPath(); ctx.moveTo(r.x+2,r.y+s+2);ctx.lineTo(r.x+2,r.y+2);ctx.lineTo(r.x+s+2,r.y+2);
+  ctx.moveTo(r.x+r.w-s-2,r.y+2);ctx.lineTo(r.x+r.w-2,r.y+2);ctx.lineTo(r.x+r.w-2,r.y+s+2);
+  ctx.moveTo(r.x+2,r.y+r.h-s-2);ctx.lineTo(r.x+2,r.y+r.h-2);ctx.lineTo(r.x+s+2,r.y+r.h-2);
+  ctx.moveTo(r.x+r.w-s-2,r.y+r.h-2);ctx.lineTo(r.x+r.w-2,r.y+r.h-2);ctx.lineTo(r.x+r.w-2,r.y+r.h-s-2); ctx.stroke();
+  // LED
+  const led = state==="active"?col : state==="alert"?P.amber : "#3a3358";
+  glow(r.x+10,r.y+10,5,hexA(led,.8), on?(.6+.4*Math.sin(t/180)):.3); R(r.x+8,r.y+8,4,4,led);
+}
+
+// shelf + plant + lamp props (back wall)
+function props(r,t){
+  // bookshelf back-left
+  R(r.x+8,r.y+10,26,16,"#241a3a"); for(let i=0;i<5;i++) R(r.x+10+i*5,r.y+12,3,12,["#5b6cff","#ff7ad1","#58f2a0","#ffc24a","#36e0ff"][i%5]);
+  // plant back-right
+  const pxn=r.x+r.w-16; R(pxn,r.y+18,8,8,"#2a1c12"); R(pxn-1,r.y+10,3,9,"#3aa86a"); R(pxn+3,r.y+8,3,11,"#46c47e"); R(pxn+6,r.y+12,3,8,"#3aa86a");
+  // lamp (warm)
+  const lx=r.desk==="r"? r.x+22 : r.x+r.w-22, ly=r.y+r.h-20;
+  R(lx,ly,2,12,"#2a2440"); R(lx-3,ly-4,8,5,"#ffcaa0"); glow(lx+1,ly-2,16,hexA("#ff9a4a",.5),.5);
+}
+
+// desk + monitor showing product
+function deskMonitor(r,working,prodCol,t){
+  const dl = r.desk==="r";
+  const dx = dl? r.x+r.w-86 : r.x+14;
+  const dy = r.y+r.h-46;
+  R(dx,dy+14,72,8,"#241a36"); R(dx,dy+22,6,18,"#1b1330"); R(dx+66,dy+22,6,18,"#1b1330"); // desk
+  // monitor
+  const mx=dx+ (dl?40:6), my=dy-6;
+  R(mx,my,30,22,"#0a0820"); ctx.save(); ctx.globalAlpha = working? (0.85+0.15*Math.sin(t/90)) : .5;
+  R(mx+2,my+2,26,16, working? prodCol : "#142a3a"); ctx.restore();
+  // screen content: tiny product/doc lines
+  for(let i=0;i<4;i++) R(mx+4,my+5+i*3,18- (i*2),1, hexA("#06121a",.7));
+  R(mx+12,my+22,6,3,"#1b1330"); R(mx+8,my+25,14,2,"#241a36"); // stand
+  if(working) glow(mx+15,my+10,18,hexA(prodCol,.5),.5);
+}
+
+// ---------- agent character ----------
+const SKIN={nova:"#ffd9b8",forge:"#ffcf9e",pixel:"#ffd2c2",human:"#ffd9b8"};
+const HAIR={nova:"#36e0ff",forge:"#ff8a3c",pixel:"#22d3ee",human:"#ffc24a"};
+function agentSprite(x,baseY,who,ac,state,t){
+  const bob = state==="work"? Math.round(Math.sin(t/110)*1) : Math.round(Math.sin(t/520)*1);
+  const y=baseY+bob;
+  glow(x,baseY+1,12,hexA(ac,.35), state==="work"?.6:.3);
+  R(x-7,baseY+1,14,3,"rgba(0,0,0,.35)"); // shadow
+  // legs
+  R(x-4,y-4,3,5,"#241a36"); R(x+1,y-4,3,5,"#241a36");
+  // torso (jacket accent)
+  R(x-5,y-12,10,9,ac); R(x-5,y-12,10,2,hexA("#ffffff",.25));
+  // arms
+  if(state==="work"){ const a=Math.sin(t/90)>0?1:0; R(x-7,y-10+a,3,4,ac); R(x+4,y-10+(1-a),3,4,ac); }
+  else { R(x-7,y-11,3,6,ac); R(x+4,y-11,3,6,ac); }
+  // head
+  R(x-4,y-20,8,8,SKIN[who]); R(x-4,y-21,8,3,HAIR[who]); // hair
+  R(x-3,y-17,2,2,"#1a1330"); R(x+1,y-17,2,2,"#1a1330"); // eyes
+  // tool spark when working
+  if(state==="work"){ const fx=x+(Math.sin(t/120)>0?7:-7); R(fx,y-14,2,2,hexA(ac,.9)); glow(fx+1,y-13,5,hexA(ac,.8),.7); }
+  if(state==="wait"){ R(x-1,y-26,2,5,P.amber); R(x-1,y-20,2,2,P.amber); /* ! */ }
+}
+// human reviewer (review room)
+function humanSprite(x,baseY,active,t){
+  const bob=Math.round(Math.sin(t/600));
+  const y=baseY+bob; R(x-7,baseY+1,14,3,"rgba(0,0,0,.35)");
+  R(x-4,y-4,3,5,"#2a2040"); R(x+1,y-4,3,5,"#2a2040");
+  R(x-5,y-12,10,9,active?"#caa24a":"#6a5a3a"); R(x-4,y-20,8,8,"#ffd9b8"); R(x-4,y-21,8,3,"#caa24a");
+  R(x-3,y-17,2,2,"#1a1330"); R(x+1,y-17,2,2,"#1a1330");
+  if(active){ glow(x,y-10,16,hexA(P.amber,.4),.6); R(x-1,y-27,2,6,P.amber); R(x-1,y-20,2,2,P.amber); }
+}
+
+// storefront product racks (accumulate)
+let shelfCount=0;
+function storefront(r,t){
+  // counter
+  R(r.x+12,r.y+r.h-30,r.w-24,8,"#241a36");
+  // framed listings on back wall
+  const cols=6; for(let i=0;i<Math.min(shelfCount,12);i++){ const col=i%cols, row=(i/cols)|0; const fx=r.x+18+col*40, fy=r.y+20+row*44;
+    R(fx,fy,30,30,"#0c0a1e"); R(fx+2,fy+2,26,22, ["#1e3a5f","#3a2a1e","#1e3a2c","#2c1e3a","#3a1e2c","#1e2e3a"][i%6]); R(fx+2,fy+26,26,2,P.green);
+    for(let k=0;k<3;k++) R(fx+4,fy+5+k*5,18,1,hexA("#bfe9ff",.4)); }
+  glow(cx(r),r.y+8,r.w*0.5,hexA(P.green,.18),.5);
+}
+
+// ---------- conduits + token ----------
+function polyLen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); return L; }
+function polyAt(pts,fr){ let L=polyLen(pts), d=fr*L; for(let i=1;i<pts.length;i++){ const seg=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); if(d<=seg){ const k=seg?d/seg:0; return [pts[i-1][0]+(pts[i][0]-pts[i-1][0])*k, pts[i-1][1]+(pts[i][1]-pts[i-1][1])*k]; } d-=seg; } return pts[pts.length-1]; }
+function drawConduit(pts,on,col,t){
+  ctx.lineCap="round"; ctx.lineJoin="round";
+  ctx.strokeStyle="rgba(255,255,255,.05)"; ctx.lineWidth=4; line(pts);
+  ctx.strokeStyle= on? col : hexA(col,.25); ctx.lineWidth= on?2:1.4; ctx.setLineDash([5,5]); ctx.lineDashOffset= on? -(t/40)%10 : -(t/400)%10; line(pts); ctx.setLineDash([]);
+  if(on){ ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.strokeStyle=hexA(col,.4); ctx.lineWidth=4; line(pts); ctx.restore(); }
+}
+function line(pts){ ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.stroke(); }
+
+// ---------- state ----------
+const ST={ ideas:0, review:0, pub:0, money:0, busy:false, awaiting:false, prodIdx:0,
+  agents:{ nova:{status:"idle",tk:0,cost:0}, forge:{status:"idle",tk:0,cost:0}, pixel:{status:"idle",tk:0,cost:0} },
+  rooms:{ research:"idle",forge:"idle",review:"idle",pixel:"idle",store:"idle" },
+  flow:{c1:false,c2:false,c3:false,c4:false}, token:null, t0:Date.now() };
+const PRODUCTS=[
+  {t:"Daily Habit Tracker",p:7,col:"#1e3a5f"},{t:"Meal Prep Planner",p:9,col:"#3a2a1e"},
+  {t:"Budget Worksheet Set",p:8,col:"#1e3a2c"},{t:"Cleaning Checklist",p:6,col:"#2c1e3a"},
+  {t:"Reading Log + Goals",p:7,col:"#3a1e2c"},{t:"Student Study Planner",p:10,col:"#1e2e3a"} ];
+
+// ---------- overlays (signs + bubbles) ----------
+const signs={}, bubbles={};
+ROOMS.forEach(r=>{
+  const s=document.createElement("div"); s.className="ov"; s.innerHTML='<span class="sign" style="color:'+r.ac+'">'+r.name+'</span>';
+  s.style.left=(cx(r)/W*100)+"%"; s.style.top=((r.y-2)/H*100)+"%"; scene.appendChild(s); signs[r.id]=s;
+  const b=document.createElement("div"); b.className="ov"; b.innerHTML='<span class="bubble" id="bub-'+r.id+'"></span>';
+  b.style.left=(cx(r)/W*100)+"%"; b.style.top=((r.y+34)/H*100)+"%"; scene.appendChild(b); bubbles[r.id]=b.querySelector(".bubble");
+});
+function bubble(roomId,text){ const b=bubbles[roomId]; if(!b)return; if(text){ b.textContent=text; b.classList.add("show"); } else b.classList.remove("show"); }
+
+// ---------- agent cards ----------
+const AGMETA={nova:["Nova","Research Agent",P.cyan],forge:["Forge","Creation Agent",P.orange],pixel:["Pixel","Marketing Agent",P.teal]};
+function buildCards(){ const wrap=$("agents"); wrap.innerHTML=""; for(const k of ["nova","forge","pixel"]){ const m=AGMETA[k];
+  const d=document.createElement("div"); d.className="acard"; d.id="ac-"+k;
+  d.innerHTML='<div class="top"><span class="ic" style="background:'+m[2]+';color:'+m[2]+'"></span><div><div class="nm">'+m[0]+'</div><div class="rl">'+m[1]+'</div></div><span class="pill" id="pill-'+k+'">Idle</span></div>'+
+    '<div class="stats"><span class="st">TOKENS <b id="tk-'+k+'">0.0k</b></span><span class="st">COST <b id="ct-'+k+'">$0.00</b></span></div>'+
+    '<div class="tkbar"><i id="bar-'+k+'"></i></div>'; wrap.appendChild(d); } }
+function renderAgents(){ for(const k of ["nova","forge","pixel"]){ const a=ST.agents[k]; const pill=$("pill-"+k);
+  pill.className="pill"+(a.status==="working"?" work":a.status==="waiting"?" wait":""); pill.textContent=a.status==="working"?"Working":a.status==="waiting"?"Waiting":"Idle";
+  $("tk-"+k).textContent=(a.tk/1000).toFixed(1)+"k"; $("ct-"+k).textContent="$"+a.cost.toFixed(2); $("bar-"+k).style.width=Math.min(100,a.tk/120)+"%"; } }
+function renderKPI(){ $("k-ideas").textContent=ST.ideas; $("k-rev").textContent=ST.review; $("k-pub").textContent=ST.pub; $("k-money").textContent=ST.money; }
+
+// ---------- log ----------
+function ts(){ const d=new Date(),p=(n)=>String(n).padStart(2,"0"); return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
+function log(tag,msg,tone){ const w=$("log"); const l=document.createElement("div"); l.className="ln "+(tone||"")+" fresh"; l.innerHTML='<span class="ts">'+ts()+'</span> <span class="tag">'+tag+'</span> '+msg; w.prepend(l); setTimeout(()=>l.classList.remove("fresh"),3000); while(w.children.length>18) w.removeChild(w.lastChild); $("tick").textContent=tag+" — "+msg; }
+
+// ---------- render loop ----------
+function frame(now){ const t=now;
+  drawBack(t);
+  for(const k in PATHS) drawConduit(PATHS[k], ST.flow[k], k==="c3"?P.amber:(k==="c4"?P.green:RM[Object.keys(RM)[0]].ac), t);
+  // draw conduit colors per segment
+  // rooms
+  for(const r of ROOMS){ const stt=ST.rooms[r.id]; roomShell(r,stt,t); props(r,t);
+    if(r.id==="store"){ storefront(r,t); }
+    else { const working = stt==="active"; deskMonitor(r, working, r.id==="research"?P.cyan:r.id==="forge"?P.orange:P.teal, t); }
+  }
+  // agents
+  drawAgentAt("research","nova",t); drawAgentAt("forge","forge",t); drawAgentAt("pixel","pixel",t);
+  // human reviewer
+  { const r=RM.review; humanSprite(cx(r)+18, r.y+r.h-22, ST.rooms.review!=="idle", t); }
+  // token
+  if(ST.token){ const pts=PATHS[ST.token.path]; const pt=polyAt(pts,ST.token.fr); glow(pt[0],pt[1],8,hexA(ST.token.col,.8),.8); R(pt[0]-4,pt[1]-4,8,8,ST.token.col); R(pt[0]-2,pt[1]-2,4,4,"#fff"); }
+  requestAnimationFrame(frame);
+}
+function drawAgentAt(roomId,who,t){ const r=RM[roomId]; const a=ST.agents[who]; const state=a.status==="working"?"work":a.status==="waiting"?"wait":"idle";
+  agentSprite(cx(r)-6, r.y+r.h-22, who, AGMETA[who][2], state, t); }
+
+// ---------- token tween ----------
+function moveToken(path,dur,col){ return new Promise(res=>{ ST.token={path,fr:0,col}; const s=performance.now(); (function step(n){ let p=Math.min(1,(n-s)/dur); ST.token.fr=p; if(p<1) requestAnimationFrame(step); else { ST.token=null; res(); } })(performance.now()); }); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function setRoom(id,s){ ST.rooms[id]=s; }
+function setAgent(k,s){ ST.agents[k].status=s; const dot=$("d-"+k); if(dot) dot.className="dot"+(s==="working"?" on":s==="waiting"?" warn":""); renderAgents(); }
+function spend(k,tk){ ST.agents[k].tk+=tk; ST.agents[k].cost+=tk*0.000003*1000/1000* (k==="forge"?1.6:1); ST.agents[k].cost=Math.round(ST.agents[k].cost*100)/100; renderAgents(); }
+
+// ---------- cycle ----------
+const bRun=$("b-run"),bApp=$("b-app"),bPix=$("b-pix"),bRst=$("b-rst");
+function busy(b){ ST.busy=b; bRun.disabled=b||ST.awaiting; bPix.disabled=b; bRst.disabled=b; }
+async function runCycle(){ if(ST.busy||ST.awaiting)return; busy(true); $("phase").classList.add("show");
+  // NOVA
+  $("phase").textContent="▶ NOVA SCANNING"; bRun.innerHTML='<span class="spin"></span>NOVA…';
+  setRoom("research","active"); setAgent("nova","working"); ST.ideas++; renderKPI();
+  bubble("research","Scanning demand signals…"); log("NOVA","scanning demand signals → idea queued","cyan");
+  for(let i=0;i<6;i++){ spend("nova",420+Math.random()*300); await sleep(150); }
+  bubble("research",null); setAgent("nova","idle"); setRoom("research","idle");
+  ST.flow.c1=true; log("FLOW","idea → Design Press","cyan"); await moveToken("c1",750,P.cyan); ST.flow.c1=false;
+  // FORGE
+  $("phase").textContent="▶ FORGE BUILDING"; bRun.innerHTML='<span class="spin"></span>FORGE…';
+  setRoom("forge","active"); setAgent("forge","working"); bubble("forge","Manufacturing listing assets…"); log("FORGE","building mockup + printable PDF","orange");
+  for(let i=0;i<7;i++){ spend("forge",520+Math.random()*340); await sleep(150); }
+  bubble("forge",null); setAgent("forge","idle"); setRoom("forge","idle");
+  ST.flow.c2=true; log("FLOW","draft → Review Gate","orange"); await moveToken("c2",750,P.orange); ST.flow.c2=false;
+  // REVIEW
+  setRoom("review","alert"); ST.review++; renderKPI(); bubble("review","Awaiting Logan's approval"); log("REVIEW","⚠ mandatory human gate — approve to ship","amber");
+  $("phase").textContent="▌ AWAITING REVIEW"; bRun.innerHTML="▶ Run Cycle"; ST.awaiting=true; busy(false); bApp.disabled=false; bApp.classList.add("ready"); bRun.disabled=true;
+}
+async function approve(){ if(!ST.awaiting)return; ST.awaiting=false; bApp.disabled=true; bApp.classList.remove("ready"); busy(true);
+  $("phase").classList.add("show"); $("phase").textContent="▶ APPROVED"; bubble("review",null); log("OPERATOR","Logan approved ✓ — release to Media Studio","green");
+  ST.review=Math.max(0,ST.review-1); renderKPI(); setRoom("review","idle");
+  ST.flow.c3=true; await moveToken("c3",1100,P.amber); ST.flow.c3=false;
+  // PIXEL
+  $("phase").textContent="▶ PIXEL PACKAGING"; bRun.innerHTML='<span class="spin"></span>PIXEL…';
+  setRoom("pixel","active"); setAgent("pixel","working"); bubble("pixel","Packaging promo content…"); log("PIXEL","packaging short-form promo","teal");
+  for(let i=0;i<5;i++){ spend("pixel",380+Math.random()*260); await sleep(150); }
+  bubble("pixel",null); setAgent("pixel","idle"); setRoom("pixel","idle");
+  ST.flow.c4=true; log("FLOW","approved product → Storefront","green"); await moveToken("c4",700,P.green); ST.flow.c4=false;
+  // STORE
+  setRoom("store","active"); const prod=PRODUCTS[ST.prodIdx%PRODUCTS.length]; ST.prodIdx++; shelfCount++;
+  ST.pub++; ST.money+=prod.p; renderKPI(); bubble("store","“"+prod.t+"” $"+prod.p+" live"); log("STORE","published draft “"+prod.t+"” $"+prod.p,"green");
+  await sleep(900); bubble("store",null); setRoom("store","idle");
+  $("phase").textContent="▶ STANDBY"; $("phase").classList.remove("show"); bRun.innerHTML="▶ Run Cycle"; busy(false); bRun.disabled=false; log("SYS","cycle complete · quality over volume","cyan");
+}
+async function runPixel(){ if(ST.busy||ST.awaiting)return; if(ST.pub===0){ log("PIXEL","no approved listing yet — run a cycle first","amber"); return; }
+  busy(true); $("phase").classList.add("show"); $("phase").textContent="▶ PIXEL PROMO"; bPix.innerHTML='<span class="spin"></span>PIXEL…';
+  setRoom("pixel","active"); setAgent("pixel","working"); bubble("pixel","Scheduling promos…"); for(let i=0;i<6;i++){ spend("pixel",300+Math.random()*200); await sleep(150);} log("PIXEL","scheduled 3 promos for live listings","teal");
+  bubble("pixel",null); setAgent("pixel","idle"); setRoom("pixel","idle"); $("phase").classList.remove("show"); bPix.innerHTML="▶ Run Pixel"; busy(false); }
+function reset(){ if(ST.busy)return; ST.ideas=ST.review=ST.pub=ST.money=ST.prodIdx=0; shelfCount=0; ST.awaiting=false;
+  for(const k in ST.agents){ ST.agents[k]={status:"idle",tk:0,cost:0}; setAgent(k,"idle"); } for(const id in ST.rooms) setRoom(id,"idle");
+  for(const r of ROOMS) bubble(r.id,null); bApp.disabled=true; bApp.classList.remove("ready"); bRun.disabled=false; $("phase").classList.remove("show");
+  renderKPI(); renderAgents(); $("log").innerHTML=""; log("SYS","floor reset — agents idle, racks cleared","cyan"); }
+
+bRun.onclick=runCycle; bApp.onclick=approve; bPix.onclick=runPixel; bRst.onclick=reset;
+setInterval(()=>{ const s=Math.floor((Date.now()-ST.t0)/1000); $("sess").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); },1000);
+const AMB=["telemetry nominal · RLS scoped to operator","agent memory synced","Etsy adapter: draft-only mode armed","compliance filter active · blocked-product rules","cost guard: budget headroom 100%"]; let ai=0;
+setInterval(()=>{ if(!ST.busy&&!ST.awaiting&&Math.random()>.45){ log("SYS",AMB[ai++%AMB.length],"cyan"); } },5600);
+
+buildCards(); renderAgents(); renderKPI();
+log("BOOT","operator LOGAN authenticated · clearance OWNER","green"); log("BOOT","Octane Ajax floor online · @lilchulo","cyan");
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

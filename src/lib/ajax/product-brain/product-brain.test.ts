@@ -11,16 +11,16 @@ import type { ProductBrainInput } from "@/lib/ajax/product-brain/types";
 
 function baseInput(overrides: Partial<ProductBrainInput> = {}): ProductBrainInput {
   return {
-    title: "Visual Morning Routine Planner for Parents of PDA Children",
-    niche: "parenting support for pathological demand avoidance mornings",
-    targetBuyer: "Parents of children with PDA who struggle with morning transitions",
+    title: "Reactive Rescue Dog Mom T-Shirt Celebrating Training Wins",
+    niche: "reactive rescue dog mom apparel",
+    targetBuyer: "Dog moms of reactive rescue dogs navigating leash training",
     problemSolved:
-      "Reduce overwhelming morning meltdowns with a visual step-by-step routine planner",
-    format: "planner",
-    category: "parenting_support",
+      "Owners of reactive rescue dogs feel judged on walks and struggle to find apparel celebrating training wins",
+    format: "tshirt",
+    category: "pet_lovers",
     description:
-      "Printable visual morning routine planner with icons, checkboxes, and transition cues for PDA-friendly mornings.",
-    keywords: ["pda", "morning routine", "visual planner", "parents", "sensory"],
+      "Soft original-design t-shirt apparel for the rescue dog mom whose daily battle of leash training deserves celebration.",
+    keywords: ["rescue dog", "dog mom", "reactive dog shirt", "dog training", "dog mom gift"],
     ...overrides,
   };
 }

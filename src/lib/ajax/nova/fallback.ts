@@ -8,111 +8,107 @@ export type FakeIdeaDraft = {
   trend_score: number;
 };
 
-/** Deterministic fallback ideas — real printable digital downloads for underserved niches. */
-export function buildFakeProductIdeas(runId: string): FakeIdeaDraft[] {
-  const suffix = runId.slice(0, 8);
-  return [
-    {
-      niche: "ADHD adult productivity",
-      title: `ADHD Daily Routine Planner for Adults — ${suffix}`,
-      description:
-        "A structured printable planner for adults with ADHD who struggle to maintain morning and evening routines. Includes time-blocking, priority ranking, brain-dump section, and habit check-ins. Solves the chaos of unstructured days.",
-      seo_keywords: [
-        "adhd planner",
-        "adhd daily routine",
-        "executive function",
-        "printable planner adhd",
-        "adult adhd tools",
-        "routine tracker",
-      ],
-      trend_score: 88,
-    },
-    {
-      niche: "Small business owner finances",
-      title: `Small Business Weekly Income Tracker — ${suffix}`,
-      description:
-        "A printable weekly tracker for small business owners and Etsy sellers who need a simple way to log sales, expenses, and profit without complex software. Designed for non-accountants who run solo shops.",
-      seo_keywords: [
-        "small business tracker",
-        "etsy seller income log",
-        "business expense tracker",
-        "printable income worksheet",
-        "solo business planner",
-        "weekly profit tracker",
-      ],
-      trend_score: 82,
-    },
-    {
-      niche: "Homeschool parent planning",
-      title: `Homeschool Year Planner Bundle — ${suffix}`,
-      description:
-        "A complete printable planning bundle for homeschool parents covering curriculum scheduling, daily lesson blocks, attendance records, and subject progress tracking. Built for the overwhelmed parent managing multiple grade levels.",
-      seo_keywords: [
-        "homeschool planner",
-        "homeschool curriculum tracker",
-        "lesson plan template",
-        "homeschool attendance",
-        "printable homeschool bundle",
-        "homeschool schedule",
-      ],
-      trend_score: 76,
-    },
-  ];
-}
-
 type FallbackIdeaSpec = FakeIdeaDraft & {
   format: string;
   category: string;
   targetBuyer: string;
+  problemSolved: string;
   suggestedPrice: number;
 };
 
-const FALLBACK_SPECS: Omit<FallbackIdeaSpec, "title">[] = [
-  {
-    niche: "ADHD adult productivity",
-    description:
-      "A structured printable planner for adults with ADHD who struggle to maintain morning and evening routines. Includes time-blocking, priority ranking, brain-dump section, and habit check-ins.",
-    seo_keywords: ["adhd planner", "adhd daily routine", "executive function", "printable planner adhd", "adult adhd tools", "routine tracker"],
-    trend_score: 88,
-    format: "planner",
-    category: "wellness_tracking",
-    targetBuyer: "Adults with ADHD looking for structured daily routine support",
-    suggestedPrice: 5.99,
-  },
-  {
-    niche: "Small business owner finances",
-    description:
-      "A printable weekly tracker for small business owners and Etsy sellers who need a simple way to log sales, expenses, and profit without complex software.",
-    seo_keywords: ["small business tracker", "etsy seller income log", "business expense tracker", "printable income worksheet", "solo business planner", "weekly profit tracker"],
-    trend_score: 82,
-    format: "tracker",
-    category: "small_business",
-    targetBuyer: "Solo Etsy sellers and small business owners managing finances manually",
-    suggestedPrice: 4.99,
-  },
-  {
-    niche: "Homeschool parent planning",
-    description:
-      "A complete printable planning bundle for homeschool parents covering curriculum scheduling, daily lesson blocks, attendance records, and subject progress tracking.",
-    seo_keywords: ["homeschool planner", "homeschool curriculum tracker", "lesson plan template", "homeschool attendance", "printable homeschool bundle", "homeschool schedule"],
-    trend_score: 76,
-    format: "bundle",
-    category: "parenting_support",
-    targetBuyer: "Homeschool parents managing multiple children across grade levels",
-    suggestedPrice: 8.99,
-  },
-];
+/** Deterministic fallback specs — niche print-on-demand gift products. */
+function buildFallbackSpecs(runId: string): FallbackIdeaSpec[] {
+  const suffix = runId.slice(0, 8);
+  return [
+    {
+      niche: "backyard chicken keeper humor gifts",
+      title: `Chicken Math Club Member Coffee Mug for Backyard Flock Keepers — ${suffix}`,
+      description:
+        "An original illustrated coffee mug celebrating chicken math — the inside joke every backyard flock keeper lives by. Hand-drawn hens, coop-to-cup humor, and hobby farm pride on dishwasher-safe drinkware.",
+      problemSolved:
+        "Backyard flock keepers struggle to find birthday gifts that get the chicken math inside joke instead of generic farm clichés",
+      targetBuyer:
+        "Backyard chicken keepers and gift-givers shopping for hobby farm friends who joke about chicken math",
+      seo_keywords: [
+        "chicken math mug",
+        "backyard chicken gift",
+        "hobby farm mug",
+        "chicken keeper gift",
+        "funny farmer mug",
+        "crazy chicken lady",
+      ],
+      trend_score: 86,
+      format: "mug",
+      category: "hobby_leisure",
+      suggestedPrice: 16.99,
+    },
+    {
+      niche: "reactive rescue dog mom apparel",
+      title: `Reactive Rescue Dog Mom T-Shirt Celebrating Training Wins — ${suffix}`,
+      description:
+        "A soft original-design t-shirt for the rescue dog mom whose walks are a daily battle of leash training and small victories. Apparel that says my dog is a work in progress and so am I.",
+      problemSolved:
+        "Owners of reactive rescue dogs feel judged on walks and struggle to find apparel that celebrates slow training progress",
+      targetBuyer:
+        "Dog moms of reactive rescue dogs who want apparel celebrating training progress over perfection",
+      seo_keywords: [
+        "rescue dog mom shirt",
+        "reactive dog tshirt",
+        "dog mom gift",
+        "dog training shirt",
+        "rescue dog apparel",
+        "adopt dont shop tee",
+      ],
+      trend_score: 83,
+      format: "tshirt",
+      category: "pet_lovers",
+      suggestedPrice: 26.99,
+    },
+    {
+      niche: "night shift nurse appreciation gifts",
+      title: `Night Shift Nurse Sweatshirt Powered by Caffeine and Chaos — ${suffix}`,
+      description:
+        "A cozy crewneck sweatshirt made for nurses surviving the night shift on coffee, dark humor, and teamwork. An original typographic design for nurses week, graduation, and unit gift exchanges.",
+      problemSolved:
+        "Night shift nurses face burnout and chaos yet most appreciation gifts ignore the night crew entirely",
+      targetBuyer:
+        "Night shift nurses and coworkers buying unit gifts for nurses week and graduation",
+      seo_keywords: [
+        "night shift nurse gift",
+        "nurse sweatshirt",
+        "nurse week gift",
+        "funny nurse crewneck",
+        "nurse graduation gift",
+        "er nurse apparel",
+      ],
+      trend_score: 81,
+      format: "sweatshirt",
+      category: "occupation_gifts",
+      suggestedPrice: 29.99,
+    },
+  ];
+}
+
+/** Deterministic fallback ideas — niche POD gift products for underserved audiences. */
+export function buildFakeProductIdeas(runId: string): FakeIdeaDraft[] {
+  return buildFallbackSpecs(runId).map((spec) => ({
+    niche: spec.niche,
+    title: spec.title,
+    description: spec.description,
+    seo_keywords: spec.seo_keywords,
+    trend_score: spec.trend_score,
+  }));
+}
 
 /** Convert fallback drafts into Nova raw ideas for Product Brain + persistence. */
 export function mapFakeDraftsToNovaRaw(runId: string): NovaRawIdea[] {
-  const suffix = runId.slice(0, 8);
-  return FALLBACK_SPECS.map((spec, i) =>
+  return buildFallbackSpecs(runId).map((spec) =>
     mapLlmIdeaToRaw(
       {
         niche: spec.niche,
         targetBuyer: spec.targetBuyer,
-        problemSolved: spec.description,
-        productConcept: `${spec.niche.split(" ").map(w => w[0]!.toUpperCase() + w.slice(1)).join(" ")} — ${suffix}-${i + 1}`,
+        problemSolved: spec.problemSolved,
+        productConcept: spec.title,
         format: spec.format,
         category: spec.category,
         suggestedPrice: spec.suggestedPrice,

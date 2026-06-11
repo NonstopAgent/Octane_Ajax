@@ -11,7 +11,7 @@ import type {
   ProductFormat,
 } from "@/lib/ajax/product-brain/types";
 
-export const NOVA_PROMPT_VERSION = "nova-ideation-v1";
+export const NOVA_PROMPT_VERSION = "nova-ideation-pod-v2";
 
 export type NovaIdeationMode = "llm" | "fallback";
 
@@ -67,19 +67,30 @@ export type NovaIdeationResult = {
 };
 
 const FORMAT_ALIASES: Record<string, ProductFormat> = {
-  planners: "planner",
-  plan: "planner",
-  trackers: "tracker",
-  track: "tracker",
-  worksheets: "worksheet",
-  sheet: "worksheet",
-  checklists: "checklist",
-  list: "checklist",
-  templates: "template",
-  logbooks: "logbook",
-  journal: "logbook",
-  bundles: "bundle",
-  kit: "bundle",
+  mugs: "mug",
+  coffee_mug: "mug",
+  cup: "mug",
+  posters: "poster",
+  wall_art: "poster",
+  art_prints: "art_print",
+  print: "art_print",
+  prints: "art_print",
+  canvas: "art_print",
+  illustration: "art_print",
+  tshirts: "tshirt",
+  "t-shirt": "tshirt",
+  t_shirt: "tshirt",
+  tee: "tshirt",
+  shirt: "tshirt",
+  apparel: "tshirt",
+  sweatshirts: "sweatshirt",
+  hoodie: "sweatshirt",
+  crewneck: "sweatshirt",
+  tote: "tote_bag",
+  totes: "tote_bag",
+  bag: "tote_bag",
+  phone_cases: "phone_case",
+  case: "phone_case",
 };
 
 const CATEGORY_ALIASES: Record<string, ProductCategory> = {
@@ -97,6 +108,24 @@ const CATEGORY_ALIASES: Record<string, ProductCategory> = {
   students: "student_tools",
   creator_tools: "creator_tools",
   creators: "creator_tools",
+  pet_lovers: "pet_lovers",
+  pets: "pet_lovers",
+  pet: "pet_lovers",
+  occupation_gifts: "occupation_gifts",
+  occupation: "occupation_gifts",
+  profession: "occupation_gifts",
+  hobby_leisure: "hobby_leisure",
+  hobby: "hobby_leisure",
+  hobbies: "hobby_leisure",
+  leisure: "hobby_leisure",
+  humor_novelty: "humor_novelty",
+  humor: "humor_novelty",
+  novelty: "humor_novelty",
+  funny: "humor_novelty",
+  seasonal_holiday: "seasonal_holiday",
+  seasonal: "seasonal_holiday",
+  holiday: "seasonal_holiday",
+  gifts: "hobby_leisure",
 };
 
 function normalizeToken(value: string): string {
@@ -109,7 +138,7 @@ export function normalizeProductFormat(value: string): ProductFormat {
   if ((PRODUCT_FORMATS as readonly string[]).includes(token)) {
     return token as ProductFormat;
   }
-  return FORMAT_ALIASES[token] ?? "planner";
+  return FORMAT_ALIASES[token] ?? "mug";
 }
 
 /** Map LLM string labels to Product Brain category enum. */

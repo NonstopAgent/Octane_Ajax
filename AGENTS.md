@@ -8,13 +8,15 @@ Guidance for coding agents working in this repository.
 
 **Octane Ajax is NOT an Etsy bot.**
 
-It is a private solo-operator **business engine** for utility-first digital downloads. Etsy is **Business Unit #1** — one channel, not the whole vision. Agents should design and implement features that support a broader product and revenue system, not a single marketplace automation script.
+It is a private solo-operator **business engine** for niche print-on-demand (POD) physical products. Etsy is **Business Unit #1** — one channel, not the whole vision. Agents should design and implement features that support a broader product and revenue system, not a single marketplace automation script.
+
+**Octane Ajax does NOT sell digital downloads, printables, planners, or PDFs.** That strategy is retired. Do not propose, generate, or reintroduce PDF/printable products or pipelines.
 
 ---
 
 ## 2. Core Business Rule
 
-**Quality over volume.** Octane Ajax prioritizes high-quality, useful, niche, and compliant products over bulk AI-generated spam. When suggesting product ideas, copy, or automation, favor depth, clarity, and real utility for a specific audience.
+**Quality over volume.** Octane Ajax prioritizes high-quality, niche, emotionally resonant, and compliant POD products over bulk AI-generated spam. When suggesting product ideas, copy, or automation, favor specificity, original artwork direction, and real giftability for a defined audience.
 
 ---
 
@@ -24,7 +26,7 @@ The **Review Gate is mandatory.**
 
 - Do **not** remove, weaken, or bypass the Review Gate.
 - **No live publishing** without human review.
-- Future Etsy integration must create **draft listings only** until a human explicitly approves publication.
+- Etsy/Printify integration must create **draft listings only** until a human explicitly approves publication.
 
 Treat any change that skips or shortcuts review as out of scope unless the user explicitly requests a documented exception.
 
@@ -32,15 +34,15 @@ Treat any change that skips or shortcuts review as out of scope unless the user 
 
 ## 4. Product Strategy
 
-Target **utility-first digital products**, including:
+Target **niche print-on-demand physical gifts** with original AI-assisted artwork (generated via OpenAI `gpt-image-1`), fulfilled by Printify:
 
-- Planners, trackers, worksheets, checklists, templates, logbooks, bundles
+- Mugs, posters, art prints, t-shirts, sweatshirts, tote bags, phone cases
 
 Use this formula when evaluating or generating product concepts:
 
-> **Specific person** + **specific problem** + **structured printable format** + **clear usefulness**
+> **Specific person / identity** + **specific passion, profession, pet, milestone, or inside-joke** + **concrete POD format** + **original IP-safe design direction**
 
-Products should solve a narrow, real problem for a defined audience — not generic “inspiration” or filler content.
+Products should make a clearly defined buyer say "this was made for me" (or "this is the perfect gift for ___") — not generic "funny mug" filler.
 
 ---
 
@@ -50,11 +52,12 @@ Agents must **avoid** creating, suggesting, or shipping content that includes:
 
 | Category | Examples to avoid |
 |----------|-------------------|
+| Digital downloads | PDFs, printables, planners, templates — retired product line |
 | Medical | Diagnosis, treatment, or cure claims |
-| Legal | Legal advice or “you should sue / file” guidance |
+| Legal | Legal advice or "you should sue / file" guidance |
 | Financial | Investment, tax, or trading advice |
 | IP / brands | Copyrighted brands, characters, celebrities, schools, sports teams, franchises |
-| Misleading claims | Guaranteed results, “official” outcomes, or unverifiable promises |
+| Misleading claims | Guaranteed results, "official" outcomes, or unverifiable promises |
 | Impersonation | Official government forms, bank documents, or institutional letterhead presented as real |
 
 When in doubt, choose a generic, compliant alternative and flag ambiguity for human review.
@@ -69,8 +72,9 @@ When in doubt, choose a generic, compliant alternative and flag ambiguity for hu
 | Language | **TypeScript** |
 | Styling | **Tailwind CSS** |
 | Backend | **Supabase** — Auth, Postgres, **RLS**, Realtime |
+| Images | **OpenAI `gpt-image-1`** for product artwork; Printify for fulfillment |
 | Secrets | Server-only; never expose service role or other privileged keys to the client |
-| Security | **Keep RLS enabled**; do not disable policies to “make it work” |
+| Security | **Keep RLS enabled**; do not disable policies to "make it work" |
 | Testing | Use tests for **business rules** and critical paths |
 | Verification | After major changes, run: `npm run lint`, `npm run test`, `npm run build` |
 
@@ -95,13 +99,14 @@ When in doubt, choose a generic, compliant alternative and flag ambiguity for hu
 
 ## 8. Current Phase
 
-**Phase 2** starts with **Product Brain** and **Revenue Rules** before adding real LLM calls. Prefer deterministic rules, schemas, and testable logic over wiring production LLM endpoints until that foundation is stable.
+**POD pivot.** The pipeline is: Nova (niche gift ideation, grounded in live Etsy market data) → Product Brain (scoring + compliance) → Forge (listing draft + Printify blueprint + artwork prompt) → gpt-image-1 artwork → Printify draft product → **Human Review Gate** → publish. Legacy PDF/printable code is retired; do not extend it.
 
 ---
 
 ## Quick checklist for agents
 
 - [ ] Changes respect the Human Review Gate
-- [ ] Product ideas fit utility-first strategy and blocked-product rules
+- [ ] Product ideas are physical POD gifts that fit the niche-identity strategy and blocked-product rules
+- [ ] No digital-download / PDF / printable product logic reintroduced
 - [ ] RLS and server-only secrets unchanged or strengthened
 - [ ] `npm run lint`, `npm run test`, `npm run build` pass after substantive edits

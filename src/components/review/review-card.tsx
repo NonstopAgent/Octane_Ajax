@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { ReviewPhase2Section } from "@/components/review/review-phase2-section";
 import { getStatusLabel } from "@/lib/ajax/status";
 import { buildSellabilityInputFromGeneration } from "@/lib/review/approval-guards";
 import {
-  buildProductPdfGenerateHref,
   getReviewApproveUi,
   hasComplianceRisk,
 } from "@/lib/review/display";
@@ -54,62 +53,6 @@ export function ReviewCard({
     sellabilityAllPassed: sellability.allPassed,
     sellability,
   });
-  const generationId = phase2.generation?.id ?? null;
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfActionError, setPdfActionError] = useState<string | null>(null);
-
-  const applyGenerationPatch = useCallback(
-    (patch: {
-      generationStatus: GenerationStatus;
-      storagePath?: string | null;
-    }) => {
-      onGenerationChange?.(patch);
-    },
-    [onGenerationChange],
-  );
-
-  const generatePdf = async () => {
-    if (!generationId || sellabilityInput.mockMode) return;
-
-    setPdfBusy(true);
-    setPdfActionError(null);
-    applyGenerationPatch({ generationStatus: "generating" });
-
-    try {
-      const res = await fetch(buildProductPdfGenerateHref(generationId), {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        status?: GenerationStatus;
-        storagePath?: string;
-      };
-
-      if (!res.ok) {
-        const nextStatus =
-          data.status === "generating" ? "generating" : "failed";
-        applyGenerationPatch({ generationStatus: nextStatus });
-        setPdfActionError(
-          data.error ??
-            "PDF generation failed. Request failed or timed out. Check Vercel logs.",
-        );
-        return;
-      }
-
-      applyGenerationPatch({
-        generationStatus: data.status ?? "ready",
-        storagePath: data.storagePath ?? phase2.generation?.pdf.storagePath,
-      });
-    } catch {
-      applyGenerationPatch({ generationStatus: "failed" });
-      setPdfActionError("Request failed or timed out. Check Vercel logs.");
-    } finally {
-      setPdfBusy(false);
-    }
-  };
-
   const title = listing.title ?? idea?.title ?? "Untitled product";
   const description =
     listing.description ?? idea?.description ?? "No description provided.";
@@ -139,24 +82,6 @@ export function ReviewCard({
           </ul>
           {approveUi.complianceBlockMessage ? (
             <p className="mt-3 text-red-200">{approveUi.complianceBlockMessage}</p>
-          ) : null}
-          {approveUi.showGeneratePdfAction && generationId ? (
-            <div className="mt-3">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9"
-                disabled={pdfBusy || busy}
-                onClick={() => void generatePdf()}
-              >
-                {pdfBusy ? "Generating…" : "Generate PDF"}
-              </Button>
-              {pdfActionError ? (
-                <p className="mt-2 text-xs text-red-300" role="alert">
-                  {pdfActionError}
-                </p>
-              ) : null}
-            </div>
           ) : null}
         </div>
       ) : null}

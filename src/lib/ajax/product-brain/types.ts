@@ -1,11 +1,11 @@
 export type ProductFormat =
-  | "planner"
-  | "tracker"
-  | "worksheet"
-  | "checklist"
-  | "template"
-  | "logbook"
-  | "bundle";
+  | "mug"
+  | "poster"
+  | "art_print"
+  | "tshirt"
+  | "sweatshirt"
+  | "tote_bag"
+  | "phone_case";
 
 export type ProductRiskLevel = "safe" | "caution" | "blocked";
 
@@ -17,7 +17,12 @@ export type ProductCategory =
   | "wellness_tracking"
   | "parenting_support"
   | "student_tools"
-  | "creator_tools";
+  | "creator_tools"
+  | "pet_lovers"
+  | "occupation_gifts"
+  | "hobby_leisure"
+  | "humor_novelty"
+  | "seasonal_holiday";
 
 export type ProductBrainVerdict =
   | "approve_for_generation"

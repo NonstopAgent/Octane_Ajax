@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
 import {
   buildProductMockupDownloadHref,
   buildProductPdfDownloadHref,
-  buildProductPdfGenerateHref,
   getReviewPdfUiState,
 } from "@/lib/review/display";
 import {
@@ -15,7 +13,6 @@ import {
   reviewQcPanel,
 } from "@/components/review/review-panel-styles";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Button } from "@/components/ui/button";
 
 type ReviewPdfPanelProps = {
   generationId: string | null;
@@ -33,7 +30,7 @@ type ReviewPdfPanelProps = {
 function statusLabel(status: GenerationStatus): string {
   switch (status) {
     case "ready":
-      return "PDF ready";
+      return "Assets ready";
     case "generating":
       return "Generating";
     case "queued":
@@ -54,87 +51,29 @@ function statusTone(
   return "neutral";
 }
 
+/**
+ * Product asset panel — shows the generated artwork/mockup and POD
+ * fulfillment status. Artwork + Printify draft creation run automatically
+ * after Forge; there is no manual generate action.
+ *
+ * (Legacy PDF downloads remain available for old digital-download listings.)
+ */
 export function ReviewPdfPanel({
   generationId,
   pdf,
   mockupStoragePath = null,
-  generationStatus: initialStatus,
-  structure,
+  generationStatus,
   mockMode = false,
-  onGenerationChange,
 }: ReviewPdfPanelProps) {
-  const [generationStatus, setGenerationStatus] =
-    useState<GenerationStatus>(initialStatus);
-  const [storagePath, setStoragePath] = useState(pdf.storagePath);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const applyGenerationPatch = useCallback(
-    (patch: {
-      generationStatus: GenerationStatus;
-      storagePath?: string | null;
-    }) => {
-      setGenerationStatus(patch.generationStatus);
-      if (patch.storagePath !== undefined) {
-        setStoragePath(patch.storagePath);
-      }
-      onGenerationChange?.(patch);
-    },
-    [onGenerationChange],
-  );
-
-  const generatePdf = async () => {
-    if (!generationId || mockMode) return;
-
-    setBusy(true);
-    setActionError(null);
-    applyGenerationPatch({ generationStatus: "generating" });
-
-    try {
-      const res = await fetch(buildProductPdfGenerateHref(generationId), {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        status?: GenerationStatus;
-        storagePath?: string;
-      };
-
-      if (!res.ok) {
-        const nextStatus =
-          data.status === "generating" ? "generating" : "failed";
-        applyGenerationPatch({ generationStatus: nextStatus });
-        setActionError(
-          data.error ??
-            "PDF generation failed. Request failed or timed out. Check Vercel logs.",
-        );
-        return;
-      }
-
-      applyGenerationPatch({
-        generationStatus: data.status ?? "ready",
-        storagePath: data.storagePath ?? storagePath,
-      });
-    } catch {
-      applyGenerationPatch({ generationStatus: "failed" });
-      setActionError(
-        "Request failed or timed out. Check Vercel logs.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const uiState = getReviewPdfUiState({
     generationStatus,
-    storagePath,
+    storagePath: pdf.storagePath,
     mockMode,
   });
 
-  const downloadHref =
-    generationId && uiState === "download"
+  // Legacy digital-download listings only — POD listings have no PDF.
+  const legacyPdfHref =
+    generationId && uiState === "download" && pdf.storagePath?.trim()
       ? buildProductPdfDownloadHref(generationId)
       : null;
 
@@ -143,31 +82,19 @@ export function ReviewPdfPanel({
       ? buildProductMockupDownloadHref(generationId)
       : null;
 
-  const pageCount = structure?.pages.length ?? structure?.pageCount ?? 0;
-  const format = structure?.format;
-
-  const showGenerate =
-    !mockMode &&
-    generationId &&
-    (generationStatus === "pending" ||
-      generationStatus === "queued" ||
-      generationStatus === "failed");
-  const showGenerating =
+  const generating =
     !mockMode &&
     Boolean(generationId) &&
     (generationStatus === "generating" || generationStatus === "queued");
 
   return (
-    <section
-      className={reviewQcPanel}
-      aria-labelledby="review-pdf-heading"
-    >
+    <section className={reviewQcPanel} aria-labelledby="review-asset-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p
-          id="review-pdf-heading"
+          id="review-asset-heading"
           className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]"
         >
-          Printable asset
+          Product assets
         </p>
         <StatusBadge
           label={statusLabel(generationStatus)}
@@ -175,77 +102,19 @@ export function ReviewPdfPanel({
         />
       </div>
 
-      {structure && pageCount > 0 ? (
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
-          <div>
-            <dt className="font-mono uppercase tracking-wider">Pages</dt>
-            <dd className="text-[var(--foreground)]">{pageCount}</dd>
-          </div>
-          {format ? (
-            <div>
-              <dt className="font-mono uppercase tracking-wider">Format</dt>
-              <dd className="text-[var(--foreground)]">{format}</dd>
-            </div>
-          ) : null}
-        </dl>
-      ) : null}
-
       <div className={pdfPreviewSlot}>
         {mockupHref ? (
           <div className="mb-4 w-full">
             <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-              Listing mockup
+              Artwork / listing mockup
             </p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={mockupHref}
-              alt="Generated listing mockup preview"
+              alt="Generated product artwork preview"
               className="mx-auto max-h-48 w-auto rounded-md border border-[var(--border-dim)] object-contain"
             />
           </div>
-        ) : null}
-
-        {downloadHref ? (
-          <>
-            <span className={pdfPreviewIcon} aria-hidden>
-              ⎙
-            </span>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              PDF ready for inspection
-            </p>
-            <a
-              href={downloadHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center justify-center rounded-md border border-[var(--accent-blue)]/50 bg-[var(--accent-blue)]/10 px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/20"
-            >
-              Download PDF
-            </a>
-          </>
-        ) : uiState === "failed" ? (
-          <>
-            <span className={pdfPreviewIcon} aria-hidden>
-              ⚠
-            </span>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              PDF generation failed
-            </p>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Listing remains at Review Gate. Inspect structure and compliance,
-              then retry PDF generation or run another cycle after fixes.
-            </p>
-            {showGenerate ? (
-              <Button
-                type="button"
-                variant="secondary"
-                className="mt-3 h-10"
-                disabled={busy}
-                onClick={() => void generatePdf()}
-              >
-                {busy ? "Generating…" : "Retry PDF generation"}
-              </Button>
-            ) : null}
-          </>
         ) : (
           <>
             <span className={pdfPreviewIcon} aria-hidden>
@@ -253,41 +122,38 @@ export function ReviewPdfPanel({
             </span>
             <p className="text-sm font-medium text-[var(--foreground)]">
               {mockMode
-                ? "PDF placeholder — generation not run yet"
-                : showGenerating
-                  ? "PDF generating..."
-                  : "PDF asset pending"}
+                ? "Artwork placeholder — demo cycle has no generated assets"
+                : generating
+                  ? "Artwork & Printify draft generating..."
+                  : generationStatus === "failed"
+                    ? "Asset generation failed"
+                    : "Artwork pending"}
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               {mockMode
-                ? "Demo cycle has no printable file. Approve only after you have verified copy and structure."
-                : showGenerating
-                  ? "Forge queued PDF generation automatically. Approval unlocks once the file is ready."
-                  : "Generate the printable PDF before approval, or wait for the auto-run after Forge."}
+                ? "Approve only after you have verified copy and the POD blueprint."
+                : generationStatus === "failed"
+                  ? "Listing remains at Review Gate. Reject or run another cycle after fixes."
+                  : "Artwork and the Printify product draft are created automatically after Forge. Approval unlocks once the draft is ready."}
             </p>
-            {showGenerate && !showGenerating ? (
-              <Button
-                type="button"
-                variant="primary"
-                className="mt-3 h-10"
-                disabled={busy}
-                onClick={() => void generatePdf()}
-              >
-                {busy ? "Generating…" : "Generate PDF"}
-              </Button>
-            ) : null}
-            {showGenerating ? (
+            {generating ? (
               <p className="mt-3 inline-flex items-center gap-2 text-xs text-[var(--text-muted)]">
                 <Spinner />
-                PDF generating...
+                Generating...
               </p>
             ) : null}
           </>
         )}
-        {actionError ? (
-          <p className="mt-3 text-xs text-red-300" role="alert">
-            {actionError}
-          </p>
+
+        {legacyPdfHref ? (
+          <a
+            href={legacyPdfHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center justify-center rounded-md border border-[var(--accent-blue)]/50 bg-[var(--accent-blue)]/10 px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/20"
+          >
+            Download legacy PDF
+          </a>
         ) : null}
       </div>
     </section>

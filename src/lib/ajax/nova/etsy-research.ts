@@ -33,9 +33,9 @@ const ETSY_API_BASE = "https://openapi.etsy.com/v3/application";
 
 /** Search queries Nova uses to ground ideation in real Etsy demand. */
 export const NOVA_RESEARCH_QUERIES = [
-  "printable planner",
-  "digital download tracker",
-  "printable worksheet",
+  "funny niche coffee mug gift",
+  "hobby t-shirt gift",
+  "niche wall art print",
 ] as const;
 
 function extractPrice(listing: Record<string, unknown>): number {
@@ -76,7 +76,7 @@ async function searchEtsyListings(
   url.searchParams.set("keywords", query);
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("sort_on", "score");
-  url.searchParams.set("type", "download"); // digital downloads only
+  url.searchParams.set("type", "physical"); // physical POD products only
 
   const res = await fetch(url.toString(), {
     headers: {

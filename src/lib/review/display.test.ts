@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import {
   AI_DISCLOSURE_FLAG_CODE,
   buildProductPdfDownloadHref,
-  buildProductPdfGenerateHref,
   collectComplianceMessages,
   COMPLIANCE_APPROVAL_BLOCK_MESSAGE,
   filterComplianceFlags,
@@ -164,7 +163,8 @@ describe("review display helpers", () => {
     const ui = getReviewApproveUi("approve_for_generation", {
       sellability: forgeLike,
     });
-    assert.equal(ui.showGeneratePdfAction, true);
+    assert.equal(ui.disabled, true);
+    assert.ok(ui.blockedCheckLabels.length > 0);
   });
 
   it("shows compliance reject message when compliance check fails", () => {
@@ -229,10 +229,4 @@ describe("review display helpers", () => {
     );
   });
 
-  it("builds server generate route for generation id", () => {
-    assert.match(
-      buildProductPdfGenerateHref("abc"),
-      /product-generations\/abc\/generate-pdf/,
-    );
-  });
 });

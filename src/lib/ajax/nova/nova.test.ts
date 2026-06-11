@@ -23,56 +23,57 @@ import { buildFakeProductIdeas } from "@/lib/ajax/nova/fallback";
 const validLlmPayload = {
   ideas: [
     {
-      niche: "meal prep for night-shift nurses",
-      targetBuyer: "Night-shift RNs who batch-cook between shifts",
+      niche: "night shift nurse humor gifts",
+      targetBuyer: "Night shift nurses and coworkers buying unit gift exchange presents",
       problemSolved:
-        "Inconsistent weekly grocery planning leads to expensive takeout during 12-hour shifts",
-      productConcept: "Night-Shift Weekly Meal Prep Planner (Printable)",
-      format: "planner",
-      category: "wellness_tracking",
-      suggestedPrice: 6.99,
+        "Night shift nurses face burnout and chaos yet appreciation gifts always ignore the night crew",
+      productConcept: "Night Shift Nurse Coffee Mug Powered by Caffeine and Chaos",
+      format: "mug",
+      category: "occupation_gifts",
+      suggestedPrice: 16.99,
       keywords: [
         "night shift nurse",
-        "meal prep planner",
-        "printable",
-        "weekly menu",
-        "grocery list",
+        "nurse mug gift",
+        "funny nurse mug",
+        "nurse week",
+        "er nurse gift",
       ],
       reasoning:
-        "Specific buyer and shift constraint; printable weekly structure reduces decision fatigue.",
+        "Specific buyer and occupation identity; giftable mug format with proven Etsy demand.",
     },
     {
-      niche: "homeschool attendance compliance",
-      targetBuyer: "Homeschool parents tracking state attendance requirements",
+      niche: "backyard beekeeper hobby gifts",
+      targetBuyer: "Hobby beekeepers and family members shopping for beekeeper birthdays",
       problemSolved:
-        "Parents lose track of instructional hours across multiple children",
-      productConcept: "Homeschool Attendance & Hour Log (Printable)",
-      format: "logbook",
-      category: "education",
-      suggestedPrice: 5.49,
+        "Backyard beekeepers struggle to find original art that celebrates hive life without generic bee clichés",
+      productConcept: "Vintage Botanical Beekeeper Art Print for Apiary Enthusiasts",
+      format: "art_print",
+      category: "hobby_leisure",
+      suggestedPrice: 24.99,
       keywords: [
-        "homeschool attendance",
-        "hour log",
-        "printable tracker",
-        "state compliance",
+        "beekeeper gift",
+        "bee wall art",
+        "apiary print",
+        "for beekeepers",
       ],
-      reasoning: "Clear regulatory-adjacent tracking without legal advice.",
+      reasoning: "Clear hobby identity with giftable wall art format.",
     },
     {
-      niche: "ADHD executive function mornings",
-      targetBuyer: "Adults with ADHD who struggle with morning task sequencing",
-      problemSolved: "Morning overwhelm from unstructured transitions between tasks",
-      productConcept: "ADHD-Friendly Visual Morning Routine Checklist",
-      format: "checklist",
-      category: "productivity",
-      suggestedPrice: 4.99,
+      niche: "reactive rescue dog mom apparel",
+      targetBuyer: "Dog moms of reactive rescue dogs celebrating training progress",
+      problemSolved:
+        "Owners of reactive rescue dogs feel judged on walks and struggle to find apparel celebrating training wins",
+      productConcept: "Reactive Rescue Dog Mom T-Shirt Celebrating Training Wins",
+      format: "tshirt",
+      category: "pet_lovers",
+      suggestedPrice: 26.99,
       keywords: [
-        "adhd morning routine",
-        "visual checklist",
-        "executive function",
-        "printable",
+        "rescue dog mom",
+        "reactive dog shirt",
+        "dog mom gift",
+        "dog training tee",
       ],
-      reasoning: "Utility-first checklist with a defined neurodivergent audience.",
+      reasoning: "Emotionally resonant pet identity with a defined niche audience.",
     },
   ],
 };
@@ -159,7 +160,7 @@ describe("Nova LLM schema", () => {
     const parsed = NovaLlmResponseSchema.parse(validLlmPayload);
     assert.equal(parsed.ideas.length, 3);
     const raw = mapLlmIdeaToRaw(parsed.ideas[0]!);
-    assert.equal(normalizeProductFormat("planner"), "planner");
+    assert.equal(normalizeProductFormat("mug"), "mug");
     assert.equal(raw.productConcept, validLlmPayload.ideas[0].productConcept);
   });
 });
