@@ -29,11 +29,12 @@ export function PublicStoreCatalog({
           Octane Ajax
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-          Digital downloads
+          Niche gifts, made to order
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-          Utility-first printables and planners from the Octane Ajax factory.
-          Checkout is handled on Gumroad — no account required to browse.
+          Original print-on-demand mugs, art prints, and apparel from the
+          Octane Ajax factory. Checkout is handled externally — no account
+          required to browse.
         </p>
         <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
           SYS.AJAX.STORE :: PUBLIC CATALOG
@@ -102,7 +103,7 @@ function Callout({
 function PublicListingCard({ item }: { item: PublicStoreListing }) {
   const title = item.title ?? "Untitled product";
   const description =
-    item.description ?? "Utility-first digital download from Octane Ajax.";
+    item.description ?? "Original print-on-demand gift from Octane Ajax.";
 
   return (
     <article className="factory-panel panel-glow-blue flex h-full flex-col">

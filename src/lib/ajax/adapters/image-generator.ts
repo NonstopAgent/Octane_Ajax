@@ -77,11 +77,12 @@ export type ImageGeneratorAdapterOptions = AdapterConfig & {
 };
 
 function aspectToSize(aspectRatio?: ProductArtworkInput["aspectRatio"]): string {
+  // gpt-image-1 only supports 1024x1024, 1024x1536, 1536x1024.
   switch (aspectRatio) {
     case "4:5":
-      return "1024x1280";
+      return "1024x1536";
     case "16:9":
-      return "1536x864";
+      return "1536x1024";
     default:
       return "1024x1024";
   }

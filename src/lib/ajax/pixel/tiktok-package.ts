@@ -93,7 +93,7 @@ function promoContext(input: PixelPromoInput) {
   const format =
     podDetails?.aestheticStyle?.trim() ||
     structure?.format?.trim() ||
-    "printable download";
+    "custom gift";
   const pageTitles =
     structure?.pages
       ?.map((p) => p.title?.trim())
@@ -112,9 +112,9 @@ function buildSlideshowScript(
   const slideTexts = [
     hooks[0] ?? `POV: you found ${displayTitle}`,
     pageTitles[0] ? `Inside: ${pageTitles[0]}` : "Here's what's inside 👀",
-    pageTitles[1] ? `Plus: ${pageTitles[1]}` : "Structured sections — no blank-page guesswork",
+    pageTitles[1] ? `Plus: ${pageTitles[1]}` : "Original art — made to order, shipped to you",
     hooks[1] ?? "Save this before your next scroll session",
-    "Link in bio — instant download (demo storefront)",
+    "Link in bio — grab yours (demo storefront)",
   ].slice(0, 5);
 
   return slideTexts.map((overlay_text, index) => ({

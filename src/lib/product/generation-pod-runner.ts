@@ -1,6 +1,7 @@
 /**
  * Server-only: load a stored generation and run POD fulfillment + factory events.
  */
+import { after } from "next/server";
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import {
   PodFulfillmentError,
@@ -214,7 +215,12 @@ export async function runGenerationPodJob(
 }
 
 /**
- * Fire-and-forget POD fulfillment after Forge — does not block the forge response.
+ * POD fulfillment after Forge — does not block the forge response.
+ *
+ * Uses Next's `after()` so the work survives on Vercel serverless after the
+ * response is sent (a plain fire-and-forget promise would be frozen with the
+ * lambda). Falls back to a detached promise outside a request scope (tests,
+ * scripts).
  */
 export function schedulePodFulfillmentAfterForge(
   supabase: Supabase,
@@ -222,7 +228,7 @@ export function schedulePodFulfillmentAfterForge(
   generationId: string,
   listingId: string,
 ): void {
-  void (async () => {
+  const job = async () => {
     await insertFactoryEvent(supabase, userId, {
       event_type: "pod_fulfillment_triggered",
       agent_slug: AGENT_SLUGS.FORGE,
@@ -261,5 +267,12 @@ export function schedulePodFulfillmentAfterForge(
         },
       });
     }
-  })();
+  };
+
+  try {
+    after(job);
+  } catch {
+    // Outside a request scope (tests, local scripts) — run detached.
+    void job();
+  }
 }

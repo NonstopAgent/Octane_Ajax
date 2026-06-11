@@ -50,14 +50,40 @@ export async function GET(_request: Request, context: RouteContext) {
       );
     }
 
-    if (!row.mockup_storage_path?.trim()) {
+    const stored = row.mockup_storage_path?.trim();
+    if (!stored) {
       return NextResponse.json(
         { ok: false, error: "Mockup is not ready for download." },
         { status: 409 },
       );
     }
 
-    const signedUrl = await createProductPdfSignedUrl(row.mockup_storage_path, 300);
+    // POD artwork is stored as a direct URL (Printify/OpenAI) — redirect.
+    if (stored.startsWith("http://") || stored.startsWith("https://")) {
+      return NextResponse.redirect(stored, { status: 302 });
+    }
+
+    // gpt-image-1 returns base64 — serve the bytes directly.
+    if (stored.startsWith("data:")) {
+      const match = /^data:(image\/[\w.+-]+);base64,([\s\S]*)$/.exec(stored);
+      if (!match) {
+        return NextResponse.json(
+          { ok: false, error: "Stored artwork data is invalid." },
+          { status: 500 },
+        );
+      }
+      const bytes = Buffer.from(match[2]!, "base64");
+      return new NextResponse(new Uint8Array(bytes), {
+        status: 200,
+        headers: {
+          "Content-Type": match[1]!,
+          "Cache-Control": "private, max-age=300",
+        },
+      });
+    }
+
+    // Legacy: Supabase Storage path from the retired PDF/mockup pipeline.
+    const signedUrl = await createProductPdfSignedUrl(stored, 300);
     return NextResponse.redirect(signedUrl, { status: 302 });
   } catch (err) {
     console.error("[mockup-download]", err);
