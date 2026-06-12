@@ -16,6 +16,7 @@ import {
   ForgePodDetailsSchema,
   ensureAiDisclosureInCopy,
 } from "@/lib/ajax/forge/types";
+import { PRINTIFY_CATALOG } from "@/lib/ajax/pod/printify-catalog";
 import { mapGenerationToDbInsert } from "@/lib/product/mappers";
 import { runNovaIdeation } from "@/lib/ajax/nova/service";
 
@@ -129,7 +130,10 @@ describe("runForgeGeneration", () => {
     assert.equal(result.seoTags.length, 13);
     assert.ok(result.listingDescription.includes(AI_DISCLOSURE_TEXT));
     assert.equal(result.aiDisclosure, AI_DISCLOSURE_TEXT);
-    assert.equal(result.podDetails.blueprintId, 68);
+    assert.equal(
+      result.podDetails.blueprintId,
+      PRINTIFY_CATALOG.MUG_11OZ.blueprintId,
+    );
     assert.ok(result.podDetails.artworkPrompt.length >= 20);
     assert.equal(result.suggestedPrice, 19.99);
     assert.equal(result.llmProvider, FORGE_LLM_PROVIDER);

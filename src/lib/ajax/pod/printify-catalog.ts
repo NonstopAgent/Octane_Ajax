@@ -42,17 +42,17 @@ export type PrintifyCatalogEntry = {
 };
 
 /**
- * Known-good staples. MUG_11OZ matches the IDs already used as adapter
- * defaults in this codebase. The other entries are structural placeholders —
- * verify/replace the integers from your Printify account (see header).
+ * VERIFIED against the live Printify catalog on 2026-06-12 via
+ * /api/ajax/debug/printify-catalog (run with this account's API token).
+ * All blueprint/provider/variant combos below are valid by construction.
  */
 export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> = {
   MUG_11OZ: {
     key: "MUG_11OZ",
-    label: "Ceramic Mug 11oz",
-    blueprintId: 68,
-    printProviderId: 1,
-    variantIds: [33719, 33720],
+    label: "White Ceramic Mug 11oz",
+    blueprintId: 503, // White Ceramic Mug, 11oz
+    printProviderId: 48, // Colorway
+    variantIds: [67624], // 11oz
     defaultPriceCents: 1699,
     promptHint:
       "Best for funny/identity quotes and small illustrated designs; top gift staple.",
@@ -60,29 +60,29 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
   POSTER_MATTE_VERTICAL: {
     key: "POSTER_MATTE_VERTICAL",
     label: "Matte Vertical Poster",
-    blueprintId: 282, // TODO: verify in your Printify account
-    printProviderId: 1, // TODO: verify
-    variantIds: [43130, 43133], // TODO: verify (e.g. 11x14 / 18x24)
+    blueprintId: 282, // Matte Vertical Posters
+    printProviderId: 2, // Sensaria
+    variantIds: [43135, 43138, 43144], // 11x14, 12x18, 18x24 Matte
     defaultPriceCents: 2499,
     promptHint:
       "Best for art-forward designs: botanical, vintage, typographic wall decor.",
   },
   TEE_UNISEX: {
     key: "TEE_UNISEX",
-    label: "Unisex Softstyle T-Shirt",
-    blueprintId: 145, // TODO: verify in your Printify account
-    printProviderId: 29, // TODO: verify
-    variantIds: [38158, 38159, 38160, 38161], // TODO: verify (S–XL in one color)
+    label: "Unisex Jersey Short Sleeve Tee",
+    blueprintId: 12, // Unisex Jersey Short Sleeve Tee (Bella+Canvas 3001)
+    printProviderId: 29, // Monster Digital
+    variantIds: [18052, 18053, 18054, 18055, 18056], // Aqua S–2XL
     defaultPriceCents: 2699,
     promptHint:
       "Best for wearable identity statements; niche pride and pet/hobby slogans.",
   },
   SWEATSHIRT_CREWNECK: {
     key: "SWEATSHIRT_CREWNECK",
-    label: "Unisex Crewneck Sweatshirt",
-    blueprintId: 49, // TODO: verify in your Printify account
-    printProviderId: 29, // TODO: verify
-    variantIds: [25376, 25377, 25378, 25379], // TODO: verify (S–XL in one color)
+    label: "Unisex Heavy Blend Crewneck Sweatshirt",
+    blueprintId: 49, // Unisex Heavy Blend Crewneck Sweatshirt (Gildan)
+    printProviderId: 29, // Monster Digital
+    variantIds: [25377, 25381, 25385], // S Ash, S Dark Heather, S Light Blue
     defaultPriceCents: 2999,
     promptHint:
       "Best for cozy occupation/seasonal gifts (nurses week, holidays, grads).",
