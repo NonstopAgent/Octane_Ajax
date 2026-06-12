@@ -10,7 +10,7 @@
 export const maxDuration = 60;
 
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { runNovaStep, runForgeStep, CycleBlockedError, SimulatorError } from "@/lib/ajax/simulator";
 
 export async function GET(req: NextRequest) {
@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    // Cron has no user session — use the service-role client (required for
+    // auth.admin.listUsers and for acting on the operator's rows under RLS).
+    const supabase = createServiceClient();
 
     // Resolve the operator's user ID from their email
     const { data: userList, error: listError } = await supabase.auth.admin.listUsers();
