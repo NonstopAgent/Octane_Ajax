@@ -76,6 +76,7 @@ export function TikTokQueuePanel({
 
   useEffect(() => {
     if (enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-enable
       void loadItems();
     }
   }, [enabled, loadItems]);

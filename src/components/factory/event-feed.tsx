@@ -105,16 +105,18 @@ export function EventFeed({ enabled, initialEvents = [] }: EventFeedProps) {
 
   useEffect(() => {
     if (enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-enable
       void loadEvents();
     }
   }, [enabled, loadEvents]);
 
+  const topEventId = events[0]?.id;
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
       el.scrollTop = 0;
     }
-  }, [events.length, events[0]?.id]);
+  }, [events.length, topEventId]);
 
   return (
     <section className="machine-log sweatshop-log flex max-h-[32rem] flex-col border-zinc-800 bg-zinc-950">

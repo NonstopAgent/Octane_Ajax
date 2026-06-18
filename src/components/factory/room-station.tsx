@@ -104,6 +104,7 @@ export function RoomStation({ enabled, initialOrders = [] }: RoomStationProps) {
 
   useEffect(() => {
     if (enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-enable
       void loadOrders();
     }
   }, [enabled, loadOrders]);

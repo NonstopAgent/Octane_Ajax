@@ -44,7 +44,6 @@ export async function publishListingToEtsyOnApprove(
   const { supabase, userId, listingId, listing, generation } = ctx;
   const refreshTokenFn = dependencies.refreshToken ?? refreshEtsyToken;
   const createAdapter = dependencies.createAdapter ?? createEtsyAdapter;
-  const downloadPdf = dependencies.downloadPdf ?? downloadProductPdf;
   const downloadMockup = dependencies.downloadMockup ?? downloadProductMockup;
 
   let credentials;
@@ -78,29 +77,30 @@ export async function publishListingToEtsyOnApprove(
     return null;
   }
 
-  const pdfPath = generation?.pdf.storagePath?.trim();
-  if (!pdfPath) {
+  // POD listings have no PDF — the artwork mockup is the listing hero image.
+  const mockupPath = generation?.mockupStoragePath?.trim();
+  if (!mockupPath) {
     await insertGumroadEvent(
       supabase,
       userId,
       "etsy_publish_failed",
-      "Etsy auto-publish failed: no PDF storage path.",
+      "Etsy auto-publish failed: no artwork mockup ready for the listing.",
       { listingId },
     );
     return null;
   }
 
-  const title = listing.title?.trim() || "Digital product";
+  const title = listing.title?.trim() || "Print-on-demand product";
   const description =
-    listing.description?.trim() || "Utility-first digital download.";
+    listing.description?.trim() ||
+    "Original made-to-order print-on-demand product.";
   const priceCents = listingPriceToCents(listing.price);
-  const mockupPath = generation?.mockupStoragePath?.trim() || null;
 
   try {
     const adapter = createAdapter();
-    const pdfBuffer = await downloadPdf(pdfPath);
-    const filename = `${title.replace(/[^\w.-]+/g, "_").slice(0, 80) || "product"}.pdf`;
+    const baseName = title.replace(/[^\w.-]+/g, "_").slice(0, 80) || "product";
 
+    // Physical DRAFT listing — never auto-published live (see etsy.ts state="draft").
     const created = await adapter.createDraftListing({
       title,
       description,
@@ -109,45 +109,26 @@ export async function publishListingToEtsyOnApprove(
       accessToken: credentials.access_token,
     });
 
-    await adapter.uploadListingFile(
-      created.listing_id,
-      pdfBuffer,
-      filename,
-      credentials.shop_id,
-      credentials.access_token,
-    );
-
-    if (mockupPath) {
-      try {
-        const mockupBuffer = await downloadMockup(mockupPath);
-        const mockupFilename = `${filename.replace(/\.pdf$/i, "")}_mockup.jpg`;
-        await adapter.uploadListingImage(
-          created.listing_id,
-          mockupBuffer,
-          mockupFilename,
-          credentials.shop_id,
-          credentials.access_token,
-        );
-      } catch (imageErr) {
-        const imageMessage =
-          imageErr instanceof Error
-            ? imageErr.message
-            : "Etsy listing image upload failed.";
-        await insertGumroadEvent(
-          supabase,
-          userId,
-          "etsy_image_upload_failed",
-          `Etsy draft created but mockup image upload failed: ${imageMessage}`,
-          { listingId, provider: "etsy", mockupPath },
-        );
-      }
-    } else {
+    try {
+      const mockupBuffer = await downloadMockup(mockupPath);
+      await adapter.uploadListingImage(
+        created.listing_id,
+        mockupBuffer,
+        `${baseName}_mockup.jpg`,
+        credentials.shop_id,
+        credentials.access_token,
+      );
+    } catch (imageErr) {
+      const imageMessage =
+        imageErr instanceof Error
+          ? imageErr.message
+          : "Etsy listing image upload failed.";
       await insertGumroadEvent(
         supabase,
         userId,
-        "etsy_no_mockup_image",
-        "Etsy draft created without listing hero image (no mockup on generation).",
-        { listingId, provider: "etsy" },
+        "etsy_image_upload_failed",
+        `Etsy draft created but mockup image upload failed: ${imageMessage}`,
+        { listingId, provider: "etsy", mockupPath },
       );
     }
 
@@ -175,7 +156,7 @@ export async function publishListingToEtsyOnApprove(
       supabase,
       userId,
       "etsy_published",
-      `Published to Etsy: ${created.url}`,
+      `Etsy draft created (review and publish it live on Etsy when ready): ${created.url}`,
       {
         listingId,
         etsyUrl: created.url,

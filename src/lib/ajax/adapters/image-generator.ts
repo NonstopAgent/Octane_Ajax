@@ -15,6 +15,16 @@ import {
 
 const DEFAULT_IMAGE_MODEL = "gpt-image-1";
 
+/**
+ * Hard ceiling for a single OpenAI image call. Kept below the serverless
+ * function budget so a slow `gpt-image-1` call fails cleanly (and records a
+ * `failed` status) instead of being killed mid-await and orphaning the row.
+ */
+const IMAGE_GENERATION_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.IMAGE_GENERATION_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 45_000;
+})();
+
 export type ProductArtworkInput = {
   productTitle: string;
   niche: string;
@@ -39,6 +49,9 @@ export type PersonalizedPortraitInput = {
 export type GeneratedArtwork = {
   assetId: string;
   imageUrl: string;
+  /** Raw base64 payload (gpt-image-1 returns b64_json) for Storage persistence. */
+  imageBase64?: string;
+  mimeType?: string;
   width: number;
   height: number;
   provider: string;
@@ -104,7 +117,11 @@ function getOpenAiClient(options?: ImageGeneratorAdapterOptions): OpenAI {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
   }
-  return new OpenAI({ apiKey });
+  return new OpenAI({
+    apiKey,
+    timeout: IMAGE_GENERATION_TIMEOUT_MS,
+    maxRetries: 0,
+  });
 }
 
 function resolveModel(options?: ImageGeneratorAdapterOptions): string {
@@ -205,12 +222,14 @@ export function createLiveImageGeneratorAdapter(
       }
 
       const assetId = `art-${crypto.randomUUID().slice(0, 8)}`;
-      const url =
-        image.url ?? `data:image/png;base64,${image.b64_json ?? ""}`;
+      const b64 = image.b64_json ?? null;
+      const url = image.url ?? (b64 ? `data:image/png;base64,${b64}` : "");
 
       return liveResult("Product artwork generated.", {
         assetId,
         imageUrl: url,
+        imageBase64: b64 ?? undefined,
+        mimeType: "image/png",
         width: 1024,
         height: 1024,
         provider: "openai",

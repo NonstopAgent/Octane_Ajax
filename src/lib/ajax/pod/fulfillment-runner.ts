@@ -30,6 +30,38 @@ export class PodFulfillmentError extends Error {
   }
 }
 
+/** Hard ceiling for a single Printify API call so a hung request fails cleanly. */
+const PRINTIFY_TIMEOUT_MS = 15_000;
+
+/**
+ * Rejects with a PodFulfillmentError if `promise` doesn't settle within `ms`.
+ * The underlying request is abandoned (not awaited) so the caller can record a
+ * `failed` status instead of wedging until the serverless function is killed.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  step: "upload" | "create",
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new PodFulfillmentError(`${label} timed out after ${ms}ms.`, step)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 export type PodFulfillmentInput = {
   forgeResult: Pick<
     ForgeGenerationResult,
@@ -45,6 +77,8 @@ export type PodFulfillmentInput = {
 export type PodFulfillmentResult = {
   ok: true;
   fulfillment: PodFulfillmentSnapshot;
+  /** Raw artwork bytes (gpt-image-1 base64) for the caller to persist to Storage. */
+  artwork?: { base64?: string; mimeType?: string };
   adapterModes: {
     artwork: "demo" | "live";
     printify: "demo" | "live";
@@ -72,19 +106,29 @@ export async function runPodFulfillment(
     );
   }
 
-  const uploadResult = await printifyAdapter.uploadArtwork({
-    fileName: `${listingTitle.slice(0, 40).replace(/[^\w.-]+/g, "_") || "artwork"}.png`,
-    imageUrl: artworkResult.data.imageUrl,
-  });
+  const uploadResult = await withTimeout(
+    printifyAdapter.uploadArtwork({
+      fileName: `${listingTitle.slice(0, 40).replace(/[^\w.-]+/g, "_") || "artwork"}.png`,
+      imageUrl: artworkResult.data.imageUrl,
+    }),
+    PRINTIFY_TIMEOUT_MS,
+    "upload",
+    "Printify artwork upload",
+  );
 
-  const productResult = await printifyAdapter.createProduct({
-    title: listingTitle,
-    description: listingDescription,
-    blueprintId: podDetails.blueprintId,
-    printProviderId: podDetails.printProviderId,
-    variantIds: podDetails.variantIds,
-    artworkUploadId: uploadResult.data.uploadId,
-  });
+  const productResult = await withTimeout(
+    printifyAdapter.createProduct({
+      title: listingTitle,
+      description: listingDescription,
+      blueprintId: podDetails.blueprintId,
+      printProviderId: podDetails.printProviderId,
+      variantIds: podDetails.variantIds,
+      artworkUploadId: uploadResult.data.uploadId,
+    }),
+    PRINTIFY_TIMEOUT_MS,
+    "create",
+    "Printify product creation",
+  );
 
   let printifyStatus: PodFulfillmentSnapshot["printifyStatus"] = "draft";
   let storefrontUrl: string | null = null;
@@ -109,6 +153,10 @@ export async function runPodFulfillment(
         artworkResult.mode === "live" || uploadResult.mode === "live"
           ? "live"
           : "demo",
+    },
+    artwork: {
+      base64: artworkResult.data.imageBase64,
+      mimeType: artworkResult.data.mimeType,
     },
     adapterModes: {
       artwork: artworkResult.mode,

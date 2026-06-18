@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
 import {
@@ -64,7 +66,60 @@ export function ReviewPdfPanel({
   mockupStoragePath = null,
   generationStatus,
   mockMode = false,
+  onGenerationChange,
 }: ReviewPdfPanelProps) {
+  const router = useRouter();
+  const startedRef = useRef(false);
+
+  // Drive artwork + Printify fulfillment to completion from the Review Gate.
+  // The work runs in its own /fulfill invocation (full serverless budget), so a
+  // 'queued' or stale 'generating' listing finishes instead of hanging forever.
+  useEffect(() => {
+    if (mockMode || !generationId) return;
+    if (generationStatus !== "queued" && generationStatus !== "generating") {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const endpoint = `/api/ajax/product-generations/${generationId}/fulfill`;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(endpoint, { credentials: "include" });
+        const data = (await res.json().catch(() => ({}))) as {
+          generationStatus?: GenerationStatus;
+        };
+        if (
+          !cancelled &&
+          (data.generationStatus === "ready" ||
+            data.generationStatus === "failed")
+        ) {
+          onGenerationChange?.({ generationStatus: data.generationStatus });
+          router.refresh();
+          return;
+        }
+      } catch {
+        // transient network error — keep polling
+      }
+      if (!cancelled) timer = setTimeout(poll, 3000);
+    };
+
+    // Kick off fulfillment once per mounted panel, then poll for completion.
+    if (!startedRef.current) {
+      startedRef.current = true;
+      void fetch(endpoint, { method: "POST", credentials: "include" }).catch(
+        () => {},
+      );
+    }
+    timer = setTimeout(poll, 3000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [generationId, generationStatus, mockMode, onGenerationChange, router]);
+
   const uiState = getReviewPdfUiState({
     generationStatus,
     storagePath: pdf.storagePath,

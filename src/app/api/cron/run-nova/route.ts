@@ -7,11 +7,12 @@
  *
  * Security: Vercel sends CRON_SECRET as Bearer token. Route returns 401 if missing.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runNovaStep, runForgeStep, CycleBlockedError, SimulatorError } from "@/lib/ajax/simulator";
+import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
 
 export async function GET(req: NextRequest) {
   // Validate Vercel cron secret
@@ -62,6 +63,15 @@ export async function GET(req: NextRequest) {
 
     // Auto-chain Forge
     const forgeSummary = await runForgeStep(supabase, userId, { runId: novaSummary.runId });
+
+    // Automated cycles have no browser to drive the Review Gate poller, so run
+    // POD fulfillment inline here (own 300s budget). Non-fatal: on failure the
+    // listing stays at the Review Gate as 'failed' and can be retried.
+    try {
+      await runGenerationPodJob(supabase, userId, forgeSummary.generationId);
+    } catch (fulfillErr) {
+      console.error("[cron/run-nova] fulfillment failed", fulfillErr);
+    }
 
     return NextResponse.json({
       ok: true,

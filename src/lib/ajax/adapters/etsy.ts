@@ -29,6 +29,8 @@ export type EtsyCreateDraftListingInput = {
   title: string;
   description: string;
   price_cents: number;
+  /** Optional Etsy taxonomy id. Omitted by default (no hardcoded digital category). */
+  taxonomy_id?: number;
   tags?: string[];
   shopId: string;
   accessToken: string;
@@ -105,14 +107,21 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     ): Promise<EtsyCreateDraftListingResult> {
       const body = new URLSearchParams();
       body.set("quantity", "999");
-      body.set("title", input.title.trim() || "Digital product");
-      body.set("description", input.description.trim() || "Digital download.");
+      body.set("title", input.title.trim() || "Print-on-demand product");
+      body.set(
+        "description",
+        input.description.trim() || "Made-to-order print-on-demand product.",
+      );
       body.set("price", String((input.price_cents / 100).toFixed(2)));
-      body.set("who_made", "i_did");
+      // Physical POD produced by a partner (Printify) — not a digital download.
+      body.set("who_made", "someone_else");
       body.set("when_made", "2020_2026");
-      body.set("taxonomy_id", String(ETSY_DIGITAL_TAXONOMY_ID));
-      body.set("type", "download");
-      body.set("state", "active");
+      if (input.taxonomy_id != null) {
+        body.set("taxonomy_id", String(input.taxonomy_id));
+      }
+      body.set("type", "physical");
+      // CRITICAL: drafts only. Never auto-publish live — the human Review Gate decides.
+      body.set("state", "draft");
       body.set("is_supply", "false");
 
       const tags = (input.tags ?? [])

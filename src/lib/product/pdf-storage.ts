@@ -47,6 +47,40 @@ export async function uploadProductMockup(
   }
 }
 
+/** User-scoped artwork path: `{userId}/{generationId}_artwork.png` */
+export function buildProductArtworkStoragePath(
+  userId: string,
+  generationId: string,
+): string {
+  return `${userId}/${generationId}_artwork.png`;
+}
+
+/** Upload generated product artwork (decoded image bytes) to Storage. */
+export async function uploadProductArtwork(
+  storagePath: string,
+  imageBytes: Buffer,
+  contentType = "image/png",
+): Promise<void> {
+  if (imageBytes.byteLength === 0) {
+    throw new Error("Artwork image buffer is empty.");
+  }
+  if (imageBytes.byteLength > MAX_BYTES) {
+    throw new Error(`Artwork image exceeds ${MAX_BYTES} byte limit.`);
+  }
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.storage
+    .from(PRODUCT_PDFS_BUCKET)
+    .upload(storagePath, imageBytes, {
+      contentType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Artwork upload failed: ${error.message}`);
+  }
+}
+
 export async function downloadProductMockup(storagePath: string): Promise<Buffer> {
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage

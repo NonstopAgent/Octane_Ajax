@@ -9,6 +9,10 @@ import {
   type PodFulfillmentJobResult,
 } from "@/lib/ajax/pod/fulfillment-runner";
 import { mapGenerationFromDb, mapGenerationToDbUpdate } from "@/lib/product/mappers";
+import {
+  buildProductArtworkStoragePath,
+  uploadProductArtwork,
+} from "@/lib/product/pdf-storage";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -24,6 +28,13 @@ export class GenerationPodError extends Error {
     this.name = "GenerationPodError";
   }
 }
+
+/**
+ * A `generating` row whose `updated_at` is older than this is treated as a dead
+ * attempt (the serverless function was almost certainly torn down mid-call) and
+ * is allowed to be retried instead of being wedged behind a 409 forever.
+ */
+const STALE_FULFILLMENT_MS = 90_000;
 
 async function insertFactoryEvent(
   supabase: Supabase,
@@ -88,7 +99,15 @@ export async function runGenerationPodJob(
   }
 
   if (generation.generationStatus === "generating") {
-    throw new GenerationPodError("POD fulfillment is already in progress.", 409);
+    const updatedAtMs = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+    const isStale =
+      Number.isFinite(updatedAtMs) &&
+      Date.now() - updatedAtMs > STALE_FULFILLMENT_MS;
+    if (!isStale) {
+      throw new GenerationPodError("POD fulfillment is already in progress.", 409);
+    }
+    // Stale `generating` row: the prior attempt died (likely a serverless
+    // timeout). Fall through and re-run rather than wedging it forever.
   }
 
   const listingId = generation.productListingId;
@@ -148,11 +167,33 @@ export async function runGenerationPodJob(
       publish: false,
     });
 
+    // gpt-image-1 returns base64. Persist the bytes to Storage and store a
+    // stable path + a small serving URL instead of a multi-MB data: URI.
+    let artworkRef = result.fulfillment.artworkUrl ?? null;
+    let mockupPath: string | null = artworkRef;
+    if (result.artwork?.base64) {
+      try {
+        const storagePath = buildProductArtworkStoragePath(userId, generationId);
+        await uploadProductArtwork(
+          storagePath,
+          Buffer.from(result.artwork.base64, "base64"),
+          result.artwork.mimeType ?? "image/png",
+        );
+        mockupPath = storagePath;
+        artworkRef = `/api/ajax/product-generations/${generationId}/mockup-download`;
+      } catch (storageErr) {
+        console.error("[generation-pod] artwork storage upload failed", storageErr);
+        // Non-fatal: fall back to whatever URL the adapter returned.
+      }
+    }
+
+    const fulfillmentForStore = { ...result.fulfillment, artworkUrl: artworkRef };
+
     const podDetailsWithFulfillment = {
       ...generation.podDetails,
       metadata: {
         ...generation.podDetails.metadata,
-        fulfillment: result.fulfillment,
+        fulfillment: fulfillmentForStore,
       },
     };
 
@@ -162,11 +203,20 @@ export async function runGenerationPodJob(
         mapGenerationToDbUpdate({
           generationStatus: "ready",
           podDetails: podDetailsWithFulfillment,
-          mockupStoragePath: result.fulfillment.artworkUrl ?? null,
+          mockupStoragePath: mockupPath,
         }),
       )
       .eq("id", generationId)
       .eq("user_id", userId);
+
+    // Surface the artwork on the listing so the Review Gate can render it.
+    if (artworkRef) {
+      await supabase
+        .from(TABLES.LISTINGS)
+        .update({ mockup_url: artworkRef })
+        .eq("id", listingId)
+        .eq("user_id", userId);
+    }
 
     await insertFactoryEvent(supabase, userId, {
       event_type: "pod_fulfillment_ready",
@@ -181,7 +231,7 @@ export async function runGenerationPodJob(
       },
     });
 
-    return { ok: true, fulfillment: result.fulfillment };
+    return { ok: true, fulfillment: fulfillmentForStore };
   } catch (err) {
     const message =
       err instanceof PodFulfillmentError

@@ -4,7 +4,7 @@ export interface OctanePayload {
   command: string;
   project: string;
   timestamp: number; // For replay attack protection (max 5 minute window)
-  params: Record<string, any>;
+  params: Record<string, unknown>;
 }
 
 export function generateOctaneSignature(payload: OctanePayload, secret: string): string {

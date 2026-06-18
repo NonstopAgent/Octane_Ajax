@@ -143,7 +143,6 @@ function AgentWorkerSvg({
   const c = AGENT_COLORS[slug];
   const working = status === "working" || status === "thinking";
   const waiting = status === "waiting_review";
-  const glowId = `glow-${slug}`;
 
   return (
     <g
@@ -425,14 +424,17 @@ export function FactoryVisMap({
   onRunPixel,
   onResetFactory,
 }: FactoryVisMapProps) {
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
   const [elapsed, setElapsed] = useState("00:00");
-  const startRef = useRef(Date.now());
+  const startRef = useRef<number | null>(null);
 
   useEffect(() => {
+    startRef.current = Date.now();
     const interval = setInterval(() => {
       setTick((t) => t + 1);
-      const secs = Math.floor((Date.now() - startRef.current) / 1000);
+      const secs = Math.floor(
+        (Date.now() - (startRef.current ?? Date.now())) / 1000,
+      );
       const m = String(Math.floor(secs / 60)).padStart(2, "0");
       const s = String(secs % 60).padStart(2, "0");
       setElapsed(`${m}:${s}`);

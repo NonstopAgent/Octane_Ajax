@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createEtsyAdapter,
-  EtsyAdapterError,
-  ETSY_DIGITAL_TAXONOMY_ID,
-} from "@/lib/ajax/adapters/etsy";
+import { createEtsyAdapter, EtsyAdapterError } from "@/lib/ajax/adapters/etsy";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -26,6 +22,7 @@ describe("etsy adapter", () => {
       title: "Meal Prep Planner",
       description: "Printable planner PDF",
       price_cents: 799,
+      taxonomy_id: 1234,
       tags: ["planner", "meal prep"],
       shopId: "12345",
       accessToken: "42.token-value",
@@ -42,9 +39,10 @@ describe("etsy adapter", () => {
     assert.match(body, /title=Meal\+Prep\+Planner/);
     assert.match(body, /price=7\.99/);
     assert.match(body, /when_made=2020_2026/);
-    assert.match(body, new RegExp(`taxonomy_id=${ETSY_DIGITAL_TAXONOMY_ID}`));
-    assert.match(body, /type=download/);
-    assert.match(body, /state=active/);
+    assert.match(body, /who_made=someone_else/);
+    assert.match(body, /taxonomy_id=1234/);
+    assert.match(body, /type=physical/);
+    assert.match(body, /state=draft/);
     assert.match(body, /tags%5B%5D=planner/);
   });
 

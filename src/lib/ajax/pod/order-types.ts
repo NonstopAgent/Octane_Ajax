@@ -407,7 +407,7 @@ export function extractShippingFromWebhook(
 }
 
 /** Demo shipping used when Etsy payload omits address (local dev only). */
-export function demoShippingForOrder(etsyOrderId: string): EtsyOrderShippingInfo {
+export function demoShippingForOrder(_etsyOrderId: string): EtsyOrderShippingInfo {
   return {
     firstName: "Demo",
     lastName: "Customer",
