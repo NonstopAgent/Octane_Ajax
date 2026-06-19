@@ -52,5 +52,10 @@ export const NAV_ITEMS = [
     description: "Internal approved listings",
   },
   { href: "/agents", label: "Agents", description: "Memory & learning" },
+  {
+    href: "/war-room",
+    label: "War Room",
+    description: "Strategy from the archive",
+  },
   { href: "/settings", label: "Settings", description: "Demo & config" },
 ] as const;

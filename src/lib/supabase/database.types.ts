@@ -635,6 +635,57 @@ export interface Database {
           },
         ];
       };
+      strategy_recommendations: {
+        Row: {
+          id: string;
+          user_id: string;
+          run_id: string;
+          category: string;
+          title: string;
+          rationale: string;
+          recommended_action: string;
+          priority: number;
+          confidence: number | null;
+          evidence: Json;
+          status: string;
+          drafted_idea_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          run_id: string;
+          category: string;
+          title: string;
+          rationale?: string;
+          recommended_action?: string;
+          priority?: number;
+          confidence?: number | null;
+          evidence?: Json;
+          status?: string;
+          drafted_idea_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          run_id?: string;
+          category?: string;
+          title?: string;
+          rationale?: string;
+          recommended_action?: string;
+          priority?: number;
+          confidence?: number | null;
+          evidence?: Json;
+          status?: string;
+          drafted_idea_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       tiktok_queue: {
         Row: {
           id: string;

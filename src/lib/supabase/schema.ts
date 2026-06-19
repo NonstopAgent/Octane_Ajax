@@ -125,4 +125,5 @@ export const TABLES = {
   ETSY_CREDENTIALS: "etsy_credentials",
   ORDER_QUEUE: "order_queue",
   TIKTOK_QUEUE: "tiktok_queue",
+  STRATEGY: "strategy_recommendations",
 } as const;
