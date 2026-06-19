@@ -30,8 +30,16 @@ export class PodFulfillmentError extends Error {
   }
 }
 
-/** Hard ceiling for a single Printify API call so a hung request fails cleanly. */
-const PRINTIFY_TIMEOUT_MS = 15_000;
+/**
+ * Hard ceiling for a single live Printify API call so a hung request fails
+ * cleanly. Printify product creation can legitimately take 30-60s, so this is
+ * generous (and overridable via PRINTIFY_TIMEOUT_MS) while still staying well
+ * under the /fulfill route's function budget.
+ */
+const PRINTIFY_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.PRINTIFY_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 90_000;
+})();
 
 /**
  * Rejects with a PodFulfillmentError if `promise` doesn't settle within `ms`.
