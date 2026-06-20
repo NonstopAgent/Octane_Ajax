@@ -20,7 +20,7 @@ import {
   type NovaIdeationResult,
   type NovaRawIdea,
 } from "@/lib/ajax/nova/types";
-import type { EtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
+import type { MarketResearchContext } from "@/lib/ajax/nova/research";
 import { completeJson } from "@/lib/llm/json";
 import { isOpenAiConfigured } from "@/lib/llm/openai";
 import type { Json } from "@/lib/supabase/database.types";
@@ -38,7 +38,7 @@ export type NovaIdeationOptions = {
   /** Operator history from past cycles (rejected/approved niches, recent titles). */
   pastContext?: NovaPastContext;
   /** Live Etsy market data to ground ideation (passed through from simulator). */
-  marketContext?: EtsyMarketContext;
+  marketContext?: MarketResearchContext;
 };
 
 function toBrainInput(raw: NovaRawIdea): ProductBrainInput {

@@ -2,8 +2,8 @@ import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 import { hasNovaPastContext } from "@/lib/ajax/nova/past-context";
 import { ALLOWED_PRODUCT_CATEGORIES, PRODUCT_FORMATS } from "@/lib/ajax/product-brain/rules";
 import { NOVA_PROMPT_VERSION } from "@/lib/ajax/nova/types";
-import type { EtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
-import { formatEtsyContextForPrompt } from "@/lib/ajax/nova/etsy-research";
+import type { MarketResearchContext } from "@/lib/ajax/nova/research";
+import { formatMarketResearchForPrompt } from "@/lib/ajax/nova/research";
 
 export type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 
@@ -55,7 +55,7 @@ Generate exactly 3 ideas. Ideas must be distinct niches AND vary product formats
 export function buildNovaIdeationUserPrompt(
   runId: string,
   pastContext?: NovaPastContext,
-  marketContext?: EtsyMarketContext,
+  marketContext?: MarketResearchContext,
 ): string {
   const base = `Generate 3 niche print-on-demand gift product ideas for cycle run ${runId.slice(0, 8)}.
 
@@ -64,7 +64,7 @@ Focus on underserved niche identities — hobbies, professions, pet parenting, l
   const sections: string[] = [base];
 
   if (marketContext) {
-    sections.push(formatEtsyContextForPrompt(marketContext));
+    sections.push(formatMarketResearchForPrompt(marketContext));
   }
 
   if (pastContext && hasNovaPastContext(pastContext)) {

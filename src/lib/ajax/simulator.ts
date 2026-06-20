@@ -10,7 +10,7 @@ import {
   runNovaIdeation,
 } from "@/lib/ajax/nova";
 import { fetchNovaPastContext } from "@/lib/ajax/nova/past-context";
-import { fetchEtsyMarketContext } from "@/lib/ajax/nova/etsy-research";
+import { fetchMarketResearch } from "@/lib/ajax/nova/research";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   normalizeProductCategory,
@@ -493,8 +493,8 @@ async function executeNovaStep(
 
   const [pastContext, marketContext] = await Promise.all([
     fetchNovaPastContext(supabase, userId),
-    fetchEtsyMarketContext(process.env.ETSY_CLIENT_ID ?? "").catch((err) => {
-      console.warn("[nova] Etsy research failed, running without market data:", err);
+    fetchMarketResearch().catch((err) => {
+      console.warn("[nova] market research failed, running without market data:", err);
       return null;
     }),
   ]);
