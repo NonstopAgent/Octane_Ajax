@@ -105,6 +105,7 @@ async function fetchLlmRawIdeas(
   options?: NovaIdeationOptions,
 ): Promise<{ raw: NovaRawIdea[]; model: string }> {
   const result = await completeJson({
+    task: "ideation",
     messages: [
       { role: "system", content: NOVA_IDEATION_SYSTEM_PROMPT },
       {

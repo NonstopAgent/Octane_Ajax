@@ -43,6 +43,15 @@ export interface LlmCompletionResponse {
   usage: LlmTokenUsage;
 }
 
+/** Logical task used to route to the best provider/model (see llm/providers). */
+export type LlmTask =
+  | "ideation"
+  | "listing"
+  | "scoring"
+  | "marketing"
+  | "strategy"
+  | "default";
+
 export interface JsonCompletionRequest<T> extends LlmCompletionRequest {
   schema: z.ZodType<T>;
   /** Extra system instructions (JSON shape hints, field names, etc.). */
@@ -52,6 +61,8 @@ export interface JsonCompletionRequest<T> extends LlmCompletionRequest {
   timeout?: number;
   /** Inject a client for tests; production callers omit this. */
   client?: OpenAI;
+  /** Routes to the best provider/model for this task (falls back to OpenAI). */
+  task?: LlmTask;
 }
 
 export interface JsonCompletionResult<T> {

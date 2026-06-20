@@ -151,6 +151,7 @@ async function fetchLlmMarketing(
 ): Promise<PixelPromoPackage> {
   const ctx = promoContextFromInput(input);
   const result = await completeJson({
+    task: "marketing",
     messages: [
       { role: "system", content: PIXEL_MARKETING_SYSTEM_PROMPT },
       {
@@ -213,6 +214,7 @@ async function fetchLlmTikTokPackage(
   });
 
   const result = await completeJson({
+    task: "marketing",
     messages: [
       { role: "system", content: PIXEL_TIKTOK_SYSTEM_PROMPT },
       {

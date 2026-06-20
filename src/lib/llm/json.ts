@@ -1,6 +1,10 @@
 import type OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { createOpenAiClient } from "@/lib/llm/openai";
+import {
+  completeJsonViaProvider,
+  resolveTaskModel,
+} from "@/lib/llm/providers";
 import { estimateCompletionCost, logCostEstimate } from "@/lib/llm/cost";
 import {
   DEFAULT_LLM_MODEL,
@@ -79,12 +83,28 @@ function isRetryableError(error: unknown): boolean {
 export async function completeJson<T>(
   request: JsonCompletionRequest<T>,
 ): Promise<JsonCompletionResult<T>> {
+  // Multi-model routing: tagged tasks go to the best provider, falling back to
+  // OpenAI on missing key or any error. Injected clients (tests) skip routing.
+  const routed = request.task ? resolveTaskModel(request.task) : null;
+  if (routed && routed.provider !== "openai" && !request.client) {
+    try {
+      return await completeJsonViaProvider(routed.provider, routed.model, request);
+    } catch (routeError) {
+      console.warn(
+        `[llm] ${routed.provider} failed for task "${request.task}", falling back to OpenAI:`,
+        routeError instanceof Error ? routeError.message : routeError,
+      );
+    }
+  }
+
   const client =
     request.client ??
     createOpenAiClient(
       request.timeout !== undefined ? { timeout: request.timeout } : undefined,
     );
-  const model = request.model ?? DEFAULT_LLM_MODEL;
+  const model =
+    (routed && routed.provider === "openai" ? routed.model : request.model) ??
+    DEFAULT_LLM_MODEL;
   const maxRetries = request.maxRetries ?? DEFAULT_MAX_RETRIES;
   const messages = buildSystemMessages(request.messages, request.jsonInstructions);
 
