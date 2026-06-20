@@ -9,10 +9,7 @@ import {
   type PodFulfillmentJobResult,
 } from "@/lib/ajax/pod/fulfillment-runner";
 import { mapGenerationFromDb, mapGenerationToDbUpdate } from "@/lib/product/mappers";
-import {
-  buildProductArtworkStoragePath,
-  uploadProductArtwork,
-} from "@/lib/product/pdf-storage";
+import { uploadPublicArtwork } from "@/lib/product/pdf-storage";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -173,14 +170,15 @@ export async function runGenerationPodJob(
     let mockupPath: string | null = artworkRef;
     if (result.artwork?.base64) {
       try {
-        const storagePath = buildProductArtworkStoragePath(userId, generationId);
-        await uploadProductArtwork(
-          storagePath,
+        const publicUrl = await uploadPublicArtwork(
+          userId,
+          generationId,
           Buffer.from(result.artwork.base64, "base64"),
           result.artwork.mimeType ?? "image/png",
         );
-        mockupPath = storagePath;
-        artworkRef = `/api/ajax/product-generations/${generationId}/mockup-download`;
+        // Store the stable public URL in both fields (small, renders everywhere).
+        mockupPath = publicUrl;
+        artworkRef = publicUrl;
       } catch (storageErr) {
         console.error("[generation-pod] artwork storage upload failed", storageErr);
         // Non-fatal: fall back to whatever URL the adapter returned.

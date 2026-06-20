@@ -4,6 +4,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
 
 export const PRODUCT_PDFS_BUCKET = "product_pdfs";
+/** Public bucket for generated product artwork (served by stable public URL). */
+export const PRODUCT_ARTWORK_BUCKET = "product-artwork";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -79,6 +81,46 @@ export async function uploadProductArtwork(
   if (error) {
     throw new Error(`Artwork upload failed: ${error.message}`);
   }
+}
+
+/**
+ * Uploads generated artwork to the PUBLIC artwork bucket and returns a stable
+ * public URL (usable by the Review UI, the store, and Printify alike). This
+ * avoids storing multi-MB base64 data URIs in the database.
+ */
+export async function uploadPublicArtwork(
+  userId: string,
+  generationId: string,
+  imageBytes: Buffer,
+  contentType = "image/png",
+): Promise<string> {
+  if (imageBytes.byteLength === 0) {
+    throw new Error("Artwork image buffer is empty.");
+  }
+  if (imageBytes.byteLength > MAX_BYTES) {
+    throw new Error(`Artwork image exceeds ${MAX_BYTES} byte limit.`);
+  }
+
+  const ext = contentType.includes("jpeg")
+    ? "jpg"
+    : contentType.includes("webp")
+      ? "webp"
+      : "png";
+  const objectPath = `${userId}/${generationId}.${ext}`;
+
+  const supabase = createServiceClient();
+  const { error } = await supabase.storage
+    .from(PRODUCT_ARTWORK_BUCKET)
+    .upload(objectPath, imageBytes, { contentType, upsert: true });
+
+  if (error) {
+    throw new Error(`Artwork upload failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage
+    .from(PRODUCT_ARTWORK_BUCKET)
+    .getPublicUrl(objectPath);
+  return data.publicUrl;
 }
 
 export async function downloadProductMockup(storagePath: string): Promise<Buffer> {
