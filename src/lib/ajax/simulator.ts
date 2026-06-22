@@ -552,6 +552,8 @@ async function executeNovaStep(
         runId,
         ideationMode: novaResult.mode,
         promptVersion: novaResult.promptVersion,
+        llmModel: novaResult.llmModel ?? null,
+        researchSources: marketContext?.sources ?? [],
       },
     }),
   );

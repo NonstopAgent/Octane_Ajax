@@ -27,10 +27,10 @@ const DEFAULT_TASK_ROUTES: Record<
   LlmTask,
   { provider: LlmProvider; model: string }
 > = {
-  ideation: { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-  strategy: { provider: "anthropic", model: "claude-3-5-sonnet-latest" },
-  marketing: { provider: "google", model: "gemini-1.5-flash-latest" },
-  scoring: { provider: "google", model: "gemini-1.5-flash-latest" },
+  ideation: { provider: "anthropic", model: "claude-sonnet-4-6" },
+  strategy: { provider: "anthropic", model: "claude-sonnet-4-6" },
+  marketing: { provider: "google", model: "gemini-2.0-flash" },
+  scoring: { provider: "google", model: "gemini-2.0-flash" },
   listing: { provider: "openai", model: "gpt-4o-mini" },
   default: { provider: "openai", model: "gpt-4o-mini" },
 };
