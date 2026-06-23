@@ -42,11 +42,22 @@ export async function GET(request: Request) {
     return response;
   };
 
-  if (!code || !state || !expectedState || !codeVerifier) {
+  if (!code || !state) {
+    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? ""}/api/auth/etsy/callback`;
     return clearCookies(
       settingsRedirect({
         etsy: "error",
-        message: "Missing Etsy OAuth parameters.",
+        message: `Etsy did not return an authorization code. Confirm your Etsy app's callback URL is exactly ${callbackUrl}, then try Connect again.`,
+      }),
+    );
+  }
+
+  if (!expectedState || !codeVerifier) {
+    return clearCookies(
+      settingsRedirect({
+        etsy: "error",
+        message:
+          "Etsy login session expired or cookies were blocked. Please click Connect Etsy shop again (and allow cookies for this site).",
       }),
     );
   }
