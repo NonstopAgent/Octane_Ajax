@@ -190,10 +190,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       <Panel title="How the pipeline works">
         <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--text-muted)]">
           <li>
-            <strong className="text-[var(--foreground)]">Nova</strong> searches Etsy for market signals, then generates 3 product ideas using GPT.
+            <strong className="text-[var(--foreground)]">Nova</strong> researches the market (Etsy, Google Trends, YouTube), then generates 3 product ideas.
           </li>
           <li>
-            <strong className="text-[var(--foreground)]">Forge</strong> picks the top-scoring idea and builds a full listing (title, description, PDF structure, cover image prompt).
+            <strong className="text-[var(--foreground)]">Forge</strong> picks the top-scoring idea and builds a full listing (title, description, POD product structure, artwork prompt).
           </li>
           <li>
             <strong className="text-[var(--foreground)]">Review Gate</strong> — you approve or reject the listing. Nothing publishes without your sign-off.
@@ -202,7 +202,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             <strong className="text-[var(--foreground)]">Pixel</strong> generates social copy (TikTok hooks, Pinterest title, hashtags) for approved listings.
           </li>
           <li>
-            <strong className="text-[var(--foreground)]">Publish</strong> — listings go live on Etsy or LemonSqueezy.{" "}
+            <strong className="text-[var(--foreground)]">Publish</strong> — approved listings are pushed to Etsy as drafts for your final review.{" "}
             {!etsyConnected && (
               <Link href="/settings/etsy-connect" className="text-[var(--accent-blue)] hover:underline">
                 Connect your Etsy shop →

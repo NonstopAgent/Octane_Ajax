@@ -123,11 +123,30 @@ export async function uploadPublicArtwork(
   return data.publicUrl;
 }
 
-export async function downloadProductMockup(storagePath: string): Promise<Buffer> {
+export async function downloadProductMockup(mockupRef: string): Promise<Buffer> {
+  // Artwork is now stored as a public URL (product-artwork bucket) — fetch it.
+  if (mockupRef.startsWith("http://") || mockupRef.startsWith("https://")) {
+    const res = await fetch(mockupRef, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) {
+      throw new Error(`Mockup fetch failed (${res.status}): ${mockupRef}`);
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  // Legacy gpt-image-1 data: URI fallback.
+  if (mockupRef.startsWith("data:")) {
+    const match = /^data:[\w.+/-]+;base64,([\s\S]+)$/.exec(mockupRef);
+    if (!match) {
+      throw new Error("Mockup data URI is invalid.");
+    }
+    return Buffer.from(match[1]!, "base64");
+  }
+
+  // Legacy storage object path — read from the artwork bucket.
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage
-    .from(PRODUCT_PDFS_BUCKET)
-    .download(storagePath);
+    .from(PRODUCT_ARTWORK_BUCKET)
+    .download(mockupRef);
 
   if (error || !data) {
     throw new Error(
