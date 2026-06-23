@@ -20,12 +20,6 @@ export type GumroadOnApproveContext = {
   generation: ProductGeneration | null;
 };
 
-export type GumroadOnApproveResult = {
-  listing: ProductListing;
-  gumroadUrl: string;
-  gumroadProductId: string;
-} | null;
-
 export type GumroadPublishResult =
   | {
       ok: true;
@@ -217,29 +211,7 @@ export async function publishListingToGumroad(
   }
 }
 
-/**
- * Auto-publish to Lemon Squeezy after Review Gate approval.
- * Never throws — failures are logged as factory events and approval continues.
- */
-export async function publishListingToGumroadOnApprove(
-  ctx: GumroadOnApproveContext,
-): Promise<GumroadOnApproveResult> {
-  const result = await publishListingToGumroad(ctx, {
-    missingTokenEventType: "gumroad_skipped",
-    missingTokenStatus: "skipped",
-    missingTokenStatusCode: 200,
-    skippedMessage:
-      "Store auto-publish skipped (LEMONSQUEEZY_API_KEY not set).",
-    failureMessagePrefix: "Store auto-publish failed",
-  });
-
-  if (result.ok) {
-    return {
-      listing: result.listing,
-      gumroadUrl: result.gumroadUrl,
-      gumroadProductId: result.gumroadProductId,
-    };
-  }
-
-  return null;
-}
+// NOTE: The Review-Gate auto-publish to Lemon Squeezy (publishListingToGumroadOnApprove)
+// was removed — Octane Ajax is print-on-demand (no PDFs), so that path only ever
+// failed. The shared publishListingToGumroad above is retained for the manual
+// store-publish route (/store), which stays available but off the main nav.

@@ -493,7 +493,7 @@ async function executeNovaStep(
 
   const [pastContext, marketContext] = await Promise.all([
     fetchNovaPastContext(supabase, userId),
-    fetchMarketResearch().catch((err) => {
+    fetchMarketResearch({ supabase, userId }).catch((err) => {
       console.warn("[nova] market research failed, running without market data:", err);
       return null;
     }),

@@ -2,6 +2,7 @@ import { mapAgentFromDb, mapEventFromDb } from "@/lib/ajax/mappers";
 import type { AjaxAgent, FactoryEvent } from "@/lib/ajax/types";
 import { PRODUCT_BRAIN_VERDICTS } from "@/lib/supabase/schema";
 import type { Supabase } from "@/lib/supabase/helpers";
+import { createServiceClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
 const APPROVE_VERDICT = PRODUCT_BRAIN_VERDICTS[0];
@@ -124,6 +125,29 @@ export async function fetchDashboardAgents(
 
   if (error) throw error;
   return (data ?? []).map(mapAgentFromDb);
+}
+
+/**
+ * Sum of estimated LLM spend (USD) over the trailing 7 days. Usage rows are not
+ * user-attributed (the LLM choke point has no request user), so this is a global
+ * operator figure read via the service client. Best-effort: returns 0 on error
+ * so the dashboard never breaks.
+ */
+export async function getWeeklyLlmCostUsd(): Promise<number> {
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const supabase = createServiceClient();
+    const { data, error } = await supabase
+      .from(TABLES.LLM_USAGE)
+      .select("cost_usd")
+      .gte("created_at", since);
+    if (error) return 0;
+    let total = 0;
+    for (const row of data ?? []) total += Number(row.cost_usd ?? 0);
+    return total;
+  } catch {
+    return 0;
+  }
 }
 
 export async function fetchRecentDashboardEvents(

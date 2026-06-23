@@ -12,6 +12,10 @@
  * operator — it never publishes or opens anything on its own.
  */
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
+import {
+  fetchPerformanceSummary,
+  type PerformanceSummary,
+} from "@/lib/ajax/analytics/etsy-snapshots";
 import { createOpenAiClient, isOpenAiConfigured } from "@/lib/llm/openai";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
@@ -69,6 +73,7 @@ type ArchiveSummary = {
   };
   feedback: { type: string; text: string }[];
   orders: { total: number; byStatus: Record<string, number> };
+  performance: PerformanceSummary;
 };
 
 function tally(values: (string | null | undefined)[]): Record<string, number> {
@@ -114,6 +119,10 @@ async function aggregateArchive(
   const listingRows = listingsRes.data ?? [];
   const feedbackRows = feedbackRes.data ?? [];
   const orderRows = ordersRes.data ?? [];
+
+  // Real Etsy performance (views velocity, revenue, traffic-but-no-sales) so the
+  // strategist reasons about what actually converts, not just what gets made.
+  const performance = await fetchPerformanceSummary(supabase, userId);
 
   const nicheMap = new Map<
     string,
@@ -164,6 +173,7 @@ async function aggregateArchive(
       total: orderRows.length,
       byStatus: tally(orderRows.map((r) => r.status)),
     },
+    performance,
   };
 }
 

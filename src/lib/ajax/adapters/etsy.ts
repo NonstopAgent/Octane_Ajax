@@ -46,6 +46,20 @@ export type EtsyAdapterOptions = {
   fetchImpl?: typeof fetch;
 };
 
+/** A shop's own listing with lifetime engagement counters (analytics poller). */
+export type EtsyShopListing = {
+  listingId: string;
+  title: string;
+  views: number;
+  favorites: number;
+};
+
+/** Orders + revenue attributed per Etsy listing id from recent receipts. */
+export type EtsyReceiptsByListing = Record<
+  string,
+  { orders: number; revenueCents: number }
+>;
+
 function getClientId(explicit?: string): string {
   const clientId = explicit ?? process.env.ETSY_CLIENT_ID?.trim();
   if (!clientId) {
@@ -220,6 +234,83 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
           ? String(parsed.listing_image_id)
           : "unknown";
       return { listing_image_id: imageId };
+    },
+
+    /**
+     * Reads the shop's active listings with lifetime views + favorites. Etsy
+     * exposes only lifetime counters (no daily series), so the analytics poller
+     * snapshots these daily and derives velocity from the deltas.
+     */
+    async getShopListings(
+      shopId: string,
+      accessToken: string,
+      limit = 100,
+    ): Promise<EtsyShopListing[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/active?limit=${limit}`,
+        { headers: authHeaders(clientId, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: {
+          listing_id?: number;
+          title?: string;
+          views?: number;
+          num_favorers?: number;
+        }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .map((r) => ({
+          listingId: r.listing_id != null ? String(r.listing_id) : "",
+          title: (r.title ?? "").trim(),
+          views: Number(r.views ?? 0),
+          favorites: Number(r.num_favorers ?? 0),
+        }))
+        .filter((r) => r.listingId);
+    },
+
+    /**
+     * Sums orders + revenue per listing from receipts created since `minCreated`
+     * (unix seconds). Requires the `transactions_r` scope — shops authorized
+     * before it was added will 403 here until they reconnect Etsy.
+     */
+    async getShopReceipts(
+      shopId: string,
+      accessToken: string,
+      minCreated?: number,
+    ): Promise<EtsyReceiptsByListing> {
+      const params = new URLSearchParams({ limit: "100" });
+      if (minCreated && minCreated > 0) {
+        params.set("min_created", String(Math.floor(minCreated)));
+      }
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/receipts?${params.toString()}`,
+        { headers: authHeaders(clientId, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: {
+          transactions?: {
+            listing_id?: number;
+            quantity?: number;
+            price?: { amount?: number; divisor?: number };
+          }[];
+        }[];
+      }>(response);
+
+      const byListing: EtsyReceiptsByListing = {};
+      for (const receipt of parsed.results ?? []) {
+        for (const txn of receipt.transactions ?? []) {
+          if (txn.listing_id == null) continue;
+          const lid = String(txn.listing_id);
+          const qty = Number(txn.quantity ?? 1) || 1;
+          const amount = Number(txn.price?.amount ?? 0);
+          const divisor = Number(txn.price?.divisor ?? 100) || 100;
+          const lineCents = Math.round((amount / divisor) * 100) * qty;
+          const entry = (byListing[lid] ??= { orders: 0, revenueCents: 0 });
+          entry.orders += qty;
+          entry.revenueCents += lineCents;
+        }
+      }
+      return byListing;
     },
   };
 }

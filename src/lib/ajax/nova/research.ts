@@ -15,6 +15,8 @@ import {
   fetchEtsyMarketContext,
   formatEtsyContextForPrompt,
 } from "@/lib/ajax/nova/etsy-research";
+import type { Supabase } from "@/lib/supabase/helpers";
+import { TABLES } from "@/lib/supabase/schema";
 
 export type TrendSignal = { seed: string; queries: string[] };
 export type YouTubeSignal = { seed: string; videoTitles: string[] };
@@ -27,20 +29,61 @@ export type MarketResearchContext = {
   fetchedAt: string;
 };
 
-/** Seed phrases used for Trends + YouTube research. */
-const RESEARCH_SEEDS = [
-  "personalized gift",
-  "funny mug gift",
-  "niche t-shirt gift",
+export type ResearchSeedOptions = { supabase?: Supabase; userId?: string };
+
+/** Broader, more creative fallback seeds (used when there's no accepted strategy yet). */
+const FALLBACK_SEEDS = [
+  "hobby-specific humor apparel",
+  "occupation pride gift",
+  "pet breed specific accessories",
+  "fandom-adjacent aesthetic art",
+  "life milestone celebration",
 ] as const;
 
-async function fetchGoogleTrends(): Promise<TrendSignal[] | null> {
+/**
+ * Resolves research seeds dynamically: prefer the operator's accepted War Room
+ * niche recommendations, then supplement with a randomized fallback set so each
+ * cycle explores something fresh (instead of the same saturated terms).
+ */
+async function resolveResearchSeeds(opts?: ResearchSeedOptions): Promise<string[]> {
+  const seeds: string[] = [];
+
+  if (opts?.supabase && opts.userId) {
+    try {
+      const { data } = await opts.supabase
+        .from(TABLES.STRATEGY)
+        .select("title")
+        .eq("user_id", opts.userId)
+        .eq("category", "niche")
+        .in("status", ["accepted", "actioned"])
+        .order("created_at", { ascending: false })
+        .limit(3);
+      for (const row of data ?? []) {
+        const title = (row.title ?? "").trim();
+        if (title) seeds.push(title);
+      }
+    } catch {
+      // fall through to fallback seeds
+    }
+  }
+
+  const shuffled = [...FALLBACK_SEEDS].sort(() => Math.random() - 0.5);
+  for (const seed of shuffled) {
+    if (seeds.length >= 3) break;
+    if (!seeds.includes(seed)) seeds.push(seed);
+  }
+  return seeds.slice(0, 3);
+}
+
+async function fetchGoogleTrends(
+  seeds: readonly string[],
+): Promise<TrendSignal[] | null> {
   const key = process.env.SERPAPI_API_KEY?.trim();
   if (!key) return null;
 
   const out: TrendSignal[] = [];
   await Promise.allSettled(
-    RESEARCH_SEEDS.map(async (seed) => {
+    seeds.map(async (seed) => {
       const url = new URL("https://serpapi.com/search.json");
       url.searchParams.set("engine", "google_trends");
       url.searchParams.set("data_type", "RELATED_QUERIES");
@@ -73,13 +116,15 @@ async function fetchGoogleTrends(): Promise<TrendSignal[] | null> {
   return out.length > 0 ? out : null;
 }
 
-async function fetchYouTubeBuzz(): Promise<YouTubeSignal[] | null> {
+async function fetchYouTubeBuzz(
+  seeds: readonly string[],
+): Promise<YouTubeSignal[] | null> {
   const key = process.env.YOUTUBE_API_KEY?.trim();
   if (!key) return null;
 
   const out: YouTubeSignal[] = [];
   await Promise.allSettled(
-    RESEARCH_SEEDS.map(async (seed) => {
+    seeds.map(async (seed) => {
       const url = new URL("https://www.googleapis.com/youtube/v3/search");
       url.searchParams.set("part", "snippet");
       url.searchParams.set("type", "video");
@@ -109,11 +154,14 @@ async function fetchYouTubeBuzz(): Promise<YouTubeSignal[] | null> {
  * Runs all configured research sources in parallel. Returns null only when no
  * source produced anything (no keys / all failed) so Nova still runs.
  */
-export async function fetchMarketResearch(): Promise<MarketResearchContext | null> {
+export async function fetchMarketResearch(
+  opts?: ResearchSeedOptions,
+): Promise<MarketResearchContext | null> {
+  const seeds = await resolveResearchSeeds(opts);
   const [etsy, trends, youtube] = await Promise.all([
     fetchEtsyMarketContext(process.env.ETSY_CLIENT_ID ?? "").catch(() => null),
-    fetchGoogleTrends().catch(() => null),
-    fetchYouTubeBuzz().catch(() => null),
+    fetchGoogleTrends(seeds).catch(() => null),
+    fetchYouTubeBuzz(seeds).catch(() => null),
   ]);
 
   const sources: string[] = [];

@@ -89,4 +89,18 @@ export const LLM_MODEL_CONFIGS: Record<string, LlmModelConfig> = {
     outputUsdPer1M: 10,
     maxOutputTokens: 16_384,
   },
+  "claude-sonnet-4-6": {
+    id: "claude-sonnet-4-6",
+    label: "Claude Sonnet 4.6",
+    inputUsdPer1M: 3,
+    outputUsdPer1M: 15,
+    maxOutputTokens: 8_192,
+  },
+  "gemini-2.0-flash": {
+    id: "gemini-2.0-flash",
+    label: "Gemini 2.0 Flash",
+    inputUsdPer1M: 0.1,
+    outputUsdPer1M: 0.4,
+    maxOutputTokens: 8_192,
+  },
 };

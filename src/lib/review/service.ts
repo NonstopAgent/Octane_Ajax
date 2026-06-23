@@ -18,10 +18,11 @@ import {
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
 import { publishListingToEtsyOnApprove } from "@/lib/review/etsy-on-approve";
-import { publishListingToGumroadOnApprove } from "@/lib/review/gumroad-on-approve";
+import type { ProductGeneration } from "@/lib/product/domain";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
+import { createServiceClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
 export class ReviewError extends Error {
@@ -172,17 +173,26 @@ async function setAgentState(
   }
 }
 
+export type PostApprovalContext = {
+  userId: string;
+  listingId: string;
+  listing: ProductListing;
+  generation: ProductGeneration | null;
+};
+
 export type ApproveReviewResult = {
   ok: true;
   review: ReviewItem;
   listing: ProductListing;
   contentJob: ContentJob;
   message: string;
+  /** Heavy work for the approve route to run in the background via after(). */
+  postApproval: PostApprovalContext;
 };
 
 /**
  * Approve a pending listing: `approved` → Pixel schedules content → `published`
- * then optional Lemon Squeezy + Etsy publish, then Pixel for demo marketing.
+ * then Etsy draft auto-publish, then Pixel for demo marketing.
  */
 export async function approveReview(
   supabase: Supabase,
@@ -296,46 +306,7 @@ export async function approveReview(
     metadata: { listingId, contentJobId: jobRow.id },
   });
 
-  let listingAfterGumroad = mapListingFromDb(listingRow);
-  const gumroadPublish = await publishListingToGumroadOnApprove({
-    supabase,
-    userId,
-    listingId,
-    listing: listingAfterGumroad,
-    generation,
-  });
-  if (gumroadPublish) {
-    listingAfterGumroad = gumroadPublish.listing;
-  }
-
-  let listingAfterEtsy = listingAfterGumroad;
-  const etsyPublish = await publishListingToEtsyOnApprove({
-    supabase,
-    userId,
-    listingId,
-    listing: listingAfterGumroad,
-    generation,
-  });
-  if (etsyPublish) {
-    listingAfterEtsy = etsyPublish.listing;
-  }
-
-  let pixelResult;
-  try {
-    pixelResult = await runPixelMarketing(supabase, userId);
-  } catch (err) {
-    if (err instanceof NoQueuedContentError || err instanceof PixelSimulatorError) {
-      throw new ReviewError(
-        err instanceof NoQueuedContentError
-          ? "Listing approved but Pixel found no queued content."
-          : err.message,
-        500,
-        err,
-      );
-    }
-    throw err;
-  }
-
+  // Mark Forge idle now that the human has signed off.
   await setAgentState(
     supabase,
     AGENT_SLUGS.FORGE,
@@ -343,33 +314,56 @@ export async function approveReview(
     ROOM_SLUGS.DESIGN_PRESS,
   );
 
-  const processed =
-    pixelResult.jobs.find((j) => j.contentJob.id === jobRow.id) ??
-    pixelResult.jobs.find((j) => j.listing.id === listingId) ??
-    pixelResult.jobs[0];
+  const approvedListing = mapListingFromDb(listingRow);
 
-  const pixelListing = processed?.listing;
-  const externalUrl = listingAfterEtsy.gumroadUrl ?? listingAfterGumroad.gumroadUrl;
-  const externalProductId =
-    listingAfterEtsy.gumroadProductId ?? listingAfterGumroad.gumroadProductId;
-  const listing =
-    pixelListing &&
-    pixelListing.status === "published" &&
-    externalUrl
-      ? {
-          ...pixelListing,
-          gumroadUrl: externalUrl,
-          gumroadProductId: externalProductId,
-        }
-      : (pixelListing ?? listingAfterEtsy);
-
+  // Heavy work — Etsy draft publish + Pixel marketing — runs in the background
+  // (see runPostApproval, scheduled by the approve route via after()) so the
+  // operator's click returns immediately instead of waiting 10–30s.
   return {
     ok: true,
     review: mapReviewFromDb(reviewRow),
-    listing,
-    contentJob: processed?.contentJob ?? mapContentJobFromDb(jobRow),
-    message: pixelResult.message,
+    listing: approvedListing,
+    contentJob: mapContentJobFromDb(jobRow),
+    message:
+      "Listing approved — publishing the Etsy draft and generating marketing in the background.",
+    postApproval: { userId, listingId, listing: approvedListing, generation },
   };
+}
+
+/**
+ * Background continuation of approval: creates the Etsy DRAFT listing (uploading
+ * the artwork mockup) and runs Pixel marketing. Scheduled via `after()` from the
+ * approve route so it never blocks the operator. Uses a service client because it
+ * runs after the HTTP response is sent. Best-effort — Etsy failures are logged as
+ * factory events and Pixel failures to the console; neither surfaces to the user.
+ */
+export async function runPostApproval(ctx: PostApprovalContext): Promise<void> {
+  const supabase = createServiceClient();
+
+  try {
+    await publishListingToEtsyOnApprove({
+      supabase,
+      userId: ctx.userId,
+      listingId: ctx.listingId,
+      listing: ctx.listing,
+      generation: ctx.generation,
+    });
+  } catch (err) {
+    console.error("[review/post-approval] Etsy publish failed", err);
+  }
+
+  try {
+    await runPixelMarketing(supabase, ctx.userId);
+  } catch (err) {
+    if (
+      err instanceof NoQueuedContentError ||
+      err instanceof PixelSimulatorError
+    ) {
+      console.warn("[review/post-approval] Pixel skipped:", err.message);
+    } else {
+      console.error("[review/post-approval] Pixel failed", err);
+    }
+  }
 }
 
 export type RejectReviewResult = {

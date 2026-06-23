@@ -6,6 +6,7 @@ import {
   resolveTaskModel,
 } from "@/lib/llm/providers";
 import { estimateCompletionCost, logCostEstimate } from "@/lib/llm/cost";
+import { logLlmUsage } from "@/lib/llm/usage-logger";
 import {
   DEFAULT_LLM_MODEL,
   type JsonCompletionRequest,
@@ -88,7 +89,18 @@ export async function completeJson<T>(
   const routed = request.task ? resolveTaskModel(request.task) : null;
   if (routed && routed.provider !== "openai" && !request.client) {
     try {
-      return await completeJsonViaProvider(routed.provider, routed.model, request);
+      const routedResult = await completeJsonViaProvider(
+        routed.provider,
+        routed.model,
+        request,
+      );
+      void logLlmUsage({
+        task: request.task,
+        provider: routed.provider,
+        model: routedResult.model,
+        usage: routedResult.usage,
+      });
+      return routedResult;
     } catch (routeError) {
       console.warn(
         `[llm] ${routed.provider} failed for task "${request.task}", falling back to OpenAI:`,
@@ -144,6 +156,12 @@ export async function completeJson<T>(
 
       const cost = estimateCompletionCost(usage, resolvedModel);
       logCostEstimate(cost);
+      void logLlmUsage({
+        task: request.task ?? "default",
+        provider: "openai",
+        model: resolvedModel,
+        usage,
+      });
 
       return { data, model: resolvedModel, usage, attempts };
     } catch (error) {

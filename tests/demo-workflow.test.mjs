@@ -101,13 +101,17 @@ describe("demo workflow wiring", () => {
     assert.match(forgeBlock, /cycle_paused/);
   });
 
-  it("approve runs gumroad auto-publish then pixel for demo storefront", () => {
+  it("approve creates an Etsy draft + Pixel in the background (no Lemon Squeezy)", () => {
     const content = readFileSync(
       join(ROOT, "src/lib/review/service.ts"),
       "utf8",
     );
     assert.match(content, /status:\s*"approved"/);
-    assert.match(content, /publishListingToGumroadOnApprove/);
+    // POD: the Lemon Squeezy / gumroad auto-publish on approve was removed.
+    assert.doesNotMatch(content, /publishListingToGumroadOnApprove/);
+    // Heavy work runs after the response via runPostApproval (Etsy draft + Pixel).
+    assert.match(content, /runPostApproval/);
+    assert.match(content, /publishListingToEtsyOnApprove/);
     assert.match(content, /runPixelMarketing/);
     assert.doesNotMatch(content, /etsyAdapter|publishListingWithGumroad/i);
   });

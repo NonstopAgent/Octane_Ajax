@@ -6,7 +6,12 @@ import {
   getPublishedListingCount,
   getWeeklyApprovedListingCount,
   getWeeklyGenerationCount,
+  getWeeklyLlmCostUsd,
 } from "@/lib/factory/revenue-queries";
+import {
+  EMPTY_PERFORMANCE_SUMMARY,
+  fetchPerformanceSummary,
+} from "@/lib/ajax/analytics/etsy-snapshots";
 import type { RevenueDashboardData } from "@/lib/factory/revenue-types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,7 +23,9 @@ const EMPTY_DASHBOARD: RevenueDashboardData = {
     passedQualityGate: 0,
     approved: 0,
     liveOnEtsy: 0,
+    costThisWeekUsd: 0,
   },
+  performance: EMPTY_PERFORMANCE_SUMMARY,
   recentEvents: [],
 };
 
@@ -49,6 +56,8 @@ export default async function DashboardPage() {
           approved,
           liveOnEtsy,
           recentEvents,
+          costThisWeekUsd,
+          performance,
         ] = await Promise.all([
           fetchDashboardAgents(supabase),
           getPipelineFunnel(supabase, user.id),
@@ -56,6 +65,8 @@ export default async function DashboardPage() {
           getWeeklyApprovedListingCount(supabase, user.id),
           getPublishedListingCount(supabase, user.id),
           fetchRecentDashboardEvents(supabase, user.id, 8),
+          getWeeklyLlmCostUsd(),
+          fetchPerformanceSummary(supabase, user.id),
         ]);
 
         dashboard = {
@@ -66,7 +77,9 @@ export default async function DashboardPage() {
             passedQualityGate: funnel.passed,
             approved,
             liveOnEtsy,
+            costThisWeekUsd,
           },
+          performance,
           recentEvents,
         };
       }

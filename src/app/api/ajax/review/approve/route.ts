@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { approveReview, ReviewError } from "@/lib/review/service";
+import { after, NextResponse } from "next/server";
+import { approveReview, runPostApproval, ReviewError } from "@/lib/review/service";
 import { createClient } from "@/lib/supabase/server";
 
 /** POST /api/ajax/review/approve — body: { reviewId: string } */
@@ -23,7 +23,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await approveReview(supabase, user.id, body.reviewId);
+    const { postApproval, ...result } = await approveReview(
+      supabase,
+      user.id,
+      body.reviewId,
+    );
+    // Etsy draft publish + Pixel marketing run after the response is sent so the
+    // operator's Approve click returns immediately instead of waiting 10–30s.
+    after(() => runPostApproval(postApproval));
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof ReviewError) {

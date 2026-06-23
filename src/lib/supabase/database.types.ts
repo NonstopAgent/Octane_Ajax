@@ -635,6 +635,87 @@ export interface Database {
           },
         ];
       };
+      listing_performance_snapshots: {
+        Row: {
+          id: string;
+          user_id: string;
+          etsy_listing_id: string;
+          listing_id: string | null;
+          title: string | null;
+          views: number;
+          favorites: number;
+          revenue_cents: number;
+          orders: number;
+          snapshot_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          etsy_listing_id: string;
+          listing_id?: string | null;
+          title?: string | null;
+          views?: number;
+          favorites?: number;
+          revenue_cents?: number;
+          orders?: number;
+          snapshot_date?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          etsy_listing_id?: string;
+          listing_id?: string | null;
+          title?: string | null;
+          views?: number;
+          favorites?: number;
+          revenue_cents?: number;
+          orders?: number;
+          snapshot_date?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      llm_usage_log: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          task: string | null;
+          provider: string;
+          model: string;
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+          cost_usd: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          task?: string | null;
+          provider?: string;
+          model: string;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          cost_usd?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          task?: string | null;
+          provider?: string;
+          model?: string;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          cost_usd?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       strategy_recommendations: {
         Row: {
           id: string;

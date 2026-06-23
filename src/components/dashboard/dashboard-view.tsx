@@ -52,6 +52,11 @@ function formatEventType(eventType: string): string {
   return eventType.replace(/_/g, ".");
 }
 
+function formatUsd(value: number): string {
+  const n = Number.isFinite(value) ? value : 0;
+  return n > 0 && n < 0.01 ? "<$0.01" : `$${n.toFixed(2)}`;
+}
+
 function RecentActivityTimeline({ events }: { events: FactoryEvent[] }) {
   return (
     <section className="factory-panel">
@@ -128,6 +133,95 @@ function PipelineFunnelBar({ funnel }: { funnel: PipelineFunnel }) {
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function formatCents(cents: number): string {
+  const dollars = (Number.isFinite(cents) ? cents : 0) / 100;
+  return `$${dollars.toFixed(2)}`;
+}
+
+function PerformanceSection({
+  performance,
+}: {
+  performance: RevenueDashboardData["performance"];
+}) {
+  if (!performance.hasData) return null;
+
+  return (
+    <section className="factory-panel" aria-label="Etsy performance">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+        Etsy performance
+      </h2>
+      <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+        Live views, favorites &amp; sales · last 7 days
+      </p>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="factory-metric command-metric">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+            Revenue · 7d
+          </p>
+          <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--foreground)]">
+            {formatCents(performance.revenueCentsThisWeek)}
+          </p>
+        </div>
+        <div className="factory-metric command-metric">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+            Orders · 7d
+          </p>
+          <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--foreground)]">
+            {performance.ordersThisWeek}
+          </p>
+        </div>
+      </div>
+
+      {performance.topByViewVelocity.length > 0 && (
+        <div className="mt-5">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+            Top listings by view velocity
+          </p>
+          <ul className="space-y-1.5">
+            {performance.topByViewVelocity.map((l) => (
+              <li
+                key={l.etsyListingId}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="truncate text-[var(--foreground)]">
+                  {l.title}
+                </span>
+                <span className="shrink-0 font-mono text-[var(--accent-blue)]">
+                  +{l.viewsGained} views
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {performance.highViewsZeroOrders.length > 0 && (
+        <div className="mt-5">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-orange)]">
+            Traffic but no sales — revise title or price
+          </p>
+          <ul className="space-y-1.5">
+            {performance.highViewsZeroOrders.map((l) => (
+              <li
+                key={l.etsyListingId}
+                className="flex items-baseline justify-between gap-3 text-sm"
+              >
+                <span className="truncate text-[var(--foreground)]">
+                  {l.title}
+                </span>
+                <span className="shrink-0 font-mono text-[var(--text-muted)]">
+                  {l.latestViews} views · 0 orders
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
@@ -233,7 +327,7 @@ export function DashboardView({
             <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
               This week
             </p>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
               {THIS_WEEK_METRICS.map((item) => (
                 <div key={item.key} className="factory-metric command-metric">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
@@ -244,12 +338,25 @@ export function DashboardView({
                   </p>
                 </div>
               ))}
+              <div
+                className="factory-metric command-metric"
+                title="Estimated LLM spend across all agents over the last 7 days"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                  LLM Cost · 7d
+                </p>
+                <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-[var(--accent-orange)]">
+                  {formatUsd(dashboard.thisWeek.costThisWeekUsd)}
+                </p>
+              </div>
             </div>
           </section>
 
           <PipelineFunnelBar funnel={dashboard.funnel} />
         </>
       )}
+
+      <PerformanceSection performance={dashboard.performance} />
 
       <RecentActivityTimeline events={dashboard.recentEvents} />
 

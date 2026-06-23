@@ -36,26 +36,23 @@ export const FACTORY_STATIONS = [
   { id: "storefront", name: "Storefront", agent: "—" },
 ] as const;
 
+// Operator-focused navigation (Manus Part 2 cleanup). /store and /operator-store
+// routes stay alive but are off the sidebar — Etsy is where products actually sell,
+// and approved listings are visible via the Dashboard funnel.
 export const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", description: "Factory overview" },
-  { href: "/factory", label: "Factory", description: "Live floor map" },
-  { href: "/review", label: "Review", description: "Human-in-the-loop" },
+  { href: "/dashboard", label: "Dashboard", description: "Command center" },
+  { href: "/factory", label: "Factory", description: "Run cycles & orders" },
+  { href: "/review", label: "Review", description: "Approve or reject" },
   {
     href: "/marketing",
-    label: "Marketing",
-    description: "Pixel promo copy",
-  },
-  { href: "/store", label: "Store", description: "Public catalog" },
-  {
-    href: "/operator-store",
-    label: "Operator store",
-    description: "Internal approved listings",
+    label: "Content",
+    description: "Social copy & TikTok",
   },
   { href: "/agents", label: "Agents", description: "Memory & learning" },
   {
     href: "/war-room",
     label: "War Room",
-    description: "Strategy from the archive",
+    description: "Strategy intelligence",
   },
-  { href: "/settings", label: "Settings", description: "Demo & config" },
+  { href: "/settings", label: "Settings", description: "Connections & config" },
 ] as const;

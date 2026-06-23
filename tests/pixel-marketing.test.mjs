@@ -68,8 +68,8 @@ describe("pixel marketing wiring", () => {
     assert.match(marketingPage, /fetchMarketingContentJobs/);
   });
 
-  it("adds Marketing to navigation", () => {
+  it("adds the Content (marketing) tab to navigation", () => {
     assert.match(nav, /href:\s*"\/marketing"/);
-    assert.match(nav, /label:\s*"Marketing"/);
+    assert.match(nav, /label:\s*"Content"/);
   });
 });
