@@ -4,7 +4,9 @@ import {
   EtsyAuthError,
   ETSY_OAUTH_COOKIE_STATE,
   ETSY_OAUTH_COOKIE_VERIFIER,
+  ETSY_OAUTH_PKCE_COOKIE_NAMES,
   exchangeAuthorizationCode,
+  etsyOAuthPkceCookieOptions,
   fetchEtsyShopIdForUser,
   upsertEtsyCredentials,
 } from "@/lib/ajax/etsy-auth";
@@ -37,8 +39,16 @@ export async function GET(request: Request) {
   const codeVerifier = cookieStore.get(ETSY_OAUTH_COOKIE_VERIFIER)?.value;
 
   const clearCookies = (response: NextResponse) => {
-    response.cookies.delete(ETSY_OAUTH_COOKIE_STATE);
-    response.cookies.delete(ETSY_OAUTH_COOKIE_VERIFIER);
+    const deleteOptions = etsyOAuthPkceCookieOptions(request);
+    for (const name of ETSY_OAUTH_PKCE_COOKIE_NAMES) {
+      response.cookies.delete({
+        name,
+        path: deleteOptions.path,
+        secure: deleteOptions.secure,
+        sameSite: deleteOptions.sameSite,
+        httpOnly: deleteOptions.httpOnly,
+      });
+    }
     return response;
   };
 

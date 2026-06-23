@@ -4,13 +4,12 @@ import {
   EtsyAuthError,
   ETSY_OAUTH_COOKIE_STATE,
   ETSY_OAUTH_COOKIE_VERIFIER,
+  etsyOAuthPkceCookieOptions,
 } from "@/lib/ajax/etsy-auth";
 import { createClient } from "@/lib/supabase/server";
 
-const COOKIE_MAX_AGE = 600;
-
 /** GET /api/auth/etsy/connect — start Etsy OAuth (PKCE). */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const {
@@ -25,22 +24,14 @@ export async function GET() {
 
     const session = createEtsyOAuthSession();
     const response = NextResponse.redirect(session.authorizeUrl);
+    const cookieOptions = etsyOAuthPkceCookieOptions(request);
 
-    const secure = process.env.NODE_ENV === "production";
-    response.cookies.set(ETSY_OAUTH_COOKIE_STATE, session.state, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-    });
-    response.cookies.set(ETSY_OAUTH_COOKIE_VERIFIER, session.codeVerifier, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-    });
+    response.cookies.set(ETSY_OAUTH_COOKIE_STATE, session.state, cookieOptions);
+    response.cookies.set(
+      ETSY_OAUTH_COOKIE_VERIFIER,
+      session.codeVerifier,
+      cookieOptions,
+    );
 
     return response;
   } catch (err) {

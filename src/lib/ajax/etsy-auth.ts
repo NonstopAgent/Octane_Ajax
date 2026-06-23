@@ -27,6 +27,43 @@ export const ETSY_OAUTH_SCOPES = [
 
 export const ETSY_OAUTH_COOKIE_STATE = "etsy_oauth_state";
 export const ETSY_OAUTH_COOKIE_VERIFIER = "etsy_oauth_verifier";
+export const ETSY_OAUTH_COOKIE_MAX_AGE = 600;
+
+export type EtsyOAuthPkceCookieOptions = {
+  httpOnly: true;
+  secure: boolean;
+  sameSite: "lax";
+  path: "/";
+  maxAge: number;
+};
+
+/** PKCE cookie attributes shared by connect (set) and callback (delete). */
+export function etsyOAuthPkceCookieOptions(
+  request?: Request,
+): EtsyOAuthPkceCookieOptions {
+  const requestIsHttps =
+    request != null && new URL(request.url).protocol === "https:";
+  const appUrlIsHttps = process.env.NEXT_PUBLIC_APP_URL?.trim().startsWith(
+    "https://",
+  );
+
+  return {
+    httpOnly: true,
+    // Host-only cookies (no Domain attribute) — bound to the request host.
+    secure:
+      requestIsHttps ||
+      Boolean(appUrlIsHttps) ||
+      process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: ETSY_OAUTH_COOKIE_MAX_AGE,
+  };
+}
+
+export const ETSY_OAUTH_PKCE_COOKIE_NAMES = [
+  ETSY_OAUTH_COOKIE_STATE,
+  ETSY_OAUTH_COOKIE_VERIFIER,
+] as const;
 
 export type EtsyTokenResponse = {
   access_token: string;

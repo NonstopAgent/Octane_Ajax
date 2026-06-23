@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   buildEtsyAuthorizeUrl,
+  ETSY_OAUTH_COOKIE_MAX_AGE,
   exchangeAuthorizationCode,
+  etsyOAuthPkceCookieOptions,
   getEtsyAuthConfig,
   parseEtsyUserIdFromAccessToken,
   refreshEtsyAccessToken,
@@ -109,6 +111,26 @@ describe("etsy-auth", () => {
 
     const token = await refreshEtsyAccessToken("99.old-refresh", fetchImpl);
     assert.equal(token.access_token, "99.rotated");
+  });
+
+  it("uses lax sameSite and root path for PKCE cookies", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://octane-ajax.vercel.app";
+    const request = new Request("https://octane-ajax.vercel.app/api/auth/etsy/connect");
+    const options = etsyOAuthPkceCookieOptions(request);
+
+    assert.equal(options.sameSite, "lax");
+    assert.equal(options.path, "/");
+    assert.equal(options.httpOnly, true);
+    assert.equal(options.maxAge, ETSY_OAUTH_COOKIE_MAX_AGE);
+    assert.equal(options.secure, true);
+  });
+
+  it("marks PKCE cookies secure for HTTPS production app URL", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://octane-ajax.vercel.app";
+    const options = etsyOAuthPkceCookieOptions();
+
+    assert.equal(options.secure, true);
+    assert.equal(options.sameSite, "lax");
   });
 });
 
