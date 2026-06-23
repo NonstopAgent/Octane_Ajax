@@ -5,6 +5,8 @@ import {
   ETSY_OAUTH_COOKIE_MAX_AGE,
   exchangeAuthorizationCode,
   etsyOAuthPkceCookieOptions,
+  fetchEtsyShopIdForUser,
+  formatEtsyXApiKey,
   getEtsyAuthConfig,
   parseEtsyUserIdFromAccessToken,
   refreshEtsyAccessToken,
@@ -17,6 +19,7 @@ import {
 describe("etsy-auth", () => {
   const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const originalClientId = process.env.ETSY_CLIENT_ID;
+  const originalClientSecret = process.env.ETSY_CLIENT_SECRET;
 
   afterEach(() => {
     if (originalAppUrl === undefined) {
@@ -29,10 +32,20 @@ describe("etsy-auth", () => {
     } else {
       process.env.ETSY_CLIENT_ID = originalClientId;
     }
+    if (originalClientSecret === undefined) {
+      delete process.env.ETSY_CLIENT_SECRET;
+    } else {
+      process.env.ETSY_CLIENT_SECRET = originalClientSecret;
+    }
+  });
+
+  it("formats x-api-key as keystring:shared_secret", () => {
+    assert.equal(formatEtsyXApiKey("my-key", "my-secret"), "my-key:my-secret");
   });
 
   it("builds authorize URL with PKCE and Etsy connect endpoint", () => {
     process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.ETSY_CLIENT_SECRET = "test-secret";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
     const verifier = generateCodeVerifier();
     const config = getEtsyAuthConfig();
@@ -61,6 +74,7 @@ describe("etsy-auth", () => {
 
   it("exchanges authorization code at Etsy token endpoint", async () => {
     process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.ETSY_CLIENT_SECRET = "test-secret";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const calls: { url: string; body: string }[] = [];
@@ -93,6 +107,7 @@ describe("etsy-auth", () => {
 
   it("refreshes tokens with refresh_token grant", async () => {
     process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.ETSY_CLIENT_SECRET = "test-secret";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
     const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
@@ -131,6 +146,35 @@ describe("etsy-auth", () => {
 
     assert.equal(options.secure, true);
     assert.equal(options.sameSite, "lax");
+  });
+
+  it("fetchEtsyShopIdForUser sends keystring:shared_secret x-api-key header", async () => {
+    process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.ETSY_CLIENT_SECRET = "test-secret";
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+
+    const calls: { url: string; headers: Headers }[] = [];
+    const fetchImpl = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        headers: new Headers(init?.headers),
+      });
+      return new Response(JSON.stringify({ shop_id: 4242 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const shopId = await fetchEtsyShopIdForUser("12345.access.token", fetchImpl);
+
+    assert.equal(shopId, "4242");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!.url, /\/users\/12345\/shops$/);
+    assert.equal(
+      calls[0]!.headers.get("x-api-key"),
+      formatEtsyXApiKey("test-client", "test-secret"),
+    );
+    assert.equal(calls[0]!.headers.get("Authorization"), "Bearer 12345.access.token");
   });
 });
 

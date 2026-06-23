@@ -17,7 +17,11 @@ describe("etsy adapter", () => {
       return jsonResponse({ listing_id: 999001, url: "https://www.etsy.com/listing/999001" });
     }) as typeof fetch;
 
-    const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
+    const adapter = createEtsyAdapter({
+      clientId: "etsy-key",
+      clientSecret: "etsy-secret",
+      fetchImpl,
+    });
     const result = await adapter.createDraftListing({
       title: "Meal Prep Planner",
       description: "Printable planner PDF",
@@ -33,7 +37,7 @@ describe("etsy adapter", () => {
     assert.equal(calls.length, 1);
     assert.match(calls[0]!.url, /\/shops\/12345\/listings$/);
     const headers = new Headers(calls[0]!.init.headers);
-    assert.equal(headers.get("x-api-key"), "etsy-key");
+    assert.equal(headers.get("x-api-key"), "etsy-key:etsy-secret");
     assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
     const body = String(calls[0]!.init.body);
     assert.match(body, /title=Meal\+Prep\+Planner/);
@@ -53,7 +57,11 @@ describe("etsy adapter", () => {
       return jsonResponse({ listing_image_id: 555001 });
     }) as typeof fetch;
 
-    const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
+    const adapter = createEtsyAdapter({
+      clientId: "etsy-key",
+      clientSecret: "etsy-secret",
+      fetchImpl,
+    });
     const result = await adapter.uploadListingImage(
       "999001",
       Buffer.from([0xff, 0xd8, 0xff]),
@@ -68,7 +76,7 @@ describe("etsy adapter", () => {
     assert.match(calls[0]!.url, /\/shops\/12345\/listings\/999001\/images$/);
     assert.ok(calls[0]!.init.body instanceof FormData);
     const headers = new Headers(calls[0]!.init.headers);
-    assert.equal(headers.get("x-api-key"), "etsy-key");
+    assert.equal(headers.get("x-api-key"), "etsy-key:etsy-secret");
     assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
     assert.equal(headers.get("Content-Type"), null);
   });
@@ -80,7 +88,11 @@ describe("etsy adapter", () => {
       return new Response("", { status: 200 });
     }) as typeof fetch;
 
-    const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
+    const adapter = createEtsyAdapter({
+      clientId: "etsy-key",
+      clientSecret: "etsy-secret",
+      fetchImpl,
+    });
     await adapter.uploadListingFile(
       "999001",
       Buffer.from("%PDF-1.4"),
@@ -93,7 +105,7 @@ describe("etsy adapter", () => {
     assert.match(calls[0]!.url, /\/shops\/12345\/listings\/999001\/files$/);
     assert.ok(calls[0]!.init.body instanceof FormData);
     const headers = new Headers(calls[0]!.init.headers);
-    assert.equal(headers.get("x-api-key"), "etsy-key");
+    assert.equal(headers.get("x-api-key"), "etsy-key:etsy-secret");
     assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
   });
 
@@ -101,7 +113,11 @@ describe("etsy adapter", () => {
     const fetchImpl = async () =>
       jsonResponse({ error: "Invalid taxonomy" }, 400);
 
-    const adapter = createEtsyAdapter({ clientId: "etsy-key", fetchImpl });
+    const adapter = createEtsyAdapter({
+      clientId: "etsy-key",
+      clientSecret: "etsy-secret",
+      fetchImpl,
+    });
 
     await assert.rejects(
       () =>

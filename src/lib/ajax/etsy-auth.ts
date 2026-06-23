@@ -94,15 +94,25 @@ export class EtsyAuthError extends Error {
 
 export type EtsyAuthConfig = {
   clientId: string;
+  clientSecret: string;
   redirectUri: string;
 };
 
+/** Etsy Open API v3 x-api-key format (enforced since Feb 2026). */
+export function formatEtsyXApiKey(clientId: string, clientSecret: string): string {
+  return `${clientId}:${clientSecret}`;
+}
+
 export function getEtsyAuthConfig(): EtsyAuthConfig {
   const clientId = process.env.ETSY_CLIENT_ID?.trim();
+  const clientSecret = process.env.ETSY_CLIENT_SECRET?.trim();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
 
   if (!clientId) {
     throw new EtsyAuthError("ETSY_CLIENT_ID is not configured.");
+  }
+  if (!clientSecret) {
+    throw new EtsyAuthError("ETSY_CLIENT_SECRET is not configured.");
   }
   if (!appUrl) {
     throw new EtsyAuthError("NEXT_PUBLIC_APP_URL is not configured.");
@@ -110,6 +120,7 @@ export function getEtsyAuthConfig(): EtsyAuthConfig {
 
   return {
     clientId,
+    clientSecret,
     redirectUri: `${appUrl}/api/auth/etsy/callback`,
   };
 }
@@ -219,9 +230,13 @@ export async function refreshEtsyAccessToken(
   return postTokenRequest(body, fetchImpl);
 }
 
-function etsyApiHeaders(accessToken: string, clientId: string): HeadersInit {
+function etsyApiHeaders(
+  accessToken: string,
+  clientId: string,
+  clientSecret: string,
+): HeadersInit {
   return {
-    "x-api-key": clientId,
+    "x-api-key": formatEtsyXApiKey(clientId, clientSecret),
     Authorization: `Bearer ${accessToken}`,
   };
 }
@@ -230,11 +245,11 @@ export async function fetchEtsyShopIdForUser(
   accessToken: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
-  const { clientId } = getEtsyAuthConfig();
+  const { clientId, clientSecret } = getEtsyAuthConfig();
   const etsyUserId = parseEtsyUserIdFromAccessToken(accessToken);
   const response = await fetchImpl(
     `${ETSY_API_BASE}/users/${etsyUserId}/shops`,
-    { headers: etsyApiHeaders(accessToken, clientId) },
+    { headers: etsyApiHeaders(accessToken, clientId, clientSecret) },
   );
 
   const text = await response.text();

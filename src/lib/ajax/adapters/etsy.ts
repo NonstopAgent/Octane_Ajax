@@ -1,10 +1,11 @@
 /**
  * Etsy Open API v3 adapter — server-side only.
  *
- * Uses ETSY_CLIENT_ID for x-api-key and per-user OAuth Bearer tokens.
- * Never import from Client Components.
+ * Uses ETSY_CLIENT_ID + ETSY_CLIENT_SECRET for x-api-key and per-user OAuth
+ * Bearer tokens. Never import from Client Components.
  */
 
+import { formatEtsyXApiKey } from "@/lib/ajax/etsy-auth";
 import { listingPriceToCents } from "@/lib/ajax/adapters/gumroad";
 
 const ETSY_API_BASE = "https://api.etsy.com/v3/application";
@@ -43,6 +44,7 @@ export type EtsyCreateDraftListingResult = {
 
 export type EtsyAdapterOptions = {
   clientId?: string;
+  clientSecret?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -60,17 +62,29 @@ export type EtsyReceiptsByListing = Record<
   { orders: number; revenueCents: number }
 >;
 
-function getClientId(explicit?: string): string {
-  const clientId = explicit ?? process.env.ETSY_CLIENT_ID?.trim();
+function getEtsyConfig(options: EtsyAdapterOptions = {}): {
+  clientId: string;
+  clientSecret: string;
+} {
+  const clientId = options.clientId ?? process.env.ETSY_CLIENT_ID?.trim();
+  const clientSecret =
+    options.clientSecret ?? process.env.ETSY_CLIENT_SECRET?.trim();
   if (!clientId) {
     throw new EtsyAdapterError("ETSY_CLIENT_ID is not configured.");
   }
-  return clientId;
+  if (!clientSecret) {
+    throw new EtsyAdapterError("ETSY_CLIENT_SECRET is not configured.");
+  }
+  return { clientId, clientSecret };
 }
 
-function authHeaders(clientId: string, accessToken: string): HeadersInit {
+function authHeaders(
+  clientId: string,
+  clientSecret: string,
+  accessToken: string,
+): HeadersInit {
   return {
-    "x-api-key": clientId,
+    "x-api-key": formatEtsyXApiKey(clientId, clientSecret),
     Authorization: `Bearer ${accessToken}`,
   };
 }
@@ -112,7 +126,7 @@ function listingUrlFromResponse(
 }
 
 export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
-  const clientId = getClientId(options.clientId);
+  const { clientId, clientSecret } = getEtsyConfig(options);
   const fetchImpl = options.fetchImpl ?? fetch;
 
   return {
@@ -151,7 +165,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         {
           method: "POST",
           headers: {
-            ...authHeaders(clientId, input.accessToken),
+            ...authHeaders(clientId, clientSecret, input.accessToken),
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: body.toString(),
@@ -193,7 +207,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/files`,
         {
           method: "POST",
-          headers: authHeaders(clientId, accessToken),
+          headers: authHeaders(clientId, clientSecret, accessToken),
           body: form,
         },
       );
@@ -223,7 +237,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/images`,
         {
           method: "POST",
-          headers: authHeaders(clientId, accessToken),
+          headers: authHeaders(clientId, clientSecret, accessToken),
           body: form,
         },
       );
@@ -248,7 +262,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     ): Promise<EtsyShopListing[]> {
       const response = await fetchImpl(
         `${ETSY_API_BASE}/shops/${shopId}/listings/active?limit=${limit}`,
-        { headers: authHeaders(clientId, accessToken) },
+        { headers: authHeaders(clientId, clientSecret, accessToken) },
       );
       const parsed = await parseEtsyJson<{
         results?: {
@@ -284,7 +298,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       }
       const response = await fetchImpl(
         `${ETSY_API_BASE}/shops/${shopId}/receipts?${params.toString()}`,
-        { headers: authHeaders(clientId, accessToken) },
+        { headers: authHeaders(clientId, clientSecret, accessToken) },
       );
       const parsed = await parseEtsyJson<{
         results?: {
