@@ -270,8 +270,8 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
 
     /**
      * Sums orders + revenue per listing from receipts created since `minCreated`
-     * (unix seconds). Requires the `transactions_r` scope — shops authorized
-     * before it was added will 403 here until they reconnect Etsy.
+     * (unix seconds). Requires the optional `transactions_r` scope; callers should
+     * treat 401/403 responses as missing revenue access.
      */
     async getShopReceipts(
       shopId: string,

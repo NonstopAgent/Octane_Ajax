@@ -51,6 +51,7 @@ describe("etsy-auth", () => {
       codeChallengeFromVerifier(verifier),
     );
     assert.match(url.searchParams.get("scope") ?? "", /listings_w/);
+    assert.doesNotMatch(url.searchParams.get("scope") ?? "", /transactions_r/);
   });
 
   it("parses Etsy user id prefix from access token", () => {

@@ -4,8 +4,8 @@
  * Etsy exposes only LIFETIME views + num_favorers per listing (no daily series),
  * so we snapshot them once a day into `listing_performance_snapshots` and derive
  * velocity from the deltas. Revenue + orders are attributed per listing from
- * receipt transactions (requires the `transactions_r` OAuth scope — shops that
- * authorized before it was added simply record 0 revenue until they reconnect).
+ * receipt transactions when credentials include the optional `transactions_r`
+ * OAuth scope; otherwise the poller records 0 revenue and continues.
  *
  * Never throws on the happy path: every external call degrades to empty so the
  * daily cron always records what it can.
@@ -83,7 +83,7 @@ export async function runEtsyAnalyticsSnapshot(
     };
   }
 
-  // Revenue/orders since yesterday — needs transactions_r. Degrade gracefully.
+  // Revenue/orders since yesterday need transactions_r. Degrade gracefully.
   let receiptsByListing: Record<
     string,
     { orders: number; revenueCents: number }

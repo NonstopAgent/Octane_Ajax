@@ -19,10 +19,6 @@ export const ETSY_OAUTH_SCOPES = [
   "listings_w",
   "shops_r",
   "email_r",
-  // Read sales/receipts for the analytics poller. NOTE: shops authorized before
-  // this scope was added must reconnect Etsy in Settings to grant it; until then
-  // the analytics poller records views/favorites and simply skips revenue.
-  "transactions_r",
 ] as const;
 
 export const ETSY_OAUTH_COOKIE_STATE = "etsy_oauth_state";
