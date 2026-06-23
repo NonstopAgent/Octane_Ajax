@@ -51,3 +51,5 @@ lint2.txt
 tsc-out.txt
 git-status.txt
 .env*.local
+
+test-out.txt
