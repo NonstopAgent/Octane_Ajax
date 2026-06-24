@@ -19,11 +19,24 @@ export const ETSY_OAUTH_SCOPES = [
   "listings_w",
   "shops_r",
   "email_r",
-  // Read sales/receipts for the analytics poller. NOTE: shops authorized before
-  // this scope was added must reconnect Etsy in Settings to grant it; until then
-  // the analytics poller records views/favorites and simply skips revenue.
-  "transactions_r",
 ] as const;
+
+/**
+ * Scopes requested at authorize time. `transactions_r` (sales/receipts for the
+ * revenue analytics poller) is OPT-IN: an Etsy app must list that scope before
+ * Etsy will honor it, and requesting an unlisted scope makes Etsy reject the
+ * resulting token's API calls (403). Enable it with
+ * ETSY_ENABLE_TRANSACTIONS_SCOPE=true once your Etsy app includes transactions_r.
+ * Without it the connection still works — drafts + views/favorites analytics
+ * function, only revenue/orders are skipped.
+ */
+export function getEtsyOAuthScopes(): string[] {
+  const scopes: string[] = [...ETSY_OAUTH_SCOPES];
+  if (process.env.ETSY_ENABLE_TRANSACTIONS_SCOPE?.trim() === "true") {
+    scopes.push("transactions_r");
+  }
+  return scopes;
+}
 
 export const ETSY_OAUTH_COOKIE_STATE = "etsy_oauth_state";
 export const ETSY_OAUTH_COOKIE_VERIFIER = "etsy_oauth_verifier";
@@ -86,7 +99,7 @@ export function buildEtsyAuthorizeUrl(
     response_type: "code",
     client_id: config.clientId,
     redirect_uri: config.redirectUri,
-    scope: ETSY_OAUTH_SCOPES.join(" "),
+    scope: getEtsyOAuthScopes().join(" "),
     state,
     code_challenge: codeChallengeFromVerifier(codeVerifier),
     code_challenge_method: "S256",
@@ -214,8 +227,12 @@ export async function fetchEtsyShopIdForUser(
   }
 
   if (!response.ok) {
+    const detail =
+      (body as { error_description?: string; error?: string }).error_description ??
+      (body as { error?: string }).error ??
+      (text ? text.slice(0, 200) : "");
     throw new EtsyAuthError(
-      `Failed to load Etsy shop (${response.status}).`,
+      `Failed to load Etsy shop (${response.status})${detail ? `: ${detail}` : ""}.`,
       response.status,
     );
   }
