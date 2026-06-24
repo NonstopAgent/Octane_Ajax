@@ -53,3 +53,6 @@ git-status.txt
 .env*.local
 
 test-out.txt
+
+# Working docs / plans dropped in the project folder
+/*.pdf
