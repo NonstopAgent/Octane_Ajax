@@ -34,6 +34,10 @@ export type EtsyCreateDraftListingInput = {
   price_cents: number;
   /** Optional Etsy taxonomy id. Omitted by default (no hardcoded digital category). */
   taxonomy_id?: number;
+  /** Physical listings require a shipping profile; auto-resolved if omitted. */
+  shipping_profile_id?: number;
+  /** Etsy requires a return policy for physical listings; auto-resolved if omitted. */
+  return_policy_id?: number;
   tags?: string[];
   shopId: string;
   accessToken: string;
@@ -114,6 +118,24 @@ async function loadSellerTaxonomy(
   return taxonomyCache;
 }
 
+/** Reads the first numeric `key` from a shop sub-resource list. Never throws. */
+async function firstShopResourceId(
+  url: string,
+  key: string,
+  headers: HeadersInit,
+  fetchImpl: typeof fetch,
+): Promise<number | undefined> {
+  try {
+    const res = await fetchImpl(url, { headers });
+    if (!res.ok) return undefined;
+    const parsed = (await res.json()) as { results?: Record<string, unknown>[] };
+    const val = parsed.results?.[0]?.[key];
+    return typeof val === "number" ? val : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function getClientId(explicit?: string): string {
   const clientId = explicit ?? process.env.ETSY_CLIENT_ID?.trim();
   if (!clientId) {
@@ -191,6 +213,33 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       if (input.taxonomy_id != null) {
         body.set("taxonomy_id", String(input.taxonomy_id));
       }
+
+      // Physical listings require a shipping profile (and Etsy requires a return
+      // policy). Use the ones provided, else the shop's first of each.
+      const shippingProfileId =
+        input.shipping_profile_id ??
+        (await firstShopResourceId(
+          `${ETSY_API_BASE}/shops/${input.shopId}/shipping-profiles`,
+          "shipping_profile_id",
+          authHeaders(apiKeyHeader, input.accessToken),
+          fetchImpl,
+        ));
+      if (shippingProfileId != null) {
+        body.set("shipping_profile_id", String(shippingProfileId));
+      }
+
+      const returnPolicyId =
+        input.return_policy_id ??
+        (await firstShopResourceId(
+          `${ETSY_API_BASE}/shops/${input.shopId}/policies/return`,
+          "return_policy_id",
+          authHeaders(apiKeyHeader, input.accessToken),
+          fetchImpl,
+        ));
+      if (returnPolicyId != null) {
+        body.set("return_policy_id", String(returnPolicyId));
+      }
+
       body.set("type", "physical");
       // CRITICAL: drafts only. Never auto-publish live — the human Review Gate decides.
       body.set("state", "draft");

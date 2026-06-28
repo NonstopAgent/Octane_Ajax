@@ -23,6 +23,9 @@ describe("etsy adapter", () => {
       description: "Printable planner PDF",
       price_cents: 799,
       taxonomy_id: 1234,
+      // Provided explicitly so the adapter skips the shipping/return lookups.
+      shipping_profile_id: 555,
+      return_policy_id: 777,
       tags: ["planner", "meal prep"],
       shopId: "12345",
       accessToken: "42.token-value",
@@ -41,6 +44,8 @@ describe("etsy adapter", () => {
     assert.match(body, /when_made=2020_2026/);
     assert.match(body, /who_made=someone_else/);
     assert.match(body, /taxonomy_id=1234/);
+    assert.match(body, /shipping_profile_id=555/);
+    assert.match(body, /return_policy_id=777/);
     assert.match(body, /type=physical/);
     assert.match(body, /state=draft/);
     assert.match(body, /tags%5B%5D=planner/);
