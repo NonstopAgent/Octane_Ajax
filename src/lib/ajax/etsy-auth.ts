@@ -12,7 +12,10 @@ import { createServiceClient } from "@/lib/supabase/server";
 
 const ETSY_AUTHORIZE_URL = "https://www.etsy.com/oauth/connect";
 const ETSY_TOKEN_URL = "https://api.etsy.com/v3/public/oauth/token";
-const ETSY_API_BASE = "https://api.etsy.com/v3/application";
+// Resource endpoints live on openapi.etsy.com (api.etsy.com is only for the OAuth
+// token endpoint above). Hitting api.etsy.com/v3/application returns a misleading
+// 403 "Shared secret is required in x-api-key header".
+const ETSY_API_BASE = "https://openapi.etsy.com/v3/application";
 
 export const ETSY_OAUTH_SCOPES = [
   "listings_r",

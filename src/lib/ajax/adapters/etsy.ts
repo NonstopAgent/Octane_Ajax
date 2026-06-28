@@ -7,7 +7,10 @@
 
 import { listingPriceToCents } from "@/lib/ajax/adapters/gumroad";
 
-const ETSY_API_BASE = "https://api.etsy.com/v3/application";
+// Etsy v3 resource endpoints are served from openapi.etsy.com (api.etsy.com only
+// hosts the OAuth token endpoint). Using api.etsy.com here causes a misleading
+// 403 "Shared secret is required in x-api-key header".
+const ETSY_API_BASE = "https://openapi.etsy.com/v3/application";
 
 /** Digital downloads taxonomy (user-specified). */
 export const ETSY_DIGITAL_TAXONOMY_ID = 2078;
