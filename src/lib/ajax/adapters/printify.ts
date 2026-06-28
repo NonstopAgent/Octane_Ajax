@@ -35,6 +35,8 @@ export type PrintifyProductInput = {
   priceCents?: number;
   /** Etsy SEO tags (synced to the listing on publish). */
   tags?: string[];
+  /** Per-variant retail price (USD cents) keyed by variant id. */
+  variantPrices?: Record<number, number>;
 };
 
 export type PrintifyProduct = {
@@ -287,6 +289,7 @@ export function createLivePrintifyAdapter(
       const printProviderId = input.printProviderId ?? 1;
       const variantIds = input.variantIds?.length ? input.variantIds : [33719];
       const priceCents = input.priceCents ?? 1999;
+      const variantPrices = input.variantPrices ?? {};
 
       const productPayload = {
         title: input.title,
@@ -296,7 +299,7 @@ export function createLivePrintifyAdapter(
         print_provider_id: printProviderId,
         variants: variantIds.map((id) => ({
           id,
-          price: priceCents,
+          price: variantPrices[id] ?? priceCents,
           is_enabled: true,
         })),
         print_areas: [

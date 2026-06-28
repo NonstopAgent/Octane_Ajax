@@ -111,10 +111,11 @@ export async function runPodFulfillment(
     typeof podDetails.metadata?.catalogKey === "string"
       ? podDetails.metadata.catalogKey
       : null;
-  const artworkAspectRatio =
+  const catalogEntry =
     catalogKey && isPrintifyCatalogKey(catalogKey)
-      ? getPrintifyCatalogEntry(catalogKey).artworkAspectRatio
-      : "1:1";
+      ? getPrintifyCatalogEntry(catalogKey)
+      : null;
+  const artworkAspectRatio = catalogEntry?.artworkAspectRatio ?? "1:1";
 
   const artworkResult = await imageGeneratorAdapter.generateProductArtwork({
     productTitle: listingTitle,
@@ -150,6 +151,8 @@ export async function runPodFulfillment(
       variantIds: podDetails.variantIds,
       artworkUploadId: uploadResult.data.uploadId,
       tags,
+      variantPrices: catalogEntry?.variantPrices,
+      priceCents: catalogEntry?.defaultPriceCents,
     }),
     PRINTIFY_TIMEOUT_MS,
     "create",

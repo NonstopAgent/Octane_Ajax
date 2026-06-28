@@ -35,6 +35,8 @@ export type PrintifyCatalogEntry = {
   printProviderId: number;
   /** Enabled variant IDs (must belong to this blueprint+provider combo). */
   variantIds: number[];
+  /** Retail price (USD cents) per variant id — larger sizes priced higher. */
+  variantPrices: Record<number, number>;
   /** Default retail price in cents when Forge's price is missing/invalid. */
   defaultPriceCents: number;
   /** Artwork aspect ratio that fills this product's print area (avoids cropping). */
@@ -55,6 +57,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 503, // White Ceramic Mug, 11oz
     printProviderId: 48, // Colorway
     variantIds: [67624], // 11oz
+    variantPrices: { 67624: 1799 },
     defaultPriceCents: 1699,
     artworkAspectRatio: "1:1",
     promptHint:
@@ -66,6 +69,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 282, // Matte Vertical Posters
     printProviderId: 2, // Sensaria
     variantIds: [43135, 43138, 43144], // 11x14, 12x18, 18x24 Matte
+    variantPrices: { 43135: 1899, 43138: 2499, 43144: 3499 }, // size-tiered
     defaultPriceCents: 2499,
     artworkAspectRatio: "4:5", // vertical poster → portrait artwork
     promptHint:
@@ -77,6 +81,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 12, // Unisex Jersey Short Sleeve Tee (Bella+Canvas 3001)
     printProviderId: 29, // Monster Digital
     variantIds: [18052, 18053, 18054, 18055, 18056], // Aqua S–2XL
+    variantPrices: { 18052: 2699, 18053: 2699, 18054: 2699, 18055: 2699, 18056: 2899 }, // 2XL upcharge
     defaultPriceCents: 2699,
     artworkAspectRatio: "1:1", // centered chest print
     promptHint:
@@ -88,6 +93,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 49, // Unisex Heavy Blend Crewneck Sweatshirt (Gildan)
     printProviderId: 29, // Monster Digital
     variantIds: [25377, 25381, 25385], // S Ash, S Dark Heather, S Light Blue
+    variantPrices: { 25377: 3499, 25381: 3499, 25385: 3499 },
     defaultPriceCents: 2999,
     artworkAspectRatio: "1:1", // centered chest print
     promptHint:
