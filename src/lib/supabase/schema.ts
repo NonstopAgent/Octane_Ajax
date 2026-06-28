@@ -128,4 +128,5 @@ export const TABLES = {
   STRATEGY: "strategy_recommendations",
   LLM_USAGE: "llm_usage_log",
   LISTING_PERFORMANCE: "listing_performance_snapshots",
+  ETSY_OAUTH_SESSIONS: "etsy_oauth_sessions",
 } as const;

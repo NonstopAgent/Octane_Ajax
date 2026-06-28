@@ -635,6 +635,27 @@ export interface Database {
           },
         ];
       };
+      etsy_oauth_sessions: {
+        Row: {
+          state: string;
+          user_id: string;
+          code_verifier: string;
+          created_at: string;
+        };
+        Insert: {
+          state: string;
+          user_id: string;
+          code_verifier: string;
+          created_at?: string;
+        };
+        Update: {
+          state?: string;
+          user_id?: string;
+          code_verifier?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       listing_performance_snapshots: {
         Row: {
           id: string;

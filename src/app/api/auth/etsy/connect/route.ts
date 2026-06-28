@@ -4,10 +4,11 @@ import {
   EtsyAuthError,
   ETSY_OAUTH_COOKIE_STATE,
   ETSY_OAUTH_COOKIE_VERIFIER,
+  saveEtsyOAuthSession,
 } from "@/lib/ajax/etsy-auth";
 import { createClient } from "@/lib/supabase/server";
 
-const COOKIE_MAX_AGE = 600;
+const COOKIE_MAX_AGE = 1800;
 
 /** GET /api/auth/etsy/connect — start Etsy OAuth (PKCE). */
 export async function GET() {
@@ -24,6 +25,11 @@ export async function GET() {
     }
 
     const session = createEtsyOAuthSession();
+    // Persist the PKCE verifier server-side keyed by state — robust against
+    // cookies being dropped across the Etsy/Google redirect chain. Cookies are
+    // still set below as a fallback.
+    await saveEtsyOAuthSession(user.id, session.state, session.codeVerifier);
+
     const response = NextResponse.redirect(session.authorizeUrl);
 
     const secure = process.env.NODE_ENV === "production";

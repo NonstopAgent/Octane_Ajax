@@ -282,6 +282,53 @@ export async function upsertEtsyCredentials(
   }
 }
 
+/**
+ * Persists a PKCE session (state -> code_verifier) server-side so the OAuth
+ * callback can recover the verifier without depending on cookies (which browsers
+ * often drop across the Etsy -> Google -> Etsy sign-in redirect chain).
+ */
+export async function saveEtsyOAuthSession(
+  userId: string,
+  state: string,
+  codeVerifier: string,
+): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase.from("etsy_oauth_sessions").insert({
+    state,
+    user_id: userId,
+    code_verifier: codeVerifier,
+  });
+  if (error) {
+    throw new EtsyAuthError(
+      "Failed to save Etsy OAuth session.",
+      undefined,
+      error,
+    );
+  }
+}
+
+/**
+ * Looks up and deletes (one-time use) a PKCE session by `state`. Returns null if
+ * absent or older than 30 minutes.
+ */
+export async function consumeEtsyOAuthSession(
+  state: string,
+): Promise<{ userId: string; codeVerifier: string } | null> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("etsy_oauth_sessions")
+    .select("user_id, code_verifier, created_at")
+    .eq("state", state)
+    .maybeSingle();
+  if (!data) return null;
+
+  await supabase.from("etsy_oauth_sessions").delete().eq("state", state);
+
+  const ageMs = Date.now() - new Date(data.created_at).getTime();
+  if (ageMs > 30 * 60 * 1000) return null;
+  return { userId: data.user_id, codeVerifier: data.code_verifier };
+}
+
 const REFRESH_BUFFER_MS = 60 * 60 * 1000;
 
 export async function loadEtsyCredentials(

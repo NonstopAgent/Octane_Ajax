@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
+  consumeEtsyOAuthSession,
   EtsyAuthError,
   ETSY_OAUTH_COOKIE_STATE,
   ETSY_OAUTH_COOKIE_VERIFIER,
@@ -32,10 +33,8 @@ export async function GET(request: Request) {
 
   const code = searchParams.get("code");
   const state = searchParams.get("state");
-  const cookieStore = await cookies();
-  const expectedState = cookieStore.get(ETSY_OAUTH_COOKIE_STATE)?.value;
-  const codeVerifier = cookieStore.get(ETSY_OAUTH_COOKIE_VERIFIER)?.value;
 
+  const cookieStore = await cookies();
   const clearCookies = (response: NextResponse) => {
     response.cookies.delete(ETSY_OAUTH_COOKIE_STATE);
     response.cookies.delete(ETSY_OAUTH_COOKIE_VERIFIER);
@@ -52,21 +51,21 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!expectedState || !codeVerifier) {
+  // Recover the PKCE verifier: prefer the server-side session (cookie-independent),
+  // then fall back to the connect-time cookies for backwards compatibility.
+  const dbSession = await consumeEtsyOAuthSession(state);
+  const cookieState = cookieStore.get(ETSY_OAUTH_COOKIE_STATE)?.value;
+  const cookieVerifier = cookieStore.get(ETSY_OAUTH_COOKIE_VERIFIER)?.value;
+  const codeVerifier =
+    dbSession?.codeVerifier ??
+    (cookieState && cookieState === state ? cookieVerifier : undefined);
+
+  if (!codeVerifier) {
     return clearCookies(
       settingsRedirect({
         etsy: "error",
         message:
-          "Etsy login session expired or cookies were blocked. Please click Connect Etsy shop again (and allow cookies for this site).",
-      }),
-    );
-  }
-
-  if (state !== expectedState) {
-    return clearCookies(
-      settingsRedirect({
-        etsy: "error",
-        message: "Invalid OAuth state (CSRF check failed).",
+          "Etsy login session expired. Please click Connect Etsy shop and finish the Etsy sign-in within 30 minutes.",
       }),
     );
   }
@@ -82,6 +81,16 @@ export async function GET(request: Request) {
         settingsRedirect({
           etsy: "error",
           message: "Sign in required to connect Etsy.",
+        }),
+      );
+    }
+
+    if (dbSession && dbSession.userId !== user.id) {
+      return clearCookies(
+        settingsRedirect({
+          etsy: "error",
+          message:
+            "OAuth session did not match the signed-in user. Please try Connect again.",
         }),
       );
     }
