@@ -46,6 +46,8 @@ export type EtsyCreateDraftListingResult = {
 
 export type EtsyAdapterOptions = {
   clientId?: string;
+  /** Etsy app shared secret; combined with the keystring for the x-api-key header. */
+  sharedSecret?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -71,9 +73,9 @@ function getClientId(explicit?: string): string {
   return clientId;
 }
 
-function authHeaders(clientId: string, accessToken: string): HeadersInit {
+function authHeaders(apiKey: string, accessToken: string): HeadersInit {
   return {
-    "x-api-key": clientId,
+    "x-api-key": apiKey,
     Authorization: `Bearer ${accessToken}`,
   };
 }
@@ -116,6 +118,10 @@ function listingUrlFromResponse(
 
 export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
   const clientId = getClientId(options.clientId);
+  const sharedSecret =
+    options.sharedSecret ?? process.env.ETSY_CLIENT_SECRET?.trim();
+  // Etsy v3 requires x-api-key = "keystring:shared_secret" (colon-separated).
+  const apiKeyHeader = sharedSecret ? `${clientId}:${sharedSecret}` : clientId;
   const fetchImpl = options.fetchImpl ?? fetch;
 
   return {
@@ -154,7 +160,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         {
           method: "POST",
           headers: {
-            ...authHeaders(clientId, input.accessToken),
+            ...authHeaders(apiKeyHeader, input.accessToken),
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: body.toString(),
@@ -196,7 +202,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/files`,
         {
           method: "POST",
-          headers: authHeaders(clientId, accessToken),
+          headers: authHeaders(apiKeyHeader, accessToken),
           body: form,
         },
       );
@@ -226,7 +232,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/images`,
         {
           method: "POST",
-          headers: authHeaders(clientId, accessToken),
+          headers: authHeaders(apiKeyHeader, accessToken),
           body: form,
         },
       );
@@ -251,7 +257,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     ): Promise<EtsyShopListing[]> {
       const response = await fetchImpl(
         `${ETSY_API_BASE}/shops/${shopId}/listings/active?limit=${limit}`,
-        { headers: authHeaders(clientId, accessToken) },
+        { headers: authHeaders(apiKeyHeader, accessToken) },
       );
       const parsed = await parseEtsyJson<{
         results?: {
@@ -287,7 +293,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       }
       const response = await fetchImpl(
         `${ETSY_API_BASE}/shops/${shopId}/receipts?${params.toString()}`,
-        { headers: authHeaders(clientId, accessToken) },
+        { headers: authHeaders(apiKeyHeader, accessToken) },
       );
       const parsed = await parseEtsyJson<{
         results?: {

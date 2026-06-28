@@ -199,8 +199,10 @@ export async function refreshEtsyAccessToken(
 }
 
 function etsyApiHeaders(accessToken: string, clientId: string): HeadersInit {
+  // Etsy v3 requires x-api-key = "keystring:shared_secret" (colon-separated).
+  const secret = process.env.ETSY_CLIENT_SECRET?.trim();
   return {
-    "x-api-key": clientId,
+    "x-api-key": secret ? `${clientId}:${secret}` : clientId,
     Authorization: `Bearer ${accessToken}`,
   };
 }

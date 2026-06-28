@@ -78,9 +78,12 @@ async function searchEtsyListings(
   url.searchParams.set("sort_on", "score");
   url.searchParams.set("type", "physical"); // physical POD products only
 
+  // Etsy v3 requires x-api-key = "keystring:shared_secret" (colon-separated).
+  const secret = process.env.ETSY_CLIENT_SECRET?.trim();
+  const apiKeyHeader = secret ? `${apiKey}:${secret}` : apiKey;
   const res = await fetch(url.toString(), {
     headers: {
-      "x-api-key": apiKey,
+      "x-api-key": apiKeyHeader,
       Accept: "application/json",
     },
     // Prevent hanging if Etsy is slow — Nova can still run on timeout
