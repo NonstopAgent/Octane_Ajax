@@ -116,6 +116,11 @@ async function fetchLlmRawIdeas(
     schema: NovaLlmResponseSchema,
     jsonInstructions: NOVA_IDEATION_JSON_INSTRUCTIONS,
     options: { temperature: 0.7, maxTokens: 2500 },
+    // Single time-boxed attempt so the route stays within the serverless budget.
+    // On timeout/failure completeJson falls back to OpenAI, then runNovaIdeation
+    // falls back to deterministic ideas — never a 504.
+    timeout: 30_000,
+    maxRetries: 0,
     client: options?.client,
   });
 

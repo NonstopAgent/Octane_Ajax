@@ -1,4 +1,6 @@
-export const maxDuration = 30;
+// 60s is the Vercel Hobby ceiling. Nova = market research (~8s) + a single,
+// time-boxed ideation LLM call (see nova/service), which fits comfortably here.
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import {

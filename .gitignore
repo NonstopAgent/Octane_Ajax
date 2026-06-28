@@ -56,3 +56,6 @@ test-out.txt
 
 # Working docs / plans dropped in the project folder
 /*.pdf
+
+# Etsy shop brand assets + copy (deliverables, not app source)
+/etsy-assets/
