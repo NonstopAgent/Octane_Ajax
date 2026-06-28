@@ -3,42 +3,48 @@
 import { useState } from "react";
 import type { ProductListing } from "@/lib/ajax/types";
 import { getStatusLabel } from "@/lib/ajax/status";
-import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
 import { formatStorePrice } from "@/lib/store/display";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 type ReviewExternalLinksPanelProps = {
   listings: ProductListing[];
+  /** Retained for API compatibility with the review dashboard; unused. */
   onPublished?: (listingId: string) => void;
 };
 
+/**
+ * Approved listings + their Etsy draft status. Approving a product auto-creates
+ * an Etsy DRAFT in the background (see runPostApproval); the Etsy listing URL is
+ * stored on the listing's gumroad_url column (legacy name, reused). This panel
+ * surfaces that draft link, or lets the operator (re)create it on demand. No
+ * Lemon Squeezy / Gumroad / digital-download publishing — Octane Ajax is POD.
+ */
 export function ReviewExternalLinksPanel({
   listings,
-  onPublished,
 }: ReviewExternalLinksPanelProps) {
   if (listings.length === 0) return null;
 
   return (
-    <section className="space-y-4" aria-labelledby="external-links-heading">
+    <section className="space-y-4" aria-labelledby="approved-listings-heading">
       <div className="factory-panel border-[var(--border-dim)] px-4 py-3">
         <h2
-          id="external-links-heading"
+          id="approved-listings-heading"
           className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]"
         >
-          External links — store checkout
+          Approved — Etsy drafts
         </h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Listings with a checkout URL appear on the public{" "}
-          <span className="text-[var(--foreground)]">/store</span> catalog.
-          When Lemon Squeezy is configured, approval creates the store product.
-          Etsy auto-publish runs when Etsy is connected in Settings.
+          Approving a listing automatically creates a DRAFT on your connected Etsy
+          shop once the product&apos;s artwork mockup has finished generating.
+          Review and publish it live from Etsy when you&apos;re happy with it.
         </p>
       </div>
 
       <ul className="space-y-4">
         {listings.map((listing) => (
           <li key={listing.id}>
-            <GumroadListingCard listing={listing} onPublished={onPublished} />
+            <EtsyDraftCard listing={listing} />
           </li>
         ))}
       </ul>
@@ -46,26 +52,43 @@ export function ReviewExternalLinksPanel({
   );
 }
 
-function GumroadListingCard({
-  listing,
-  onPublished,
-}: {
-  listing: ProductListing;
-  onPublished?: (listingId: string) => void;
-}) {
-  const [gumroadUrl, setGumroadUrl] = useState(listing.gumroadUrl?.trim() || null);
+function EtsyDraftCard({ listing }: { listing: ProductListing }) {
+  // gumroad_* columns are reused to store the Etsy listing link + id.
+  const [etsyUrl, setEtsyUrl] = useState(listing.gumroadUrl?.trim() || null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const title = listing.title ?? "Untitled product";
+
+  const createDraft = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/ajax/listings/${listing.id}/etsy-draft`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        etsyUrl?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.etsyUrl) {
+        setError(data.error ?? "Could not create the Etsy draft.");
+        return;
+      }
+      setEtsyUrl(data.etsyUrl);
+    } catch {
+      setError("Network error creating the Etsy draft.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <article className="factory-panel">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border-dim)] pb-3">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge
-              label={getStatusLabel(listing.status)}
-              tone="blue"
-            />
-          </div>
+          <StatusBadge label={getStatusLabel(listing.status)} tone="blue" />
           <h3 className="mt-2 font-semibold text-[var(--foreground)]">{title}</h3>
         </div>
         <p className="font-mono text-lg font-bold text-[var(--accent-orange)]">
@@ -73,49 +96,40 @@ function GumroadListingCard({
         </p>
       </header>
 
-      {gumroadUrl ? (
-        <GumroadPublishedBlock gumroadUrl={gumroadUrl} />
+      {etsyUrl ? (
+        <div className="mt-4 space-y-3">
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+              Etsy draft created
+            </span>
+            <p className="mt-1 break-all rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)]">
+              {etsyUrl}
+            </p>
+          </div>
+          <a
+            href={etsyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--accent-blue)] px-4 text-sm font-medium text-[var(--accent-blue)] transition hover:bg-[var(--accent-blue)]/10"
+          >
+            Open draft on Etsy
+          </a>
+        </div>
       ) : (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
-            No checkout URL yet. Retry server-side publishing after confirming
-            the listing PDF is ready, or paste a URL manually.
+            No Etsy draft yet. It&apos;s normally created automatically on approval —
+            click below to (re)create it now. Requires Etsy connected in Settings
+            and the product&apos;s artwork mockup ready.
           </p>
-          <GumroadPublishAction
-            listingId={listing.id}
-            status={listing.status}
-            gumroadUrl={listing.gumroadUrl}
-            gumroadProductId={listing.gumroadProductId}
-            onPublished={(url) => {
-              setGumroadUrl(url);
-              onPublished?.(listing.id);
-            }}
-          />
+          <Button onClick={createDraft} disabled={busy}>
+            {busy ? "Creating Etsy draft…" : "Create Etsy draft"}
+          </Button>
+          {error && (
+            <p className="text-sm text-[var(--accent-orange)]">{error}</p>
+          )}
         </div>
       )}
     </article>
-  );
-}
-
-function GumroadPublishedBlock({ gumroadUrl }: { gumroadUrl: string }) {
-  return (
-    <div className="mt-4 space-y-3">
-      <div>
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-          Checkout URL
-        </span>
-        <p className="mt-1 break-all rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)]">
-          {gumroadUrl}
-        </p>
-      </div>
-      <a
-        href={gumroadUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--accent-blue)] px-4 text-sm font-medium text-[var(--accent-blue)] transition hover:bg-[var(--accent-blue)]/10"
-      >
-        Open checkout
-      </a>
-    </div>
   );
 }
