@@ -33,8 +33,23 @@ export type EtsyPublishDependencies = {
   downloadMockup?: typeof downloadProductMockup;
 };
 
+/** Derive Etsy taxonomy hints from a listing title so we pick a sensible category. */
+function taxonomyHintsFromTitle(title: string): string[] {
+  const t = title.toLowerCase();
+  const hints: string[] = [];
+  if (/\bmug\b/.test(t)) hints.push("mug");
+  if (/t-?shirt|\btee\b|\bshirt\b/.test(t)) hints.push("t-shirt", "shirt");
+  if (/sweatshirt|hoodie/.test(t)) hints.push("sweatshirt", "hoodie");
+  if (/tote/.test(t)) hints.push("tote bag", "tote");
+  if (/phone\s*case|\bcase\b/.test(t)) hints.push("phone case");
+  if (/poster/.test(t)) hints.push("poster", "print");
+  if (/print|wall art|art print/.test(t)) hints.push("print");
+  hints.push("print"); // default lean — most products are art prints
+  return hints;
+}
+
 /**
- * Auto-publish to Etsy after Review Gate approval (after content job + Lemon Squeezy).
+ * Auto-publish to Etsy after Review Gate approval.
  * Never throws — failures are logged as factory events and approval continues.
  */
 export async function publishListingToEtsyOnApprove(
@@ -100,11 +115,21 @@ export async function publishListingToEtsyOnApprove(
     const adapter = createAdapter();
     const baseName = title.replace(/[^\w.-]+/g, "_").slice(0, 80) || "product";
 
+    // Etsy rejects listings without a leaf taxonomy_id. Resolve one from the
+    // title; the draft is editable so the seller can refine the category later.
+    let taxonomyId: number | undefined;
+    try {
+      taxonomyId = await adapter.resolveTaxonomyId(taxonomyHintsFromTitle(title));
+    } catch {
+      taxonomyId = undefined;
+    }
+
     // Physical DRAFT listing — never auto-published live (see etsy.ts state="draft").
     const created = await adapter.createDraftListing({
       title,
       description,
       price_cents: priceCents,
+      taxonomy_id: taxonomyId,
       shopId: credentials.shop_id,
       accessToken: credentials.access_token,
     });

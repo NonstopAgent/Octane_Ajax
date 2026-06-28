@@ -65,6 +65,55 @@ export type EtsyReceiptsByListing = Record<
   { orders: number; revenueCents: number }
 >;
 
+/** A node in Etsy's seller taxonomy tree. */
+export type EtsyTaxonomyNode = {
+  id: number;
+  name: string;
+  level?: number;
+  children?: EtsyTaxonomyNode[];
+};
+
+let taxonomyCache: EtsyTaxonomyNode[] | null = null;
+
+function flattenTaxonomy(
+  nodes: EtsyTaxonomyNode[],
+  acc: EtsyTaxonomyNode[] = [],
+): EtsyTaxonomyNode[] {
+  for (const n of nodes) {
+    acc.push(n);
+    if (n.children?.length) flattenTaxonomy(n.children, acc);
+  }
+  return acc;
+}
+
+/** Picks a valid LEAF taxonomy id matching hints, with print/first-leaf fallbacks. */
+function pickTaxonomyLeaf(nodes: EtsyTaxonomyNode[], hints: string[]): number {
+  const leaves = flattenTaxonomy(nodes).filter(
+    (n) => !n.children || n.children.length === 0,
+  );
+  for (const hint of hints.map((h) => h.toLowerCase()).filter(Boolean)) {
+    const match = leaves.find((n) => n.name.toLowerCase().includes(hint));
+    if (match) return match.id;
+  }
+  const printLeaf = leaves.find((n) => n.name.toLowerCase().includes("print"));
+  if (printLeaf) return printLeaf.id;
+  if (leaves[0]) return leaves[0].id;
+  throw new EtsyAdapterError("Etsy seller taxonomy returned no categories.");
+}
+
+async function loadSellerTaxonomy(
+  apiKey: string,
+  fetchImpl: typeof fetch,
+): Promise<EtsyTaxonomyNode[]> {
+  if (taxonomyCache) return taxonomyCache;
+  const response = await fetchImpl(`${ETSY_API_BASE}/seller-taxonomy/nodes`, {
+    headers: { "x-api-key": apiKey, Accept: "application/json" },
+  });
+  const parsed = await parseEtsyJson<{ results?: EtsyTaxonomyNode[] }>(response);
+  taxonomyCache = parsed.results ?? [];
+  return taxonomyCache;
+}
+
 function getClientId(explicit?: string): string {
   const clientId = explicit ?? process.env.ETSY_CLIENT_ID?.trim();
   if (!clientId) {
@@ -320,6 +369,16 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         }
       }
       return byListing;
+    },
+
+    /**
+     * Resolves a valid LEAF taxonomy_id for a new listing by matching hints
+     * (e.g., "mug", "print") against Etsy's live seller taxonomy, with sensible
+     * fallbacks. Etsy rejects listing creation without a leaf taxonomy_id.
+     */
+    async resolveTaxonomyId(hints: string[]): Promise<number> {
+      const nodes = await loadSellerTaxonomy(apiKeyHeader, fetchImpl);
+      return pickTaxonomyLeaf(nodes, hints);
     },
   };
 }
