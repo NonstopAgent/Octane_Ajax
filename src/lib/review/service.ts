@@ -17,7 +17,7 @@ import {
   PixelSimulatorError,
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
-import { publishListingToEtsyOnApprove } from "@/lib/review/etsy-on-approve";
+import { publishListingViaPrintify } from "@/lib/review/printify-publish-on-approve";
 import type { ProductGeneration } from "@/lib/product/domain";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
@@ -341,7 +341,7 @@ export async function runPostApproval(ctx: PostApprovalContext): Promise<void> {
   const supabase = createServiceClient();
 
   try {
-    await publishListingToEtsyOnApprove({
+    await publishListingViaPrintify({
       supabase,
       userId: ctx.userId,
       listingId: ctx.listingId,
@@ -349,7 +349,7 @@ export async function runPostApproval(ctx: PostApprovalContext): Promise<void> {
       generation: ctx.generation,
     });
   } catch (err) {
-    console.error("[review/post-approval] Etsy publish failed", err);
+    console.error("[review/post-approval] Printify→Etsy publish failed", err);
   }
 
   try {

@@ -52,7 +52,7 @@ describe("demo workflow wiring", () => {
     );
     assert.match(novaRoute, /runNovaStep/);
     assert.match(forgeRoute, /runForgeStep/);
-    assert.match(novaRoute, /maxDuration\s*=\s*30/);
+    assert.match(novaRoute, /maxDuration\s*=\s*60/);
     assert.match(forgeRoute, /maxDuration\s*=\s*60/);
     assert.match(simulator, /export async function runNovaStep/);
     assert.match(simulator, /export async function runForgeStep/);
@@ -109,9 +109,9 @@ describe("demo workflow wiring", () => {
     assert.match(content, /status:\s*"approved"/);
     // POD: the Lemon Squeezy / gumroad auto-publish on approve was removed.
     assert.doesNotMatch(content, /publishListingToGumroadOnApprove/);
-    // Heavy work runs after the response via runPostApproval (Etsy draft + Pixel).
+    // Heavy work runs after the response via runPostApproval (Printify→Etsy + Pixel).
     assert.match(content, /runPostApproval/);
-    assert.match(content, /publishListingToEtsyOnApprove/);
+    assert.match(content, /publishListingViaPrintify/);
     assert.match(content, /runPixelMarketing/);
     assert.doesNotMatch(content, /etsyAdapter|publishListingWithGumroad/i);
   });

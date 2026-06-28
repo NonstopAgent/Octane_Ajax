@@ -11,7 +11,7 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import { mapGenerationFromDb } from "@/lib/product/mappers";
-import { publishListingToEtsyOnApprove } from "@/lib/review/etsy-on-approve";
+import { publishListingViaPrintify } from "@/lib/review/printify-publish-on-approve";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -52,7 +52,7 @@ export async function POST(
     .maybeSingle();
 
   try {
-    const result = await publishListingToEtsyOnApprove({
+    const result = await publishListingViaPrintify({
       supabase,
       userId: user.id,
       listingId: id,
@@ -65,13 +65,13 @@ export async function POST(
         {
           ok: false,
           error:
-            "Etsy draft was not created. Confirm Etsy is connected in Settings and the product's artwork mockup is ready, then try again.",
+            "Publish failed. Confirm the product finished fulfillment (Printify product created) and that your Etsy shop is connected inside Printify, then try again.",
         },
         { status: 502 },
       );
     }
 
-    return NextResponse.json({ ok: true, etsyUrl: result.etsyUrl });
+    return NextResponse.json({ ok: true, etsyUrl: result.url });
   } catch (err) {
     console.error("[listings/etsy-draft]", err);
     return NextResponse.json(

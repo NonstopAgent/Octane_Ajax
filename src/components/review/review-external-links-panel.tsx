@@ -35,9 +35,10 @@ export function ReviewExternalLinksPanel({
           Approved — Etsy drafts
         </h2>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Approving a listing automatically creates a DRAFT on your connected Etsy
-          shop once the product&apos;s artwork mockup has finished generating.
-          Review and publish it live from Etsy when you&apos;re happy with it.
+          Approving a listing publishes it to your Etsy shop via Printify (your Etsy
+          shop must be connected inside Printify, set to &quot;Publish as draft&quot;).
+          Printify builds the full listing — variants, pricing, shipping — then you
+          publish it live from Etsy.
         </p>
       </div>
 
@@ -100,7 +101,7 @@ function EtsyDraftCard({ listing }: { listing: ProductListing }) {
         <div className="mt-4 space-y-3">
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-              Etsy draft created
+              Published via Printify
             </span>
             <p className="mt-1 break-all rounded-md border border-[var(--border-dim)] bg-black/30 px-3 py-2 text-sm text-[var(--foreground)]">
               {etsyUrl}
@@ -112,18 +113,18 @@ function EtsyDraftCard({ listing }: { listing: ProductListing }) {
             rel="noopener noreferrer"
             className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--accent-blue)] px-4 text-sm font-medium text-[var(--accent-blue)] transition hover:bg-[var(--accent-blue)]/10"
           >
-            Open draft on Etsy
+            Open in Printify
           </a>
         </div>
       ) : (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
-            No Etsy draft yet. It&apos;s normally created automatically on approval —
-            click below to (re)create it now. Requires Etsy connected in Settings
-            and the product&apos;s artwork mockup ready.
+            Not published yet. It&apos;s normally published automatically on approval —
+            click below to publish now. Requires the product&apos;s Printify product
+            (from fulfillment) and your Etsy shop connected inside Printify.
           </p>
           <Button onClick={createDraft} disabled={busy}>
-            {busy ? "Creating Etsy draft…" : "Create Etsy draft"}
+            {busy ? "Publishing to Etsy…" : "Publish to Etsy"}
           </Button>
           {error && (
             <p className="text-sm text-[var(--accent-orange)]">{error}</p>
