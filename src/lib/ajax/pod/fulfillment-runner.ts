@@ -15,6 +15,10 @@ import {
   imageGeneratorAdapter,
   printifyAdapter,
 } from "@/lib/ajax/adapters";
+import {
+  getPrintifyCatalogEntry,
+  isPrintifyCatalogKey,
+} from "@/lib/ajax/pod/printify-catalog";
 import type { ForgeGenerationResult } from "@/lib/ajax/forge/types";
 import type { PodFulfillmentSnapshot } from "@/lib/product/domain";
 
@@ -80,6 +84,8 @@ export type PodFulfillmentInput = {
   >;
   niche: string;
   publish?: boolean;
+  /** Etsy SEO tags to attach to the Printify product (synced on publish). */
+  tags?: string[];
 };
 
 export type PodFulfillmentResult = {
@@ -96,15 +102,26 @@ export type PodFulfillmentResult = {
 export async function runPodFulfillment(
   input: PodFulfillmentInput,
 ): Promise<PodFulfillmentResult> {
-  const { forgeResult, niche, publish = false } = input;
+  const { forgeResult, niche, publish = false, tags } = input;
   const { podDetails, listingTitle, listingDescription } = forgeResult;
+
+  // Match the artwork's aspect ratio to the product's print area so it isn't
+  // cropped (e.g., vertical posters need portrait art, not a square).
+  const catalogKey =
+    typeof podDetails.metadata?.catalogKey === "string"
+      ? podDetails.metadata.catalogKey
+      : null;
+  const artworkAspectRatio =
+    catalogKey && isPrintifyCatalogKey(catalogKey)
+      ? getPrintifyCatalogEntry(catalogKey).artworkAspectRatio
+      : "1:1";
 
   const artworkResult = await imageGeneratorAdapter.generateProductArtwork({
     productTitle: listingTitle,
     niche,
     stylePrompt: podDetails.artworkPrompt,
     aestheticStyle: podDetails.aestheticStyle,
-    aspectRatio: "1:1",
+    aspectRatio: artworkAspectRatio,
   });
 
   if (!artworkResult.data.imageUrl) {
@@ -132,6 +149,7 @@ export async function runPodFulfillment(
       printProviderId: podDetails.printProviderId,
       variantIds: podDetails.variantIds,
       artworkUploadId: uploadResult.data.uploadId,
+      tags,
     }),
     PRINTIFY_TIMEOUT_MS,
     "create",

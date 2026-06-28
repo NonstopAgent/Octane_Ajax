@@ -33,6 +33,8 @@ export type PrintifyProductInput = {
   artworkUploadId: string;
   /** Retail price in USD cents per variant (defaults to 1999). */
   priceCents?: number;
+  /** Etsy SEO tags (synced to the listing on publish). */
+  tags?: string[];
 };
 
 export type PrintifyProduct = {
@@ -123,6 +125,23 @@ function getCredentials(options?: PrintifyAdapterOptions): {
     throw new Error("PRINTIFY_API_TOKEN and PRINTIFY_SHOP_ID are required.");
   }
   return { token, shopId };
+}
+
+/** Etsy tag rules: max 13 tags, each <= 20 chars, unique, non-empty. */
+function sanitizeEtsyTags(tags?: string[]): string[] {
+  if (!tags?.length) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const tag = (raw ?? "").trim().slice(0, 20);
+    const key = tag.toLowerCase();
+    if (tag && !seen.has(key)) {
+      seen.add(key);
+      out.push(tag);
+    }
+    if (out.length >= 13) break;
+  }
+  return out;
 }
 
 type PrintifyUploadResponse = {
@@ -272,6 +291,7 @@ export function createLivePrintifyAdapter(
       const productPayload = {
         title: input.title,
         description: input.description,
+        tags: sanitizeEtsyTags(input.tags),
         blueprint_id: blueprintId,
         print_provider_id: printProviderId,
         variants: variantIds.map((id) => ({

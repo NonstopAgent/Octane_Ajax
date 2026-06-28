@@ -37,6 +37,8 @@ export type PrintifyCatalogEntry = {
   variantIds: number[];
   /** Default retail price in cents when Forge's price is missing/invalid. */
   defaultPriceCents: number;
+  /** Artwork aspect ratio that fills this product's print area (avoids cropping). */
+  artworkAspectRatio: "1:1" | "4:5" | "16:9";
   /** Hint for Forge about when to pick this product. */
   promptHint: string;
 };
@@ -54,6 +56,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 48, // Colorway
     variantIds: [67624], // 11oz
     defaultPriceCents: 1699,
+    artworkAspectRatio: "1:1",
     promptHint:
       "Best for funny/identity quotes and small illustrated designs; top gift staple.",
   },
@@ -64,6 +67,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 2, // Sensaria
     variantIds: [43135, 43138, 43144], // 11x14, 12x18, 18x24 Matte
     defaultPriceCents: 2499,
+    artworkAspectRatio: "4:5", // vertical poster → portrait artwork
     promptHint:
       "Best for art-forward designs: botanical, vintage, typographic wall decor.",
   },
@@ -74,6 +78,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 29, // Monster Digital
     variantIds: [18052, 18053, 18054, 18055, 18056], // Aqua S–2XL
     defaultPriceCents: 2699,
+    artworkAspectRatio: "1:1", // centered chest print
     promptHint:
       "Best for wearable identity statements; niche pride and pet/hobby slogans.",
   },
@@ -84,6 +89,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 29, // Monster Digital
     variantIds: [25377, 25381, 25385], // S Ash, S Dark Heather, S Light Blue
     defaultPriceCents: 2999,
+    artworkAspectRatio: "1:1", // centered chest print
     promptHint:
       "Best for cozy occupation/seasonal gifts (nurses week, holidays, grads).",
   },

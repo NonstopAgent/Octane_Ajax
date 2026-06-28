@@ -41,12 +41,12 @@ Every listing must be honest about AI assistance. Include this exact sentence in
 export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
   "listingTitle": "string — Etsy listing title (specific, no copyrighted brands)",
-  "listingDescription": "string — buyer-facing description with bullet benefits; MUST include the AI disclosure sentence verbatim",
+  "listingDescription": "string — a complete, persuasive Etsy description (120-220 words): an attention-grabbing first line, 3-5 benefit/feature bullets (each starting with • ), who it's for + gift occasions, a product-quality + made-to-order shipping note, and a short call to action. MUST end with the AI disclosure sentence verbatim",
   "seoTags": ["string", ...] (exactly 13 Etsy tags, no duplicates, niche-specific),
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
   "podDetails": {
     "catalogKey": "one of: ${PRINTIFY_CATALOG_KEYS.join(", ")} — pick the pre-approved product that best fits the concept",
-    "artworkPrompt": "string — detailed original artwork prompt, 20+ chars, no brands/characters/logos",
+    "artworkPrompt": "string — detailed, print-ready artwork prompt (40+ chars): one clear focal subject, centered with generous safe margins (nothing important near the edges), a clean uncluttered background, bold high-contrast colors that print well, and NO tiny text or fine details that crop badly. No brands/characters/logos",
     "aestheticStyle": "one of: ${AESTHETIC_LIST}"
   },
   "complianceNotes": ["string", ...] (policy reminders for human review, may be empty),
@@ -74,6 +74,11 @@ export function buildForgeGenerationUserPrompt(input: {
   keywords: string[];
   reasoning: string;
 }): string {
+  const focus = process.env.FORGE_PRODUCT_FOCUS?.trim();
+  const productGuidance = focus
+    ? `PRODUCT FOCUS: Prefer these product type(s) unless the concept clearly fits another: ${focus}.`
+    : `PRODUCT MIX: Pick the catalogKey that genuinely best fits the concept and vary product types across cycles — do NOT default to posters. Favor apparel (tees, sweatshirts) and mugs for slogan/identity/quote concepts; reserve posters for art-forward wall-decor concepts.`;
+
   return `Generate a POD listing + Printify blueprint for cycle ${input.runId.slice(0, 8)}.
 
 Product idea:
@@ -86,6 +91,8 @@ Product idea:
 - Nova suggested price: $${input.suggestedPrice.toFixed(2)}
 - Seed keywords: ${input.keywords.join(", ")}
 - Nova reasoning: ${input.reasoning}
+
+${productGuidance}
 
 Deliver a cohesive print-on-demand gift product with original IP-safe artwork, the best-fitting catalogKey, and an Etsy-ready listing draft.`;
 }

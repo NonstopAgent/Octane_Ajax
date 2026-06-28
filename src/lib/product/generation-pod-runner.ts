@@ -125,7 +125,7 @@ export async function runGenerationPodJob(
 
   const { data: ideaRow, error: ideaError } = await supabase
     .from(TABLES.IDEAS)
-    .select("niche, raw_payload")
+    .select("niche, raw_payload, seo_keywords")
     .eq("id", generation.productIdeaId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -162,6 +162,9 @@ export async function runGenerationPodJob(
       },
       niche,
       publish: false,
+      tags: Array.isArray(ideaRow?.seo_keywords)
+        ? ideaRow.seo_keywords
+        : undefined,
     });
 
     // gpt-image-1 returns base64. Persist the bytes to Storage and store a
