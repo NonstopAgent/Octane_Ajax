@@ -73,6 +73,8 @@ export function buildForgeGenerationUserPrompt(input: {
   suggestedPrice: number;
   keywords: string[];
   reasoning: string;
+  /** Proven Etsy search terms (real volume data) to prefer among the 13 seoTags. */
+  marketKeywords?: string[];
 }): string {
   const focus = process.env.FORGE_PRODUCT_FOCUS?.trim();
   const productGuidance = focus
@@ -91,7 +93,11 @@ Product idea:
 - Nova suggested price: $${input.suggestedPrice.toFixed(2)}
 - Seed keywords: ${input.keywords.join(", ")}
 - Nova reasoning: ${input.reasoning}
-
+${
+  input.marketKeywords?.length
+    ? `- PROVEN Etsy search terms (verified real volume — include each one that fits this product among the 13 seoTags, and consider them for the title): ${input.marketKeywords.join(", ")}`
+    : ""
+}
 ${productGuidance}
 
 Deliver a cohesive print-on-demand gift product with original IP-safe artwork, the best-fitting catalogKey, and an Etsy-ready listing draft.`;

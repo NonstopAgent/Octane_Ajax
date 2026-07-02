@@ -95,6 +95,7 @@ async function fetchLlmForgeOutput(
           suggestedPrice: idea.suggestedPrice,
           keywords: idea.keywords,
           reasoning: idea.reasoning,
+          marketKeywords: input.marketKeywords,
         }),
       },
     ],

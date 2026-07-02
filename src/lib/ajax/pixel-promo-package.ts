@@ -15,6 +15,8 @@ export type PixelPromoMetadata = {
   pinterestDescription: string;
   tiktokHookIdeas: string[];
   hashtags: string[];
+  /** Trackable Share & Save product URL to include when posting. */
+  productUrl?: string | null;
   /** Traceability for future LLM prompts — not for publishing as-is. */
   source: {
     listingTitle: string;
@@ -50,14 +52,16 @@ export type PixelPromoInput = {
   seoKeywords?: string[] | null;
   structure?: ProductStructure | null;
   podDetails?: PodDetails | null;
+  /** Trackable Share & Save URL for this product (listing link or shop link). */
+  productUrl?: string | null;
 };
 
 const DEMO_HASHTAGS = [
   "#OctaneAjax",
-  "#DemoShop",
+  "#EtsyFinds",
+  "#GiftIdeas",
+  "#MadeToOrder",
   "#SmallBusiness",
-  "#PrintablePlanner",
-  "#DigitalDownload",
 ] as const;
 
 function slugHashtag(value: string): string | null {
@@ -172,10 +176,11 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
 
   const audience = niche ? `${niche} fans` : "gift shoppers";
   const formatLabel = podDetails ? "print-on-demand gift" : format ?? "printable download";
+  const productUrl = input.productUrl?.trim() || null;
 
   const shortCaption = [
     `✨ ${displayTitle} — ${formatLabel} for ${audience}.`,
-    podDetails ? "Made to order, ships fast." : pageCount ? `${pageCount} pages, instant download.` : "Instant download.",
+    podDetails ? "Made to order, ships fast. 🔗 Link in bio!" : pageCount ? `${pageCount} pages, instant download.` : "Instant download.",
     hashtagLine,
   ].join("\n");
 
@@ -196,7 +201,9 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
     "What's inside:",
     ...benefits,
     "",
-    "Tap through for the demo slideshow — packaged by Pixel.",
+    productUrl
+      ? `Shop it here 👉 ${productUrl}`
+      : "Tap through for the demo slideshow — packaged by Pixel.",
     "",
     hashtagLine,
   ].join("\n");
@@ -211,12 +218,22 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
   const keywordSnippet = (input.seoKeywords ?? []).slice(0, 5).join(", ");
   const pinterestDescription = [
     `${displayTitle} — a ${formatLabel}${niche ? ` for ${niche}` : ""}.`,
-    pageCount ? `${pageCount} printable pages.` : "Printable pages included.",
-    pageTitles.length
-      ? `Includes: ${pageTitles.slice(0, 3).join(", ")}.`
-      : "Structured sections ready to print.",
+    podDetails
+      ? "Original artwork, made to order and shipped to your door."
+      : pageCount
+        ? `${pageCount} printable pages.`
+        : "Printable pages included.",
+    podDetails
+      ? ""
+      : pageTitles.length
+        ? `Includes: ${pageTitles.slice(0, 3).join(", ")}.`
+        : "Structured sections ready to print.",
     keywordSnippet ? `Keywords: ${keywordSnippet}.` : "",
-    "Instant digital download (demo storefront).",
+    productUrl
+      ? `Shop: ${productUrl}`
+      : podDetails
+        ? "Available on Etsy."
+        : "Instant digital download (demo storefront).",
   ]
     .filter(Boolean)
     .join(" ");
@@ -248,6 +265,7 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
     pinterestDescription,
     tiktokHookIdeas,
     hashtags,
+    productUrl,
     source: {
       listingTitle: displayTitle,
       listingDescription: input.listingDescription?.trim() || null,

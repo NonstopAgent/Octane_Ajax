@@ -14,6 +14,28 @@ function formatHashtags(tags: string[]): string {
   return tags.join(" ");
 }
 
+type PromoMeta = NonNullable<MarketingContentJob["metadata"]>;
+
+/** Instagram/TikTok-ready post: caption + hashtags, link stays in bio. */
+function buildShortPost(meta: PromoMeta): string {
+  const tagLine = formatHashtags(meta.hashtags);
+  const caption = meta.shortCaption.includes("#")
+    ? meta.shortCaption
+    : `${meta.shortCaption}\n\n${tagLine}`;
+  return caption;
+}
+
+/** Facebook/long-form post: long caption with the trackable link guaranteed. */
+function buildLongPost(meta: PromoMeta): string {
+  const link = meta.productUrl?.trim();
+  const base =
+    link && !meta.longCaption.includes(link)
+      ? `${meta.longCaption}\n\nShop it here 👉 ${link}`
+      : meta.longCaption;
+  const tagLine = formatHashtags(meta.hashtags);
+  return base.includes("#") ? base : `${base}\n\n${tagLine}`;
+}
+
 export function MarketingDashboard({
   jobs,
   isAuthenticated,
@@ -47,7 +69,7 @@ export function MarketingDashboard({
         badge="Pixel output"
         badgeTone="blue"
         title="Marketing"
-        description="Social captions, hooks, and hashtags generated when Pixel schedules content. Copy fields for TikTok, Pinterest, and Instagram."
+        description="Ready-to-paste social posts generated when Pixel schedules content. Every link uses the Share & Save trackable URL, so orders from these posts earn reduced Etsy fees."
         aside={
           <ButtonLink href="/factory" variant="secondary">
             Factory floor
@@ -101,18 +123,49 @@ export function MarketingDashboard({
                       </p>
                     )}
                   </div>
-                  <Link
-                    href={`/operator-store/${job.listingId}`}
-                    className="text-sm font-medium text-[var(--accent-blue)] hover:underline"
-                  >
-                    View listing →
-                  </Link>
+                  {meta.productUrl ? (
+                    <a
+                      href={meta.productUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-[var(--accent-blue)] hover:underline"
+                    >
+                      Open on Etsy →
+                    </a>
+                  ) : (
+                    <Link
+                      href={`/operator-store/${job.listingId}`}
+                      className="text-sm font-medium text-[var(--accent-blue)] hover:underline"
+                    >
+                      View listing →
+                    </Link>
+                  )}
                 </div>
 
-                <CopyField label="Short caption" value={meta.shortCaption} multiline />
+                {meta.productUrl && (
+                  <CopyField
+                    label="Share & Save link (reduced Etsy fees)"
+                    value={meta.productUrl}
+                  />
+                )}
+                <CopyField
+                  label="Instagram / TikTok caption (put the link in bio)"
+                  value={buildShortPost(meta)}
+                  multiline
+                />
+                <CopyField
+                  label="Facebook / long-form post (link included)"
+                  value={buildLongPost(meta)}
+                  multiline
+                />
                 <CopyField
                   label="Pinterest title"
                   value={meta.pinterestTitle}
+                />
+                <CopyField
+                  label="Pinterest description"
+                  value={meta.pinterestDescription}
+                  multiline
                 />
                 <div className="space-y-2">
                   <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-blue)]">

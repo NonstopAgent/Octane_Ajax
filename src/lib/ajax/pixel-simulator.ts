@@ -16,6 +16,7 @@ import {
   type PixelPromoPackage,
 } from "@/lib/ajax/pixel-promo-package";
 import type { ContentJob, FactoryEvent, ProductListing } from "@/lib/ajax/types";
+import { buildShareSaveUrl } from "@/lib/etsy/share-link";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -70,6 +71,10 @@ type QueuedListingRow = {
   status: string;
   description: string | null;
   mockup_url: string | null;
+  /** Etsy listing URL (column reused from the legacy Gumroad era). */
+  gumroad_url: string | null;
+  /** Etsy listing id (column reused from the legacy Gumroad era). */
+  gumroad_product_id: string | null;
   product_ideas: QueuedIdeaRow | QueuedIdeaRow[] | null;
   product_generations: QueuedGenerationRow | QueuedGenerationRow[] | null;
 };
@@ -143,6 +148,10 @@ function promoInputFromJob(job: QueuedJobRow): {
       seoKeywords: idea?.seo_keywords ?? null,
       structure,
       podDetails,
+      productUrl: buildShareSaveUrl({
+        etsyListingId: listing?.gumroad_product_id,
+        listingUrl: listing?.gumroad_url,
+      }),
     },
     generationId: generation?.id ?? null,
     mockupSources: {
@@ -234,6 +243,8 @@ export async function runPixelMarketing(
         status,
         description,
         mockup_url,
+        gumroad_url,
+        gumroad_product_id,
         product_ideas (
           niche,
           title,

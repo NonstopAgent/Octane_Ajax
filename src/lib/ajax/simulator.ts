@@ -10,7 +10,10 @@ import {
   runNovaIdeation,
 } from "@/lib/ajax/nova";
 import { fetchNovaPastContext } from "@/lib/ajax/nova/past-context";
-import { fetchMarketResearch } from "@/lib/ajax/nova/research";
+import {
+  fetchMarketResearch,
+  fetchOperatorKeywords,
+} from "@/lib/ajax/nova/research";
 import type { NovaEvaluatedIdea } from "@/lib/ajax/nova/types";
 import {
   normalizeProductCategory,
@@ -640,9 +643,13 @@ async function executeForgeStep(
   );
   await sleep(CYCLE_PACING.agentWorkMs);
 
+  // Proven Etsy search terms ground Forge's tags/title in real demand data.
+  const operatorKeywords = await fetchOperatorKeywords({ supabase, userId }, 8);
+
   const forgeResult = await runForgeGeneration({
     runId,
     idea: forgePick,
+    marketKeywords: operatorKeywords?.map((kw) => kw.term),
   });
   const compliance = forgeResultToCompliance(forgeResult);
 

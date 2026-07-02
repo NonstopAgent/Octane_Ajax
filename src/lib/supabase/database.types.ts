@@ -737,6 +737,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      market_keywords: {
+        Row: {
+          id: string;
+          user_id: string;
+          term: string;
+          searches_per_month: number | null;
+          competing_listings: number | null;
+          source: string;
+          notes: string | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          term: string;
+          searches_per_month?: number | null;
+          competing_listings?: number | null;
+          source?: string;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          term?: string;
+          searches_per_month?: number | null;
+          competing_listings?: number | null;
+          source?: string;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       strategy_recommendations: {
         Row: {
           id: string;

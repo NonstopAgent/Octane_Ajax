@@ -127,6 +127,7 @@ export const TABLES = {
   TIKTOK_QUEUE: "tiktok_queue",
   STRATEGY: "strategy_recommendations",
   LLM_USAGE: "llm_usage_log",
+  MARKET_KEYWORDS: "market_keywords",
   LISTING_PERFORMANCE: "listing_performance_snapshots",
   ETSY_OAUTH_SESSIONS: "etsy_oauth_sessions",
 } as const;

@@ -59,6 +59,8 @@ export type ForgeLlmResponse = z.infer<typeof ForgeLlmResponseSchema>;
 export type ForgeGenerationInput = {
   runId: string;
   idea: NovaEvaluatedIdea;
+  /** Proven Etsy search terms (real volume) Forge should prefer in tags/title. */
+  marketKeywords?: string[];
 };
 
 export type ForgeGenerationResult = {

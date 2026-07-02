@@ -20,11 +20,18 @@ import { TABLES } from "@/lib/supabase/schema";
 
 export type TrendSignal = { seed: string; queries: string[] };
 export type YouTubeSignal = { seed: string; videoTitles: string[] };
+export type OperatorKeywordSignal = {
+  term: string;
+  searchesPerMonth: number | null;
+  competingListings: number | null;
+  source: string;
+};
 
 export type MarketResearchContext = {
   etsy: EtsyMarketContext | null;
   trends: TrendSignal[] | null;
   youtube: YouTubeSignal[] | null;
+  operatorKeywords: OperatorKeywordSignal[] | null;
   sources: string[];
   fetchedAt: string;
 };
@@ -41,11 +48,46 @@ const FALLBACK_SEEDS = [
 ] as const;
 
 /**
- * Resolves research seeds dynamically: prefer the operator's accepted War Room
- * niche recommendations, then supplement with a randomized fallback set so each
- * cycle explores something fresh (instead of the same saturated terms).
+ * Proven Etsy search terms the operator curated (Marketplace Insights research,
+ * manual additions, War Room). Real demand numbers — the strongest signal we
+ * have, so it leads the research context and seeds Trends/YouTube lookups.
  */
-async function resolveResearchSeeds(opts?: ResearchSeedOptions): Promise<string[]> {
+export async function fetchOperatorKeywords(
+  opts?: ResearchSeedOptions,
+  limit = 12,
+): Promise<OperatorKeywordSignal[] | null> {
+  if (!opts?.supabase || !opts.userId) return null;
+  try {
+    const { data } = await opts.supabase
+      .from(TABLES.MARKET_KEYWORDS)
+      .select("term, searches_per_month, competing_listings, source")
+      .eq("user_id", opts.userId)
+      .eq("active", true)
+      .order("searches_per_month", { ascending: false, nullsFirst: false })
+      .limit(limit);
+    const rows = (data ?? [])
+      .map((row) => ({
+        term: (row.term ?? "").trim(),
+        searchesPerMonth: row.searches_per_month ?? null,
+        competingListings: row.competing_listings ?? null,
+        source: row.source ?? "manual",
+      }))
+      .filter((row) => row.term.length > 0);
+    return rows.length > 0 ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves research seeds dynamically: prefer the operator's accepted War Room
+ * niche recommendations, then top proven keywords, then a randomized fallback
+ * set so each cycle explores something fresh (instead of the same saturated terms).
+ */
+async function resolveResearchSeeds(
+  opts?: ResearchSeedOptions,
+  operatorKeywords?: OperatorKeywordSignal[] | null,
+): Promise<string[]> {
   const seeds: string[] = [];
 
   if (opts?.supabase && opts.userId) {
@@ -63,8 +105,13 @@ async function resolveResearchSeeds(opts?: ResearchSeedOptions): Promise<string[
         if (title) seeds.push(title);
       }
     } catch {
-      // fall through to fallback seeds
+      // fall through to keyword/fallback seeds
     }
+  }
+
+  for (const kw of operatorKeywords ?? []) {
+    if (seeds.length >= 3) break;
+    if (!seeds.includes(kw.term)) seeds.push(kw.term);
   }
 
   const shuffled = [...FALLBACK_SEEDS].sort(() => Math.random() - 0.5);
@@ -157,7 +204,8 @@ async function fetchYouTubeBuzz(
 export async function fetchMarketResearch(
   opts?: ResearchSeedOptions,
 ): Promise<MarketResearchContext | null> {
-  const seeds = await resolveResearchSeeds(opts);
+  const operatorKeywords = await fetchOperatorKeywords(opts);
+  const seeds = await resolveResearchSeeds(opts, operatorKeywords);
   const [etsy, trends, youtube] = await Promise.all([
     fetchEtsyMarketContext(process.env.ETSY_CLIENT_ID ?? "").catch(() => null),
     fetchGoogleTrends(seeds).catch(() => null),
@@ -165,6 +213,7 @@ export async function fetchMarketResearch(
   ]);
 
   const sources: string[] = [];
+  if (operatorKeywords) sources.push("operator_keywords");
   if (etsy) sources.push("etsy");
   if (trends) sources.push("google_trends");
   if (youtube) sources.push("youtube");
@@ -174,6 +223,7 @@ export async function fetchMarketResearch(
     etsy,
     trends,
     youtube,
+    operatorKeywords,
     sources,
     fetchedAt: new Date().toISOString(),
   };
@@ -184,6 +234,24 @@ export function formatMarketResearchForPrompt(
   ctx: MarketResearchContext,
 ): string {
   const parts: string[] = [];
+
+  if (ctx.operatorKeywords?.length) {
+    const lines = [
+      "PROVEN ETSY SEARCH TERMS (real Marketplace Insights volume — the operator verified demand; target these niches and weave the terms into keywords):",
+    ];
+    for (const kw of ctx.operatorKeywords) {
+      const volume =
+        kw.searchesPerMonth != null
+          ? `${kw.searchesPerMonth.toLocaleString("en-US")} searches/mo`
+          : "volume unknown";
+      const competition =
+        kw.competingListings != null
+          ? `, ${kw.competingListings.toLocaleString("en-US")} competing listings`
+          : "";
+      lines.push(`  • "${kw.term}" — ${volume}${competition}`);
+    }
+    parts.push(lines.join("\n"));
+  }
 
   if (ctx.etsy) {
     parts.push(formatEtsyContextForPrompt(ctx.etsy));

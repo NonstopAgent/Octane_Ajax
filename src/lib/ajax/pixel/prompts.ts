@@ -49,6 +49,7 @@ export function buildPixelMarketingUserPrompt(input: {
   format?: string | null;
   pageCount?: number | null;
   pageTitles?: string[];
+  productUrl?: string | null;
 }): string {
   const lines = [
     `Product: ${input.listingTitle}`,
@@ -66,12 +67,21 @@ export function buildPixelMarketingUserPrompt(input: {
     input.seoKeywords?.length
       ? `SEO keywords: ${input.seoKeywords.join(", ")}`
       : null,
+    input.productUrl ? `Trackable product link: ${input.productUrl}` : null,
   ].filter(Boolean);
+
+  const linkGuidance = input.productUrl
+    ? [
+        "",
+        "Link rules: include the trackable product link verbatim exactly once in longCaption (e.g. \"Shop it here 👉 <link>\") and once at the end of pinterestDescription. Do NOT put the raw URL in shortCaption or tiktokHookIdeas — use a \"link in bio\" style CTA there instead.",
+      ]
+    : [];
 
   return [
     "Generate marketing copy for this print-on-demand product listing.",
     "",
     ...lines,
+    ...linkGuidance,
     "",
     "Match the tone to the niche. Keep claims factual and compliant.",
   ].join("\n");

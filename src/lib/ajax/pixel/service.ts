@@ -115,14 +115,23 @@ function mapLlmToPromoPackage(
   const { displayTitle, niche, format, pageCount, pageTitles } =
     promoContextFromInput(input);
   const hashtags = normalizeHashtags(llm.hashtags);
+  const productUrl = input.productUrl?.trim() || null;
+
+  // Guarantee the trackable link lands in the long-form copy even if the
+  // model ignored the instruction.
+  let longCaption = llm.longCaption.trim();
+  if (productUrl && !longCaption.includes(productUrl)) {
+    longCaption = `${longCaption}\n\nShop it here 👉 ${productUrl}`;
+  }
 
   const metadata: PixelPromoMetadata = {
     shortCaption: llm.shortCaption.trim(),
-    longCaption: llm.longCaption.trim(),
+    longCaption,
     pinterestTitle: llm.pinterestTitle.trim(),
     pinterestDescription: llm.pinterestDescription.trim(),
     tiktokHookIdeas: llm.tiktokHookIdeas.map((h) => h.trim()),
     hashtags,
+    productUrl,
     source: {
       ...base.metadata.source,
       listingTitle: displayTitle,
@@ -166,6 +175,7 @@ async function fetchLlmMarketing(
           format: ctx.format,
           pageCount: ctx.pageCount,
           pageTitles: ctx.pageTitles,
+          productUrl: input.productUrl,
         }),
       },
     ],
