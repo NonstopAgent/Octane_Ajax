@@ -33,6 +33,8 @@ Etsy POD pricing guidance: mugs $14.99–$24.99, posters $19.99–$34.99, appare
 
 Use ONLY these IP-safe aesthetic styles (no copyrighted character or brand styles): ${AESTHETIC_LIST}.
 
+Artwork emotional tone: designs are GIFTS — they must read warm, celebratory, proud, or funny at a glance. Never melancholy, empty, or ambiguous (e.g. a retirement design should feel like a party, not a farewell). At most ONE short text element (5 words max) in the artwork; no secondary labels, signs, or fine print.
+
 ${BLOCKED_GUIDANCE}
 
 Every listing must be honest about AI assistance. Include this exact sentence in listingDescription and aiDisclosure:
@@ -46,7 +48,7 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
   "podDetails": {
     "catalogKey": "one of: ${PRINTIFY_CATALOG_KEYS.join(", ")} — pick the pre-approved product that best fits the concept",
-    "artworkPrompt": "string — detailed, print-ready artwork prompt (40+ chars): one clear focal subject, centered with generous safe margins (nothing important near the edges), a clean uncluttered background, bold high-contrast colors that print well, and NO tiny text or fine details that crop badly. No brands/characters/logos",
+    "artworkPrompt": "string — detailed, print-ready artwork prompt (40+ chars) describing ONLY the flat 2D design itself: one clear focal subject, centered with generous safe margins (nothing important near the edges), a clean uncluttered background, bold high-contrast colors that print well, and NO tiny text or fine details that crop badly. NEVER mention the physical product ('on the mug', 'on the shirt', 'poster of') or any mockup/scene — the printer applies the art to the product later. No brands/characters/logos",
     "aestheticStyle": "one of: ${AESTHETIC_LIST}"
   },
   "complianceNotes": ["string", ...] (policy reminders for human review, may be empty),

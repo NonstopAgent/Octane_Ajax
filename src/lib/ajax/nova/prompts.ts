@@ -29,6 +29,8 @@ ${BLOCKED_GUIDANCE}
 
 Only suggest physical print-on-demand products. Each idea must name a specific person (or gift recipient), a specific identity/passion/inside-joke the design celebrates, and a concrete product format with a clear design direction. Niche identity + emotional resonance + giftability beats broad appeal.
 
+Prioritize niches with a built-in PURCHASE OCCASION or urgency — a moment when someone must buy a gift (gotcha day, adoption day, retirement, graduation, new pet, pet memorial, milestone birthdays, appreciation weeks). Nostalgia or aesthetic interest alone, with no buying occasion, scores poorly with the operator.
+
 Etsy POD pricing guidance: mugs $14.99–$24.99, posters and art prints $19.99–$34.99, apparel $24.99–$39.99, tote bags and phone cases $18.99–$29.99; new shops should price toward the lower end of each band.
 
 You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify across formats and audiences.`;

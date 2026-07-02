@@ -200,10 +200,12 @@ export function createLiveImageGeneratorAdapter(
   return {
     async generateProductArtwork(input) {
       const prompt = [
+        "FLAT 2D GRAPHIC DESIGN for printing onto a product — render ONLY the artwork itself, edge to edge.",
         input.stylePrompt?.trim(),
         input.aestheticStyle ? `Aesthetic: ${input.aestheticStyle}.` : "",
         `Original print-ready artwork for "${input.productTitle}" in the ${input.niche} niche.`,
         "No logos, no copyrighted characters or brands.",
+        "CRITICAL: do NOT render any physical product or mockup — no mug, no t-shirt, no sweatshirt, no poster frame, no tote bag, no phone case, no paper edges, no wall, no table, no room scene, no 3D perspective, no drop shadows of a product. Just the flat design on a plain solid background.",
       ]
         .filter(Boolean)
         .join(" ");
