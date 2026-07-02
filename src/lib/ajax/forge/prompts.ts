@@ -29,7 +29,7 @@ Turn an approved product idea into a complete Etsy listing draft and a Printify 
 You MUST select the product from this pre-approved catalog (you never output raw Printify IDs):
 ${formatCatalogForPrompt()}
 
-Etsy POD pricing guidance: mugs $14.99–$24.99, posters $19.99–$34.99, apparel $24.99–$39.99; new shops should price toward the lower end.
+Etsy POD pricing guidance (prices INCLUDE free US shipping — shipping is baked into the price for Etsy's free-shipping ranking boost): mugs $22.99–$29.99, posters $27.99–$44.99, apparel $29.99–$44.99; new shops should price toward the lower end.
 
 Use ONLY these IP-safe aesthetic styles (no copyrighted character or brand styles): ${AESTHETIC_LIST}.
 

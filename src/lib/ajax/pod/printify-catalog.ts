@@ -57,8 +57,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 503, // White Ceramic Mug, 11oz
     printProviderId: 48, // Colorway
     variantIds: [67624], // 11oz
-    variantPrices: { 67624: 1799 },
-    defaultPriceCents: 1699,
+    // Prices bake in US shipping (shop ships free to the US — Etsy ranking boost).
+    variantPrices: { 67624: 2499 },
+    defaultPriceCents: 2499,
     artworkAspectRatio: "1:1",
     promptHint:
       "Best for funny/identity quotes and small illustrated designs; top gift staple.",
@@ -69,8 +70,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 282, // Matte Vertical Posters
     printProviderId: 2, // Sensaria
     variantIds: [43135, 43138, 43144], // 11x14, 12x18, 18x24 Matte
-    variantPrices: { 43135: 1899, 43138: 2499, 43144: 3499 }, // size-tiered
-    defaultPriceCents: 2499,
+    // Size-tiered; prices bake in US shipping (free-shipping listings rank higher).
+    variantPrices: { 43135: 2799, 43138: 3299, 43144: 3999 },
+    defaultPriceCents: 3299,
     artworkAspectRatio: "4:5", // vertical poster → portrait artwork
     promptHint:
       "Best for art-forward designs: botanical, vintage, typographic wall decor.",
@@ -81,8 +83,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 12, // Unisex Jersey Short Sleeve Tee (Bella+Canvas 3001)
     printProviderId: 29, // Monster Digital
     variantIds: [18052, 18053, 18054, 18055, 18056], // Aqua S–2XL
-    variantPrices: { 18052: 2699, 18053: 2699, 18054: 2699, 18055: 2699, 18056: 2899 }, // 2XL upcharge
-    defaultPriceCents: 2699,
+    // 2XL upcharge; prices bake in US shipping (free-shipping listings rank higher).
+    variantPrices: { 18052: 2999, 18053: 2999, 18054: 2999, 18055: 2999, 18056: 3199 },
+    defaultPriceCents: 2999,
     artworkAspectRatio: "1:1", // centered chest print
     promptHint:
       "Best for wearable identity statements; niche pride and pet/hobby slogans.",
@@ -93,8 +96,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 49, // Unisex Heavy Blend Crewneck Sweatshirt (Gildan)
     printProviderId: 29, // Monster Digital
     variantIds: [25377, 25381, 25385], // S Ash, S Dark Heather, S Light Blue
-    variantPrices: { 25377: 3499, 25381: 3499, 25385: 3499 },
-    defaultPriceCents: 2999,
+    // Prices bake in US shipping (free-shipping listings rank higher).
+    variantPrices: { 25377: 3999, 25381: 3999, 25385: 3999 },
+    defaultPriceCents: 3699,
     artworkAspectRatio: "1:1", // centered chest print
     promptHint:
       "Best for cozy occupation/seasonal gifts (nurses week, holidays, grads).",

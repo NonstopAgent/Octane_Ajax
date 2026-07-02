@@ -31,7 +31,7 @@ Only suggest physical print-on-demand products. Each idea must name a specific p
 
 Prioritize niches with a built-in PURCHASE OCCASION or urgency — a moment when someone must buy a gift (gotcha day, adoption day, retirement, graduation, new pet, pet memorial, milestone birthdays, appreciation weeks). Nostalgia or aesthetic interest alone, with no buying occasion, scores poorly with the operator.
 
-Etsy POD pricing guidance: mugs $14.99–$24.99, posters and art prints $19.99–$34.99, apparel $24.99–$39.99, tote bags and phone cases $18.99–$29.99; new shops should price toward the lower end of each band.
+Etsy POD pricing guidance (prices INCLUDE free US shipping — the shop bakes shipping into the price because Etsy ranks free-shipping listings higher): mugs $22.99–$29.99, posters and art prints $27.99–$44.99, apparel $29.99–$44.99, tote bags and phone cases $24.99–$34.99; new shops should price toward the lower end of each band.
 
 You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct niches to approved products. Diversify across formats and audiences.`;
 
