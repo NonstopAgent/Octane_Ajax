@@ -11,7 +11,7 @@ import type {
   ProductFormat,
 } from "@/lib/ajax/product-brain/types";
 
-export const NOVA_PROMPT_VERSION = "nova-ideation-pod-v2";
+export const NOVA_PROMPT_VERSION = "nova-ideation-pet-v3";
 
 export type NovaIdeationMode = "llm" | "fallback";
 
