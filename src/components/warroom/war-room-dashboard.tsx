@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CommandHeader } from "@/components/layout/command-header";
 import { ButtonLink } from "@/components/ui/button";
@@ -22,6 +22,7 @@ type Recommendation = {
   recommendedAction: string;
   priority: number;
   confidence: number | null;
+  evidence?: unknown;
   status: RecStatus;
   draftedIdeaId: string | null;
   createdAt: string;
@@ -33,21 +34,18 @@ type WarRoomDashboardProps = {
   configReady: boolean;
 };
 
-const CATEGORY_LABELS: Record<RecCategory, string> = {
-  niche: "Niche & product strategy",
-  channel: "Channel expansion",
-  pricing: "Pricing & margins",
-  cut: "Cut underperformers",
-  other: "Other",
+const CATEGORY_META: Record<
+  RecCategory,
+  { label: string; accent: string; tag: string }
+> = {
+  niche: { label: "Niche & product strategy", accent: "var(--accent-blue)", tag: "Niche" },
+  channel: { label: "Channel expansion", accent: "var(--accent-blue)", tag: "Channel" },
+  pricing: { label: "Pricing & margins", accent: "#34d399", tag: "Pricing" },
+  cut: { label: "Cut underperformers", accent: "var(--accent-orange)", tag: "Cut" },
+  other: { label: "Other moves", accent: "var(--text-muted)", tag: "Other" },
 };
 
-const CATEGORY_ORDER: RecCategory[] = [
-  "niche",
-  "channel",
-  "pricing",
-  "cut",
-  "other",
-];
+const CATEGORY_ORDER: RecCategory[] = ["niche", "channel", "pricing", "cut", "other"];
 
 function statusTone(
   status: RecStatus,
@@ -55,6 +53,42 @@ function statusTone(
   if (status === "accepted" || status === "actioned") return "blue";
   if (status === "dismissed") return "neutral";
   return "warning";
+}
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const s = Math.floor((Date.now() - then) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function evidenceList(evidence: unknown): string[] {
+  if (!evidence) return [];
+  if (Array.isArray(evidence)) {
+    return evidence.map((e) => String(e).trim()).filter(Boolean).slice(0, 4);
+  }
+  if (typeof evidence === "string") {
+    return evidence.trim() ? [evidence.trim()] : [];
+  }
+  if (typeof evidence === "object") {
+    return Object.entries(evidence as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${String(v)}`)
+      .slice(0, 4);
+  }
+  return [String(evidence)];
+}
+
+function priorityColor(priority: number): string {
+  if (priority <= 1) return "var(--accent-orange)";
+  if (priority <= 3) return "var(--accent-blue)";
+  return "var(--text-muted)";
 }
 
 export function WarRoomDashboard({
@@ -123,6 +157,35 @@ export function WarRoomDashboard({
     }
   };
 
+  const stats = useMemo(() => {
+    const active = initialRecommendations.filter((r) => r.status !== "dismissed");
+    const lastRunIso = initialRecommendations.reduce<string | null>(
+      (latest, r) =>
+        !latest || new Date(r.createdAt) > new Date(latest) ? r.createdAt : latest,
+      null,
+    );
+    return {
+      active: active.length,
+      proposed: active.filter((r) => r.status === "proposed").length,
+      committed: active.filter(
+        (r) => r.status === "accepted" || r.status === "actioned",
+      ).length,
+      draftedIdeas: active.filter((r) => r.draftedIdeaId).length,
+      lastRun: lastRunIso ? timeAgo(lastRunIso) : "never",
+    };
+  }, [initialRecommendations]);
+
+  const runButton = (
+    <button
+      type="button"
+      onClick={runWarRoom}
+      disabled={running}
+      className="factory-control factory-control-primary px-4 py-2"
+    >
+      {running ? "Analyzing archive…" : "Run War Room"}
+    </button>
+  );
+
   if (!configReady) {
     return (
       <Callout
@@ -157,93 +220,75 @@ export function WarRoomDashboard({
         badge="Strategy"
         badgeTone="warning"
         title="War Room"
-        description="An AI strategist reads the full Archive — every idea, verdict, listing, and order — and proposes moves to grow the business. It recommends; you decide and execute."
-        aside={
-          <button
-            type="button"
-            onClick={runWarRoom}
-            disabled={running}
-            className="inline-flex items-center justify-center rounded-md border border-[var(--accent-orange)]/50 bg-[var(--accent-orange)]/15 px-4 py-2 text-sm font-semibold text-[var(--accent-orange)] hover:bg-[var(--accent-orange)]/25 disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run War Room"}
-          </button>
-        }
+        description="An AI strategist reads the full Archive — every idea, verdict, listing, order, and live Etsy metric — and proposes revenue-ranked moves. It recommends; you decide and execute."
+        aside={runButton}
         sysline="SYS.AJAX.WARROOM :: STRATEGY"
       />
 
       <ToastBanner toast={toast} />
 
-      {grouped.length === 0 ? (
-        <div className="factory-panel panel-glow-blue text-center">
-          <p className="text-lg font-semibold">No recommendations yet</p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Run the War Room to analyze your archive and generate strategy.
+      {running && (
+        <div className="factory-panel panel-glow-orange flex items-center gap-3">
+          <span className="vis-spinner" style={{ color: "var(--accent-orange)" }} />
+          <p className="text-sm text-[var(--text-muted)]">
+            Reading the archive and ranking moves by revenue impact… this can take
+            up to a minute.
           </p>
+        </div>
+      )}
+
+      {grouped.length > 0 && (
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Active moves" value={stats.active} />
+          <StatTile
+            label="Awaiting your call"
+            value={stats.proposed}
+            accent="var(--accent-orange)"
+          />
+          <StatTile label="Committed" value={stats.committed} />
+          <StatTile
+            label="Ideas queued for Nova"
+            value={stats.draftedIdeas}
+            hint={`Last run ${stats.lastRun}`}
+          />
+        </section>
+      )}
+
+      {grouped.length === 0 ? (
+        <div className="factory-panel panel-glow-blue text-center py-10">
+          <p className="text-lg font-semibold">No strategy on the board yet</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-muted)]">
+            Run the War Room and the strategist will read every idea, verdict,
+            listing, order, and live Etsy metric, then hand you 4–8 ranked moves:
+            niches to double down on, listings to fix, prices to adjust, and dead
+            weight to cut.
+          </p>
+          <div className="mt-6 flex justify-center">{runButton}</div>
         </div>
       ) : (
         grouped.map((group) => (
           <section key={group.cat} className="space-y-3">
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-              {CATEGORY_LABELS[group.cat]}
-            </h2>
+            <div className="flex items-center gap-3">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ background: CATEGORY_META[group.cat].accent }}
+              />
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                {CATEGORY_META[group.cat].label}
+              </h2>
+              <span className="font-mono text-[11px] text-[var(--text-muted)]/60">
+                {group.items.length}
+              </span>
+              <span className="h-px flex-1 bg-[var(--border-dim)]" />
+            </div>
             <ul className="space-y-3">
               {group.items.map((rec) => (
-                <li key={rec.id} className="factory-panel">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded bg-black/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
-                        P{rec.priority}
-                      </span>
-                      <h3 className="text-base font-semibold">{rec.title}</h3>
-                    </div>
-                    <StatusBadge
-                      label={rec.status}
-                      tone={statusTone(rec.status)}
-                    />
-                  </div>
-
-                  <p className="mt-2 text-sm text-[var(--foreground)]">
-                    {rec.rationale}
-                  </p>
-
-                  {rec.recommendedAction ? (
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      <span className="font-semibold text-[var(--foreground)]">
-                        Action:{" "}
-                      </span>
-                      {rec.recommendedAction}
-                    </p>
-                  ) : null}
-
-                  {rec.draftedIdeaId ? (
-                    <p className="mt-2 text-xs text-[var(--accent-blue)]">
-                      ✓ Draft idea queued for Nova
-                    </p>
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {rec.status !== "accepted" ? (
-                      <ActionButton
-                        label="Accept"
-                        onClick={() => setStatus(rec.id, "accepted")}
-                        busy={actingId === rec.id}
-                      />
-                    ) : null}
-                    {rec.status !== "actioned" ? (
-                      <ActionButton
-                        label="Mark actioned"
-                        onClick={() => setStatus(rec.id, "actioned")}
-                        busy={actingId === rec.id}
-                      />
-                    ) : null}
-                    <ActionButton
-                      label="Dismiss"
-                      onClick={() => setStatus(rec.id, "dismissed")}
-                      busy={actingId === rec.id}
-                      subtle
-                    />
-                  </div>
-                </li>
+                <RecCard
+                  key={rec.id}
+                  rec={rec}
+                  busy={actingId === rec.id}
+                  onStatus={setStatus}
+                />
               ))}
             </ul>
           </section>
@@ -254,6 +299,153 @@ export function WarRoomDashboard({
         Back to factory
       </ButtonLink>
     </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  accent = "var(--accent-blue)",
+  hint,
+}: {
+  label: string;
+  value: number;
+  accent?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="factory-metric command-metric" style={{ borderLeftColor: accent }}>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+        {label}
+      </p>
+      <p
+        className="mt-1 font-mono text-3xl font-bold tabular-nums"
+        style={{ color: accent }}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p className="mt-0.5 text-[10px] text-[var(--text-muted)]/70">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function RecCard({
+  rec,
+  busy,
+  onStatus,
+}: {
+  rec: Recommendation;
+  busy: boolean;
+  onStatus: (id: string, status: RecStatus) => void;
+}) {
+  const evidence = evidenceList(rec.evidence);
+  const pct =
+    rec.confidence != null
+      ? Math.max(0, Math.min(100, Math.round(rec.confidence * 100)))
+      : null;
+  const pColor = priorityColor(rec.priority);
+
+  return (
+    <li className="factory-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide"
+            style={{
+              color: pColor,
+              background: "rgba(0,0,0,0.35)",
+              border: `1px solid ${pColor}`,
+            }}
+            title={`Priority ${rec.priority} of 5`}
+          >
+            P{rec.priority}
+          </span>
+          <span
+            className="rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide"
+            style={{ color: CATEGORY_META[rec.category].accent, background: "rgba(0,0,0,0.25)" }}
+          >
+            {CATEGORY_META[rec.category].tag}
+          </span>
+          <h3 className="min-w-0 text-base font-semibold">{rec.title}</h3>
+        </div>
+        <StatusBadge label={rec.status} tone={statusTone(rec.status)} />
+      </div>
+
+      {pct != null && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+            Confidence
+          </span>
+          <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/8">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, background: pColor }}
+            />
+          </div>
+          <span className="font-mono text-[10px] tabular-nums text-[var(--text-muted)]">
+            {pct}%
+          </span>
+        </div>
+      )}
+
+      <p className="mt-2 text-sm text-[var(--foreground)]">{rec.rationale}</p>
+
+      {rec.recommendedAction ? (
+        <div className="mt-3 rounded-md border-l-2 border-[var(--accent-blue)]/60 bg-black/25 px-3 py-2">
+          <p className="text-sm text-[var(--foreground)]">
+            <span className="font-semibold text-[var(--accent-blue)]">
+              Next move:{" "}
+            </span>
+            {rec.recommendedAction}
+          </p>
+        </div>
+      ) : null}
+
+      {evidence.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {evidence.map((e, i) => (
+            <li
+              key={i}
+              className="flex gap-2 text-xs text-[var(--text-muted)]"
+            >
+              <span className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-[var(--accent-blue)]" />
+              <span>{e}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {rec.draftedIdeaId ? (
+        <p className="mt-3 inline-flex items-center gap-1 rounded-full border border-[var(--accent-blue)]/40 bg-[var(--accent-blue)]/10 px-2.5 py-0.5 text-xs text-[var(--accent-blue)]">
+          ✓ Draft idea queued for Nova
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {rec.status !== "accepted" ? (
+          <ActionButton
+            label="Accept"
+            onClick={() => onStatus(rec.id, "accepted")}
+            busy={busy}
+          />
+        ) : null}
+        {rec.status !== "actioned" ? (
+          <ActionButton
+            label="Mark actioned"
+            onClick={() => onStatus(rec.id, "actioned")}
+            busy={busy}
+          />
+        ) : null}
+        <ActionButton
+          label="Dismiss"
+          onClick={() => onStatus(rec.id, "dismissed")}
+          busy={busy}
+          subtle
+        />
+      </div>
+    </li>
   );
 }
 

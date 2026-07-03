@@ -284,6 +284,14 @@ body {
 .command-metric {
   box-shadow: inset 0 1px 0 rgba(0, 212, 255, 0.06);
   background: linear-gradient(160deg, var(--surface) 0%, rgba(0, 0, 0, 0.35) 100%);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.command-metric:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(0, 212, 255, 0.1),
+    0 0 26px -14px var(--accent-blue-glow);
 }
 
 .agent-sprite-working .rounded-md,

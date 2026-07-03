@@ -32,7 +32,7 @@ export function FactoryShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition ${
                     active
-                      ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]"
+                      ? "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] ring-1 ring-inset ring-[var(--accent-blue)]/30"
                       : "text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--foreground)]"
                   }`}
                 >

@@ -16,12 +16,17 @@ import {
   fetchPerformanceSummary,
   type PerformanceSummary,
 } from "@/lib/ajax/analytics/etsy-snapshots";
-import { createOpenAiClient, isOpenAiConfigured } from "@/lib/llm/openai";
+import { z } from "zod";
+import { completeJson } from "@/lib/llm/json";
+import { isOpenAiConfigured } from "@/lib/llm/openai";
+import { isProviderConfigured } from "@/lib/llm/providers";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
 
-const WARROOM_MODEL = process.env.WARROOM_MODEL?.trim() || "gpt-4o-mini";
+// War Room routes through the shared task router (see lib/llm/providers): the
+// "strategy" task prefers Claude and falls back to OpenAI automatically. This
+// keeps the strategist on a strong reasoning model instead of a cheap default.
 const WARROOM_TIMEOUT_MS = 60_000;
 
 export const STRATEGY_CATEGORIES = [
@@ -177,31 +182,63 @@ async function aggregateArchive(
   };
 }
 
-const SYSTEM_PROMPT = `You are the War Room — the strategist for Octane Ajax, a solo-operator print-on-demand (POD) business selling niche physical gifts (mugs, shirts, posters, etc.), fulfilled by Printify, sold on Etsy.
+const SYSTEM_PROMPT = `You are the War Room — head of growth and strategy for GotchaDayGoods (internal codename "Octane Ajax"), a solo-operator print-on-demand gift business. Original AI-assisted artwork on mugs, posters, art prints, apparel, tote bags, and phone cases; fulfilled by Printify; sold on Etsy. One operator with limited hours — every recommendation must earn its slot.
 
-You are given an ARCHIVE summary of everything the business has done: product ideas and their Product Brain verdicts, listings and their statuses, the operator's approval/rejection feedback, and orders.
+You are handed an ARCHIVE: product ideas and their Product Brain verdicts, listings and statuses, the operator's approve/reject feedback, orders, and — most importantly — live Etsy performance (7-day revenue, orders, view-velocity leaders, and listings with traffic but zero sales).
 
-Produce concrete, evidence-based recommendations to grow the business across these categories:
-- "niche": specific niches/product directions to double down on or try next (grounded in what gets approved and what sells).
-- "channel": when to expand channels (e.g., open a second Etsy store for a proven niche, add a new marketplace).
-- "pricing": pricing/margin moves based on price points and demand.
-- "cut": product lines or patterns to retire (repeatedly rejected or never sell).
+## HOW TO THINK
+1. Follow the money first. Real revenue, orders, and Etsy views are ground truth; approvals and trend scores are only leading indicators. Weight anything with real sales or real views far above anything still theoretical.
+2. Exploit what converts. Niches/formats that are both approved AND getting views or sales are your base — name them specifically and say how to widen them.
+3. Fix the leaks. A "traffic but no sales" listing is proven demand with a broken offer. Recommend a concrete title / price / photo fix for that specific listing, never a vague "optimize".
+4. Cut dead weight. Niches repeatedly rejected, or published with no traffic, should be retired so the operator stops burning cycles on them.
+5. Respect the pricing model. Prices INCLUDE free US shipping (baked in for Etsy's free-shipping ranking boost): mugs $22.99–29.99, posters/prints $27.99–44.99, apparel $29.99–44.99, totes/cases $24.99–34.99; new-shop items price toward the low end. Never recommend prices outside these bands.
+6. Occasion beats aesthetic. The brand wins on gift occasions with urgency — gotcha day, adoption day, pet memorial, retirement, appreciation weeks, milestone birthdays. Favor niches with a built-in "someone has to buy a gift" moment.
 
-Rules:
+## CATEGORIES
+- "niche": specific niches/product directions to double down on or try next, grounded in what is approved AND actually getting views/sales.
+- "channel": when to widen distribution (a second Etsy shop for a proven niche, a new marketplace) — only after a niche has proven demand.
+- "pricing": concrete pricing/margin moves tied to real price points and conversion.
+- "cut": product lines or patterns to retire (repeatedly rejected, or published with no traffic).
+
+## RULES
 - Recommend only. The operator decides and executes. Never assume anything was already done.
-- Be specific and actionable; cite the archive numbers that justify each recommendation in "evidence".
-- Return 4-8 of the highest-leverage recommendations.
-- Respond with STRICT JSON: {"recommendations":[{"category","title","rationale","recommended_action","priority"(1=highest..5=lowest),"confidence"(0..1),"evidence"}]}. No prose outside JSON.`;
+- Be specific enough to act on today: name the niche or listing, the exact move, and the number that justifies it.
+- Quantify. Each recommendation carries 1–3 short factual "evidence" strings, each citing an archive or performance number. If the archive is thin, say so and recommend the cheapest experiment to generate signal — never invent data.
+- Prioritize by expected revenue impact vs. effort: priority 1 = the highest-leverage move to make next; 5 = nice-to-have.
+- Calibrate confidence to how much real evidence backs it — sales/views = high; pure theory = low.
+- Return 4–8 recommendations, ordered best-first, no two saying the same thing.`;
 
-type RawRec = {
-  category?: string;
-  title?: string;
-  rationale?: string;
-  recommended_action?: string;
-  priority?: number;
-  confidence?: number;
-  evidence?: Json;
-};
+const WARROOM_JSON_INSTRUCTIONS = `Return a single JSON object of exactly this shape:
+{
+  "recommendations": [
+    {
+      "category": "niche | channel | pricing | cut",
+      "title": "string — the move in under 8 words, e.g. 'Double down on pet-memorial mugs'",
+      "rationale": "string — why now, grounded in the archive/performance numbers",
+      "recommended_action": "string — the concrete next step, naming any target listing, price, or count",
+      "priority": 1,
+      "confidence": 0.0,
+      "evidence": ["short factual string citing a number", "..."]
+    }
+  ]
+}
+priority is an integer 1 (highest) to 5 (lowest). confidence is 0..1. evidence is an array of 1–3 short strings. No prose outside the JSON object.`;
+
+const StrategyRecSchema = z.object({
+  category: z.string().optional(),
+  title: z.string(),
+  rationale: z.string().optional(),
+  recommended_action: z.string().optional(),
+  priority: z.union([z.number(), z.string()]).optional(),
+  confidence: z.union([z.number(), z.string()]).optional(),
+  evidence: z.unknown().optional(),
+});
+
+const WarRoomResponseSchema = z.object({
+  recommendations: z.array(StrategyRecSchema),
+});
+
+type RawRec = z.infer<typeof StrategyRecSchema>;
 
 function normalizeCategory(value: unknown): StrategyCategory {
   const v = String(value ?? "").toLowerCase().trim();
@@ -229,25 +266,26 @@ export async function runWarRoom(
 ): Promise<WarRoomRunResult> {
   const runId = crypto.randomUUID();
 
-  if (!isOpenAiConfigured()) {
+  if (!isProviderConfigured("anthropic") && !isOpenAiConfigured()) {
     return {
       ok: false,
       runId,
       mode: "skipped",
       recommendations: [],
       draftedIdeaCount: 0,
-      message: "OPENAI_API_KEY not configured — War Room needs the LLM to analyze the archive.",
+      message:
+        "No LLM provider configured — add ANTHROPIC_API_KEY or OPENAI_API_KEY so the War Room can analyze the archive.",
     };
   }
 
   const archive = await aggregateArchive(supabase, userId);
 
   let rawRecs: RawRec[] = [];
+  let strategistModel = "";
   try {
-    const client = createOpenAiClient({ timeout: WARROOM_TIMEOUT_MS });
-    const completion = await client.chat.completions.create({
-      model: WARROOM_MODEL,
-      response_format: { type: "json_object" },
+    const result = await completeJson({
+      task: "strategy",
+      schema: WarRoomResponseSchema,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -255,12 +293,13 @@ export async function runWarRoom(
           content: `ARCHIVE summary (JSON):\n${JSON.stringify(archive)}`,
         },
       ],
+      jsonInstructions: WARROOM_JSON_INSTRUCTIONS,
+      options: { temperature: 0.4, maxTokens: 2600 },
+      timeout: WARROOM_TIMEOUT_MS,
+      maxRetries: 1,
     });
-    const content = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(content) as { recommendations?: RawRec[] };
-    rawRecs = Array.isArray(parsed.recommendations)
-      ? parsed.recommendations.slice(0, 8)
-      : [];
+    strategistModel = result.model;
+    rawRecs = result.data.recommendations.slice(0, 8);
   } catch (err) {
     const message = err instanceof Error ? err.message : "War Room LLM call failed.";
     await insertFactoryEvent(supabase, userId, {
@@ -352,8 +391,13 @@ export async function runWarRoom(
     event_type: "war_room_run",
     message: `War Room produced ${recommendations.length} recommendation(s)${
       draftedIdeaCount ? `, drafted ${draftedIdeaCount} idea(s)` : ""
-    }.`,
-    metadata: { runId, count: recommendations.length, draftedIdeaCount },
+    }${strategistModel ? ` via ${strategistModel}` : ""}.`,
+    metadata: {
+      runId,
+      count: recommendations.length,
+      draftedIdeaCount,
+      model: strategistModel,
+    },
   });
 
   return {
