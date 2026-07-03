@@ -48,7 +48,7 @@ export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact s
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
   "podDetails": {
     "catalogKey": "one of: ${PRINTIFY_CATALOG_KEYS.join(", ")} — pick the pre-approved product that best fits the concept",
-    "artworkPrompt": "string — detailed, print-ready artwork prompt (40+ chars) describing ONLY the flat 2D design itself: one clear focal subject, centered with generous safe margins (nothing important near the edges), a clean uncluttered background, bold high-contrast colors that print well, and NO tiny text or fine details that crop badly. NEVER mention the physical product ('on the mug', 'on the shirt', 'poster of') or any mockup/scene — the printer applies the art to the product later. No brands/characters/logos",
+    "artworkPrompt": "string — detailed, print-ready artwork prompt (40+ chars) describing ONLY the flat 2D design itself: one clear focal subject, centered with generous safe margins (nothing important near the edges), bold high-contrast colors that print well, and NO tiny text or fine details that crop badly. For apparel and mugs describe an ISOLATED design (subject + text lockup with its own silhouette, NO background fill, box, or scene — it prints directly on the fabric); only poster/art-print designs may have a full background. NEVER mention the physical product ('on the mug', 'on the shirt', 'poster of') or any mockup/scene — the printer applies the art to the product later. No brands/characters/logos",
     "aestheticStyle": "one of: ${AESTHETIC_LIST}"
   },
   "complianceNotes": ["string", ...] (policy reminders for human review, may be empty),

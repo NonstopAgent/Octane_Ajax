@@ -116,13 +116,20 @@ export async function runPodFulfillment(
       ? getPrintifyCatalogEntry(catalogKey)
       : null;
   const artworkAspectRatio = catalogEntry?.artworkAspectRatio ?? "1:1";
+  // Apparel/mugs need an isolated transparent design (composited onto the
+  // product); posters are full-bleed. Composition rules ride along per product.
+  const artworkBackground = catalogEntry?.artworkBackground ?? "opaque";
+  const stylePrompt = catalogEntry?.artworkCompositionHint
+    ? `${podDetails.artworkPrompt} ${catalogEntry.artworkCompositionHint}`
+    : podDetails.artworkPrompt;
 
   const artworkResult = await imageGeneratorAdapter.generateProductArtwork({
     productTitle: listingTitle,
     niche,
-    stylePrompt: podDetails.artworkPrompt,
+    stylePrompt,
     aestheticStyle: podDetails.aestheticStyle,
     aspectRatio: artworkAspectRatio,
+    background: artworkBackground,
   });
 
   if (!artworkResult.data.imageUrl) {

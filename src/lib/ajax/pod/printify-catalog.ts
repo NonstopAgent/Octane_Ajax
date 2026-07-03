@@ -41,6 +41,13 @@ export type PrintifyCatalogEntry = {
   defaultPriceCents: number;
   /** Artwork aspect ratio that fills this product's print area (avoids cropping). */
   artworkAspectRatio: "1:1" | "4:5" | "16:9";
+  /**
+   * "transparent" = isolated design composited onto the product (apparel, mugs);
+   * "opaque" = full-bleed artwork that IS the product surface (posters).
+   */
+  artworkBackground: "transparent" | "opaque";
+  /** Composition rules injected into the image prompt for this product type. */
+  artworkCompositionHint: string;
   /** Hint for Forge about when to pick this product. */
   promptHint: string;
 };
@@ -61,6 +68,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     variantPrices: { 67624: 2499 },
     defaultPriceCents: 2499,
     artworkAspectRatio: "1:1",
+    artworkBackground: "transparent",
+    artworkCompositionHint:
+      "Self-contained centered motif (illustration + short text lockup) with generous empty padding on every side — the design wraps a mug, so NOTHING important near the edges. Isolated on a transparent background: no background color, box, or scene.",
     promptHint:
       "Best for funny/identity quotes and small illustrated designs; top gift staple.",
   },
@@ -74,6 +84,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     variantPrices: { 43135: 2799, 43138: 3299, 43144: 3999 },
     defaultPriceCents: 3299,
     artworkAspectRatio: "4:5", // vertical poster → portrait artwork
+    artworkBackground: "opaque",
+    artworkCompositionHint:
+      "Full-bleed poster composition — the artwork IS the entire printed surface, edge to edge, with a deliberate background color/texture as part of the design.",
     promptHint:
       "Best for art-forward designs: botanical, vintage, typographic wall decor.",
   },
@@ -87,6 +100,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     variantPrices: { 18052: 2999, 18053: 2999, 18054: 2999, 18055: 2999, 18056: 3199 },
     defaultPriceCents: 2999,
     artworkAspectRatio: "1:1", // centered chest print
+    artworkBackground: "transparent",
+    artworkCompositionHint:
+      "Screen-print style chest graphic that sits DIRECTLY on the fabric: bold isolated subject + text lockup with an organic silhouette. Isolated on a transparent background — absolutely NO background rectangle, square, color fill, or scene behind the design (that prints as an ugly box on the shirt).",
     promptHint:
       "Best for wearable identity statements; niche pride and pet/hobby slogans.",
   },
@@ -100,6 +116,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     variantPrices: { 25377: 3999, 25381: 3999, 25385: 3999 },
     defaultPriceCents: 3699,
     artworkAspectRatio: "1:1", // centered chest print
+    artworkBackground: "transparent",
+    artworkCompositionHint:
+      "Screen-print style chest graphic that sits DIRECTLY on the fabric: bold isolated subject + text lockup with an organic silhouette. Isolated on a transparent background — absolutely NO background rectangle, square, color fill, or scene behind the design (that prints as an ugly box on the garment).",
     promptHint:
       "Best for cozy occupation/seasonal gifts (nurses week, holidays, grads).",
   },

@@ -31,6 +31,11 @@ export type ProductArtworkInput = {
   stylePrompt?: string;
   aestheticStyle?: string;
   aspectRatio?: "1:1" | "4:5" | "16:9";
+  /**
+   * "transparent" → isolated design for compositing onto apparel/mugs (no
+   * background fill); "opaque" (default) → full-bleed art (posters).
+   */
+  background?: "transparent" | "opaque";
 };
 
 export type MockupInput = {
@@ -199,13 +204,18 @@ export function createLiveImageGeneratorAdapter(
 
   return {
     async generateProductArtwork(input) {
+      const transparent = input.background === "transparent";
       const prompt = [
-        "FLAT 2D GRAPHIC DESIGN for printing onto a product — render ONLY the artwork itself, edge to edge.",
+        transparent
+          ? "FLAT 2D GRAPHIC DESIGN to be printed directly onto a product — render ONLY the isolated design elements."
+          : "FLAT 2D GRAPHIC DESIGN for printing onto a product — render ONLY the artwork itself, edge to edge.",
         input.stylePrompt?.trim(),
         input.aestheticStyle ? `Aesthetic: ${input.aestheticStyle}.` : "",
         `Original print-ready artwork for "${input.productTitle}" in the ${input.niche} niche.`,
         "No logos, no copyrighted characters or brands.",
-        "CRITICAL: do NOT render any physical product or mockup — no mug, no t-shirt, no sweatshirt, no poster frame, no tote bag, no phone case, no paper edges, no wall, no table, no room scene, no 3D perspective, no drop shadows of a product. Just the flat design on a plain solid background.",
+        transparent
+          ? "CRITICAL: the design must be ISOLATED on a fully transparent background — no background color, no rectangle or box behind it, no scene, no product mockup (no mug, shirt, frame, wall, or table). Only the design's own shapes and text, with an organic silhouette, as if made for screen printing."
+          : "CRITICAL: do NOT render any physical product or mockup — no mug, no t-shirt, no sweatshirt, no poster frame, no tote bag, no phone case, no paper edges, no wall, no table, no room scene, no 3D perspective, no drop shadows of a product. Just the flat design filling the frame.",
       ]
         .filter(Boolean)
         .join(" ");
@@ -216,6 +226,7 @@ export function createLiveImageGeneratorAdapter(
         prompt,
         size: size as "1024x1024" | "1024x1536" | "1536x1024",
         n: 1,
+        ...(transparent ? { background: "transparent" as const } : {}),
       });
 
       const image = response.data?.[0];
