@@ -19,7 +19,7 @@ afterEach(() => {
 describe("getShareSaveBaseUrl", () => {
   it("defaults to the operator share domain", () => {
     delete process.env.ETSY_SHARE_SAVE_URL;
-    assert.equal(getShareSaveBaseUrl(), "https://octaneajax.etsy.com");
+    assert.equal(getShareSaveBaseUrl(), "https://gotchadaygoods.etsy.com");
   });
 
   it("normalizes env overrides (scheme + trailing slash)", () => {
@@ -54,7 +54,7 @@ describe("buildShareSaveUrl", () => {
     delete process.env.ETSY_SHARE_SAVE_URL;
     assert.equal(
       buildShareSaveUrl({ etsyListingId: "4529408131" }),
-      "https://octaneajax.etsy.com/listing/4529408131",
+      "https://gotchadaygoods.etsy.com/listing/4529408131",
     );
   });
 
@@ -64,16 +64,16 @@ describe("buildShareSaveUrl", () => {
       buildShareSaveUrl({
         listingUrl: "https://www.etsy.com/listing/123456789/some-slug?ref=x",
       }),
-      "https://octaneajax.etsy.com/listing/123456789",
+      "https://gotchadaygoods.etsy.com/listing/123456789",
     );
   });
 
   it("falls back to the shop link when no id is derivable", () => {
     delete process.env.ETSY_SHARE_SAVE_URL;
-    assert.equal(buildShareSaveUrl(), "https://octaneajax.etsy.com");
+    assert.equal(buildShareSaveUrl(), "https://gotchadaygoods.etsy.com");
     assert.equal(
       buildShareSaveUrl({ etsyListingId: null, listingUrl: null }),
-      "https://octaneajax.etsy.com",
+      "https://gotchadaygoods.etsy.com",
     );
   });
 });

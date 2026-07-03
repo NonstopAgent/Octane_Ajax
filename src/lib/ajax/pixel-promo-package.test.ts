@@ -36,7 +36,7 @@ describe("buildPixelPromoPackage", () => {
     assert.match(promo.caption, /Night-Shift Nurse Meal Prep Planner/);
     assert.match(promo.metadata.longCaption, /What's inside:/);
     assert.ok(promo.metadata.tiktokHookIdeas.length >= 3);
-    assert.ok(promo.metadata.hashtags.some((t) => t === "#OctaneAjax"));
+    assert.ok(promo.metadata.hashtags.some((t) => t === "#GotchaDayGoods"));
     assert.match(promo.assetUrl, /demo:\/\/octane-ajax\/promo\/job-1/);
     assert.ok(Date.parse(promo.scheduledFor) > Date.now());
     assert.equal(promo.metadata.source.pageCount, 8);

@@ -10,13 +10,30 @@ Last updated: 2026-07-02
 ---
 
 ## 0. Prime directive
-Run OctaneAjax as an automated print-on-demand gift shop on **Etsy**, fulfilled by **Printify**.
+Run **GotchaDayGoods** (formerly OctaneAjax) as an automated print-on-demand gift shop on
+**Etsy**, fulfilled by **Printify**.
 Grow revenue by maximizing every Etsy ranking factor we control and keeping a steady stream of
 quality listings live. A human approves new products (Review Gate) until full autonomy is turned on.
 
 Nobody can force Etsy or AI shopping surfaces (ChatGPT / Gemini / Copilot) to "always" pick us —
 those surfaces pull from **Etsy's own ranking + listing data**. So the entire game is: **max every
 published ranking factor.** There is no magic "be #1" switch.
+
+---
+
+## 0.5 Brand — GotchaDayGoods (locked 2026-07-03)
+- **Niche:** pet-gift shop — rescue/adoption gifts first (gotcha day, adoption anniversaries),
+  plus pet memorial, senior-dog tributes, dog mom/dad identity gifts. Demand-backed:
+  pet memorial 47.3k/mo, dog memorial 35.4k, custom pet portrait 19.2k, dog dad gift 8.5k.
+- **Voice:** warm, celebratory, "made for the one they rescued." Never grim or somber — even
+  memorial designs read as loving tributes.
+- **Palette (matches product art + logo):** cream #FAF3EB, terracotta #C46F4F, blush #F4D8C8,
+  sage #A9C3B4, cocoa #4B372B.
+- **Assets:** `etsy-assets/gotchadaygoods-logo-500.png`, `etsy-assets/gotchadaygoods-banner-1600x400.png`
+  (generator: `etsy-assets/generate_gotchadaygoods_brand.py`).
+- **Share & Save link:** `https://gotchadaygoods.etsy.com` (code default + `ETSY_SHARE_SAVE_URL`).
+  Old `octaneajax.etsy.com` links die at rename — never publish them again.
+- **App/repo name stays Octane Ajax** — that's the internal factory, not the storefront.
 
 ---
 
@@ -114,10 +131,10 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 ---
 
 ## 8. Open decisions (need the owner)
-- **Returns policy: choose 1 or 2.** (Other agent is waiting on this.) Practical reality: a returned
-  poster "ships back" in theory, but in practice you just refund and let them keep it.
-- **Approve the senior-dog mug** at `/review` (repriced to $24.99). After it hits Etsy, flip its
-  shipping profile to free too.
+- **Returns policy: choose 1 or 2.** Practical reality: a returned poster "ships back" in theory,
+  but in practice you just refund and let them keep it. Autopilot queues a recommendation until decided.
+- ~~Approve the senior-dog mug~~ ✅ approved + published 2026-07-03. Listing-level price/shipping
+  polish assigned to Agent 2 (`AGENT2_BRIEF.md`).
 
 ---
 
@@ -132,11 +149,18 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 
 ---
 
-## 10. Next code step (needs a working build/test environment)
-This file is memory for humans + coding-agent sessions. For the **runtime** app to actually reason
-with it, wire it into the LLM prompts and add the Autopilot loop:
-1. Load this playbook (or a structured version) into the War Room, Forge, and Autopilot prompts.
-2. Add `runShopAutopilot(supabase, userId)` implementing §5 audit + §7 actions.
-3. Add a frequent Vercel cron (`/api/cron/autopilot`) + event-triggered runs.
-4. Verify: `tsc`, tests, `next build`; then commit + deploy.
-Do this only when git/tests/build are available so the other agent's deployed work isn't broken.
+## 10. Next code step — ✅ SHIPPED 2026-07-03
+`runShopAutopilot` is live: hourly-capable audit → auto-fix (tags, free shipping) → queue
+(pricing/returns recommendations) → react (Pixel marketing for stalled listings) → produce
+(new cycle when the gate is clear and listings < target 15). Routes: `/api/cron/shop-autopilot`
+(daily Vercel cron 07:30 UTC — Hobby limit) + `.github/workflows/shop-autopilot-hourly.yml`
+(hourly once the `CRON_SECRET` repo secret is added — Agent 2 task).
+
+## 11. Change log (recent)
+- **2026-07-03:** Shop Autopilot shipped + first live pass clean. Product-art quality fix:
+  apparel/mugs now generate ISOLATED transparent-background designs (no more art-with-background
+  pasted as a box on shirts); per-product composition rules; posters stay full-bleed. Overnight
+  batch pre-fix: 4 apparel products rejected by owner + 1 pending rejected by agent (same flaw);
+  the published "Adopted and Loved Dog Mom T-Shirt" should stay DEACTIVATED until regenerated.
+  Rebrand locked: **GotchaDayGoods** (see §0.5); new logo/banner generated; share-link default +
+  Pixel hashtag updated in code.

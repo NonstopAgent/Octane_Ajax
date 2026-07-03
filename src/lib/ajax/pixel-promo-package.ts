@@ -57,7 +57,7 @@ export type PixelPromoInput = {
 };
 
 const DEMO_HASHTAGS = [
-  "#OctaneAjax",
+  "#GotchaDayGoods",
   "#EtsyFinds",
   "#GiftIdeas",
   "#MadeToOrder",

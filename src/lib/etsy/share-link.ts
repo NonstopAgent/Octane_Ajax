@@ -10,7 +10,7 @@
  * Configure via ETSY_SHARE_SAVE_URL; defaults to the operator's share domain.
  */
 
-const DEFAULT_SHARE_SAVE_URL = "https://octaneajax.etsy.com";
+const DEFAULT_SHARE_SAVE_URL = "https://gotchadaygoods.etsy.com";
 
 /** Base trackable shop URL (no trailing slash). */
 export function getShareSaveBaseUrl(): string {
