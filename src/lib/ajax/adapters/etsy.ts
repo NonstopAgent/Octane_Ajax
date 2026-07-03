@@ -69,6 +69,32 @@ export type EtsyReceiptsByListing = Record<
   { orders: number; revenueCents: number }
 >;
 
+/** SEO-relevant fields of a single listing (autopilot audit). */
+export type EtsyListingDetails = {
+  listingId: string;
+  state: string;
+  title: string;
+  tags: string[];
+  shippingProfileId: number | null;
+  returnPolicyId: number | null;
+  priceCents: number | null;
+};
+
+/** Shipping profile with its US buyer cost (autopilot free-shipping audit). */
+export type EtsyShippingProfileSummary = {
+  profileId: number;
+  title: string;
+  /** Primary cost in cents for US destination; null when no US destination. */
+  usPrimaryCostCents: number | null;
+};
+
+/** Fields the autopilot may patch on a live listing. */
+export type EtsyListingPatch = {
+  tags?: string[];
+  shipping_profile_id?: number;
+  return_policy_id?: number;
+};
+
 /** A node in Etsy's seller taxonomy tree. */
 export type EtsyTaxonomyNode = {
   id: number;
@@ -380,6 +406,104 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
      * (unix seconds). Requires the `transactions_r` scope — shops authorized
      * before it was added will 403 here until they reconnect Etsy.
      */
+    /** SEO-relevant fields of one listing — tags, shipping, returns, price. */
+    async getListingDetails(
+      listingId: string,
+      accessToken: string,
+    ): Promise<EtsyListingDetails> {
+      const response = await fetchImpl(`${ETSY_API_BASE}/listings/${listingId}`, {
+        headers: authHeaders(apiKeyHeader, accessToken),
+      });
+      const r = await parseEtsyJson<{
+        listing_id?: number;
+        state?: string;
+        title?: string;
+        tags?: string[];
+        shipping_profile_id?: number | null;
+        return_policy_id?: number | null;
+        price?: { amount?: number; divisor?: number };
+      }>(response);
+      const amount = Number(r.price?.amount ?? 0);
+      const divisor = Number(r.price?.divisor ?? 100) || 100;
+      return {
+        listingId: r.listing_id != null ? String(r.listing_id) : listingId,
+        state: (r.state ?? "").trim(),
+        title: (r.title ?? "").trim(),
+        tags: (r.tags ?? []).map((t) => String(t)),
+        shippingProfileId: r.shipping_profile_id ?? null,
+        returnPolicyId: r.return_policy_id ?? null,
+        priceCents: amount > 0 ? Math.round((amount / divisor) * 100) : null,
+      };
+    },
+
+    /** Shop shipping profiles with their US primary cost (free-shipping audit). */
+    async getShippingProfiles(
+      shopId: string,
+      accessToken: string,
+    ): Promise<EtsyShippingProfileSummary[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/shipping-profiles`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: {
+          shipping_profile_id?: number;
+          title?: string;
+          shipping_profile_destinations?: {
+            destination_country_iso?: string;
+            primary_cost?: { amount?: number; divisor?: number };
+          }[];
+        }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .filter((p) => p.shipping_profile_id != null)
+        .map((p) => {
+          const us = (p.shipping_profile_destinations ?? []).find(
+            (d) => (d.destination_country_iso ?? "").toUpperCase() === "US",
+          );
+          const amount = Number(us?.primary_cost?.amount ?? NaN);
+          const divisor = Number(us?.primary_cost?.divisor ?? 100) || 100;
+          return {
+            profileId: Number(p.shipping_profile_id),
+            title: (p.title ?? "").trim(),
+            usPrimaryCostCents: Number.isFinite(amount)
+              ? Math.round((amount / divisor) * 100)
+              : null,
+          };
+        });
+    },
+
+    /** Patches a live listing (tags / shipping profile / return policy). */
+    async updateListing(
+      shopId: string,
+      listingId: string,
+      accessToken: string,
+      patch: EtsyListingPatch,
+    ): Promise<void> {
+      const body = new URLSearchParams();
+      if (patch.tags) body.set("tags", patch.tags.join(","));
+      if (patch.shipping_profile_id != null) {
+        body.set("shipping_profile_id", String(patch.shipping_profile_id));
+      }
+      if (patch.return_policy_id != null) {
+        body.set("return_policy_id", String(patch.return_policy_id));
+      }
+      if ([...body.keys()].length === 0) return;
+
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}`,
+        {
+          method: "PATCH",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        },
+      );
+      await parseEtsyJson(response);
+    },
+
     async getShopReceipts(
       shopId: string,
       accessToken: string,

@@ -1,0 +1,485 @@
+/**
+ * Shop Autopilot — Ajax's continuous improvement loop (server only).
+ *
+ * Runs on an hourly cron. Each pass:
+ *   1. AUDITS every live Etsy listing for SEO gaps (tags, shipping, returns, price).
+ *   2. AUTO-FIXES the small reversible ones via the Etsy API (tags, free-shipping
+ *      profile) and QUEUES the big ones as strategy recommendations.
+ *   3. REACTS to stalled listings by regenerating Pixel marketing content.
+ *   4. KEEPS THE FACTORY MOVING: when the Review Gate is clear and the shop is
+ *      under its listing target, it triggers a full Nova→Forge→fulfillment cycle.
+ *   5. LOGS everything to factory_events so the operator (and other agents) can
+ *      see exactly what Ajax changed and why.
+ *
+ * Strategy source: AJAX_STRATEGY.md (repo) — encoded here as behavior.
+ */
+import {
+  createEtsyAdapter,
+  type EtsyListingDetails,
+  type EtsyShippingProfileSummary,
+} from "@/lib/ajax/adapters/etsy";
+import {
+  auditListing,
+  buildTagFill,
+  type AutopilotAction,
+  type ListingAuditInput,
+} from "@/lib/ajax/autopilot/decisions";
+import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
+import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
+import { fetchOperatorKeywords } from "@/lib/ajax/nova/research";
+import {
+  isPrintifyCatalogKey,
+  getPrintifyCatalogEntry,
+} from "@/lib/ajax/pod/printify-catalog";
+import {
+  NoQueuedContentError,
+  runPixelMarketing,
+} from "@/lib/ajax/pixel-simulator";
+import {
+  CycleBlockedError,
+  runForgeStep,
+  runNovaStep,
+} from "@/lib/ajax/simulator";
+import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
+import type { Json } from "@/lib/supabase/database.types";
+import type { Supabase } from "@/lib/supabase/helpers";
+import { TABLES } from "@/lib/supabase/schema";
+
+/** Stop auto-producing once the shop has this many active listings. */
+const DEFAULT_TARGET_LISTINGS = 15;
+/** Cap Etsy detail lookups per pass (rate-limit hygiene). */
+const MAX_LISTINGS_PER_PASS = 25;
+
+export type AutopilotResult = {
+  ok: boolean;
+  skipped?: string;
+  audited: number;
+  tagsFixed: number;
+  shippingFixed: number;
+  recommended: number;
+  marketingQueued: number;
+  cycleTriggered: boolean;
+  cycleBlocked: boolean;
+  errors: string[];
+};
+
+function emptyResult(): AutopilotResult {
+  return {
+    ok: true,
+    audited: 0,
+    tagsFixed: 0,
+    shippingFixed: 0,
+    recommended: 0,
+    marketingQueued: 0,
+    cycleTriggered: false,
+    cycleBlocked: false,
+    errors: [],
+  };
+}
+
+async function logEvent(
+  supabase: Supabase,
+  userId: string,
+  eventType: string,
+  message: string,
+  metadata: Json = {},
+): Promise<void> {
+  try {
+    await supabase.from(TABLES.EVENTS).insert({
+      user_id: userId,
+      event_type: eventType,
+      message,
+      agent_slug: AGENT_SLUGS.NOVA,
+      room: ROOM_SLUGS.REVIEW_GATE,
+      metadata,
+    });
+  } catch {
+    // Logging must never break the loop.
+  }
+}
+
+type InternalListingRow = {
+  id: string;
+  gumroad_product_id: string | null;
+  created_at: string | null;
+  product_ideas: { seo_keywords: string[] | null } | { seo_keywords: string[] | null }[] | null;
+  product_generations:
+    | { structure: unknown }[]
+    | { structure: unknown }
+    | null;
+};
+
+function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+/** Strategy price floor (cents) from the generation's catalog key. */
+function minPriceCentsFor(row: InternalListingRow | undefined): number | null {
+  const generations =
+    row?.product_generations == null
+      ? []
+      : Array.isArray(row.product_generations)
+        ? row.product_generations
+        : [row.product_generations];
+  for (const g of generations) {
+    const meta = (g.structure as { metadata?: { catalogKey?: unknown } } | null)
+      ?.metadata;
+    const key = typeof meta?.catalogKey === "string" ? meta.catalogKey : null;
+    if (key && isPrintifyCatalogKey(key)) {
+      const prices = Object.values(getPrintifyCatalogEntry(key).variantPrices);
+      if (prices.length > 0) return Math.min(...prices);
+    }
+  }
+  return null;
+}
+
+export async function runShopAutopilot(
+  supabase: Supabase,
+  userId: string,
+): Promise<AutopilotResult> {
+  const result = emptyResult();
+
+  if (process.env.AUTOPILOT_DISABLED === "true") {
+    result.skipped = "disabled_via_env";
+    return result;
+  }
+
+  // ---- Etsy access ---------------------------------------------------------
+  let credentials;
+  try {
+    credentials = await refreshEtsyToken(userId, { supabase });
+  } catch {
+    credentials = null;
+  }
+
+  const adapter = createEtsyAdapter();
+  let liveListings: { listingId: string; title: string; views: number }[] = [];
+  let freeShippingProfileId: number | null = null;
+  let paidProfileIds = new Set<number>();
+
+  if (credentials) {
+    try {
+      liveListings = await adapter.getShopListings(
+        credentials.shop_id,
+        credentials.access_token,
+      );
+    } catch (err) {
+      result.errors.push(
+        `listings: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
+    try {
+      const profiles: EtsyShippingProfileSummary[] =
+        await adapter.getShippingProfiles(
+          credentials.shop_id,
+          credentials.access_token,
+        );
+      freeShippingProfileId =
+        profiles.find((p) => p.usPrimaryCostCents === 0)?.profileId ?? null;
+      paidProfileIds = new Set(
+        profiles
+          .filter((p) => (p.usPrimaryCostCents ?? 0) > 0)
+          .map((p) => p.profileId),
+      );
+    } catch (err) {
+      result.errors.push(
+        `profiles: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
+  }
+
+  // ---- Internal context ----------------------------------------------------
+  const etsyIds = liveListings.map((l) => l.listingId);
+  const internalByEtsyId = new Map<string, InternalListingRow>();
+  if (etsyIds.length > 0) {
+    const { data } = await supabase
+      .from(TABLES.LISTINGS)
+      .select(
+        `id, gumroad_product_id, created_at,
+         product_ideas ( seo_keywords ),
+         product_generations ( structure )`,
+      )
+      .eq("user_id", userId)
+      .in("gumroad_product_id", etsyIds);
+    for (const row of (data ?? []) as unknown as InternalListingRow[]) {
+      if (row.gumroad_product_id) {
+        internalByEtsyId.set(String(row.gumroad_product_id), row);
+      }
+    }
+  }
+
+  const marketKeywords =
+    (await fetchOperatorKeywords({ supabase, userId }))?.map((k) => k.term) ??
+    [];
+
+  // Recent marketing (avoid re-queueing the same listing every hour).
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recentMarketing = new Set<string>();
+  {
+    const { data } = await supabase
+      .from(TABLES.CONTENT_JOBS)
+      .select("listing_id, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", weekAgo);
+    for (const row of data ?? []) {
+      if (row.listing_id) recentMarketing.add(row.listing_id);
+    }
+  }
+
+  // Open recommendations (dedupe by title).
+  const openRecTitles = new Set<string>();
+  {
+    const { data } = await supabase
+      .from(TABLES.STRATEGY)
+      .select("title, status")
+      .eq("user_id", userId)
+      .eq("status", "proposed");
+    for (const row of data ?? []) openRecTitles.add(row.title ?? "");
+  }
+
+  // ---- Audit + act ---------------------------------------------------------
+  const runId = crypto.randomUUID();
+  const marketingListingIds: string[] = [];
+
+  for (const live of liveListings.slice(0, MAX_LISTINGS_PER_PASS)) {
+    if (!credentials) break;
+    let details: EtsyListingDetails;
+    try {
+      details = await adapter.getListingDetails(
+        live.listingId,
+        credentials.access_token,
+      );
+    } catch (err) {
+      result.errors.push(
+        `detail ${live.listingId}: ${err instanceof Error ? err.message : "failed"}`,
+      );
+      continue;
+    }
+    if (details.state && details.state !== "active") continue;
+
+    const internal = internalByEtsyId.get(live.listingId);
+    const createdAt = internal?.created_at ? Date.parse(internal.created_at) : NaN;
+    const ageDays = Number.isFinite(createdAt)
+      ? (Date.now() - createdAt) / 86_400_000
+      : null;
+
+    const usShippingCostCents =
+      details.shippingProfileId == null
+        ? null
+        : freeShippingProfileId != null &&
+            details.shippingProfileId === freeShippingProfileId
+          ? 0
+          : paidProfileIds.has(details.shippingProfileId)
+            ? 1 // exact amount irrelevant — "paid" is enough to act
+            : null;
+
+    const auditInput: ListingAuditInput = {
+      etsyListingId: live.listingId,
+      title: details.title || live.title,
+      tagCount: details.tags.length,
+      usShippingCostCents,
+      hasReturnPolicy: details.returnPolicyId != null,
+      priceCents: details.priceCents,
+      minPriceCents: minPriceCentsFor(internal),
+      totalViews: live.views,
+      ageDays,
+      hasRecentMarketing: internal ? recentMarketing.has(internal.id) : true,
+    };
+
+    result.audited += 1;
+    const actions: AutopilotAction[] = auditListing(auditInput);
+
+    for (const action of actions) {
+      if (action.kind === "fill_tags") {
+        const idea = firstOrSelf(internal?.product_ideas ?? null);
+        const candidates = [...(idea?.seo_keywords ?? []), ...marketKeywords];
+        const tags = buildTagFill(details.tags, candidates);
+        if (tags.length > details.tags.length) {
+          try {
+            await adapter.updateListing(
+              credentials.shop_id,
+              live.listingId,
+              credentials.access_token,
+              { tags },
+            );
+            result.tagsFixed += 1;
+            await logEvent(
+              supabase,
+              userId,
+              "autopilot_fixed_listing",
+              `Autopilot filled tags on "${auditInput.title}" (${details.tags.length} → ${tags.length}).`,
+              { etsyListingId: live.listingId, runId, tags },
+            );
+          } catch (err) {
+            result.errors.push(
+              `tags ${live.listingId}: ${err instanceof Error ? err.message : "failed"}`,
+            );
+          }
+        }
+      } else if (action.kind === "fix_shipping") {
+        if (freeShippingProfileId != null) {
+          try {
+            await adapter.updateListing(
+              credentials.shop_id,
+              live.listingId,
+              credentials.access_token,
+              { shipping_profile_id: freeShippingProfileId },
+            );
+            result.shippingFixed += 1;
+            await logEvent(
+              supabase,
+              userId,
+              "autopilot_fixed_listing",
+              `Autopilot moved "${auditInput.title}" to the free-US-shipping profile (Etsy suppresses >$6 shipping).`,
+              { etsyListingId: live.listingId, runId },
+            );
+          } catch (err) {
+            result.errors.push(
+              `shipping ${live.listingId}: ${err instanceof Error ? err.message : "failed"}`,
+            );
+          }
+        } else if (!openRecTitles.has(`Create a free-US-shipping profile`)) {
+          openRecTitles.add(`Create a free-US-shipping profile`);
+          await insertRecommendation(supabase, userId, runId, {
+            category: "channel",
+            title: `Create a free-US-shipping profile`,
+            rationale: `"${auditInput.title}" ships at a paid rate and no free-US profile exists to move it to. Etsy suppresses US listings shipping above $6.`,
+            recommendedAction:
+              "Set the listing's shipping profile to Free shipping (US) in Etsy → Settings → Shipping, or flip Printify's store shipping to free so new listings inherit it.",
+            priority: 5,
+            etsyListingId: live.listingId,
+          });
+          result.recommended += 1;
+        }
+      } else if (action.kind === "queue_marketing") {
+        if (internal) marketingListingIds.push(internal.id);
+      } else if (action.kind === "recommend") {
+        if (openRecTitles.has(action.title)) continue;
+        openRecTitles.add(action.title);
+        await insertRecommendation(supabase, userId, runId, {
+          category: action.category,
+          title: action.title,
+          rationale: action.rationale,
+          recommendedAction: action.recommendedAction,
+          priority: action.priority,
+          etsyListingId: action.etsyListingId,
+        });
+        result.recommended += 1;
+      }
+    }
+  }
+
+  // ---- React: regenerate marketing for stalled listings ---------------------
+  for (const listingId of marketingListingIds) {
+    const { error } = await supabase.from(TABLES.CONTENT_JOBS).insert({
+      user_id: userId,
+      listing_id: listingId,
+      platform: "social",
+      content_type: "promo",
+      status: "queued",
+      caption: "Autopilot: low-traffic listing — fresh promo pack",
+    });
+    if (!error) result.marketingQueued += 1;
+  }
+  if (result.marketingQueued > 0) {
+    try {
+      await runPixelMarketing(supabase, userId);
+      await logEvent(
+        supabase,
+        userId,
+        "autopilot_marketing",
+        `Autopilot generated fresh social posts for ${result.marketingQueued} low-traffic listing(s) — copy them from the Marketing page.`,
+        { runId, count: result.marketingQueued },
+      );
+    } catch (err) {
+      if (!(err instanceof NoQueuedContentError)) {
+        result.errors.push(
+          `pixel: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+  }
+
+  // ---- Produce: keep the factory moving -------------------------------------
+  const targetListings = Number(
+    process.env.AUTOPILOT_TARGET_LISTINGS ?? DEFAULT_TARGET_LISTINGS,
+  );
+  const { count: pendingReviews } = await supabase
+    .from(TABLES.REVIEW_QUEUE)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "pending");
+
+  if ((pendingReviews ?? 0) > 0) {
+    result.cycleBlocked = true;
+  } else if (liveListings.length < targetListings) {
+    try {
+      const nova = await runNovaStep(supabase, userId);
+      const forge = await runForgeStep(supabase, userId, { runId: nova.runId });
+      try {
+        await runGenerationPodJob(supabase, userId, forge.generationId);
+      } catch (fulfillErr) {
+        result.errors.push(
+          `fulfillment: ${fulfillErr instanceof Error ? fulfillErr.message : "failed"}`,
+        );
+      }
+      result.cycleTriggered = true;
+    } catch (err) {
+      if (err instanceof CycleBlockedError) {
+        result.cycleBlocked = true;
+      } else {
+        result.errors.push(
+          `cycle: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+  }
+
+  // ---- Summary ---------------------------------------------------------------
+  const acted =
+    result.tagsFixed +
+    result.shippingFixed +
+    result.recommended +
+    result.marketingQueued +
+    (result.cycleTriggered ? 1 : 0);
+  await logEvent(
+    supabase,
+    userId,
+    "autopilot_summary",
+    acted > 0
+      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review pending)" : ""}.`
+      : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: approve the pending review)" : ""}.`,
+    { runId, ...result } as unknown as Json,
+  );
+
+  result.ok = result.errors.length === 0;
+  return result;
+}
+
+async function insertRecommendation(
+  supabase: Supabase,
+  userId: string,
+  runId: string,
+  rec: {
+    category: string;
+    title: string;
+    rationale: string;
+    recommendedAction: string;
+    priority: number;
+    etsyListingId: string;
+  },
+): Promise<void> {
+  await supabase.from(TABLES.STRATEGY).insert({
+    user_id: userId,
+    run_id: runId,
+    category: rec.category,
+    title: rec.title,
+    rationale: rec.rationale,
+    recommended_action: rec.recommendedAction,
+    priority: rec.priority,
+    confidence: 80,
+    evidence: { source: "shop_autopilot", etsyListingId: rec.etsyListingId } as Json,
+    status: "proposed",
+  });
+}
