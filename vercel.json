@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/cron/shop-autopilot",
-      "schedule": "30 * * * *"
+      "schedule": "30 7 * * *"
     }
   ]
 }
