@@ -43,6 +43,10 @@ export function TikTokQueuePanel({
     null,
   );
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [renderingId, setRenderingId] = useState<string | null>(null);
+  const [videos, setVideos] = useState<
+    Record<string, { status: string; url?: string; requestId?: string }>
+  >({});
 
   const publishNow = useCallback(async (item: TikTokQueueRow) => {
     setLivePostingId(item.id);
@@ -75,6 +79,52 @@ export function TikTokQueuePanel({
       setLivePostingId(null);
     }
   }, []);
+
+  const renderVideo = useCallback(
+    async (item: TikTokQueueRow) => {
+      setRenderingId(item.id);
+      setNotice(null);
+      try {
+        const prior = videos[item.id];
+        const body = prior?.requestId
+          ? { requestId: prior.requestId }
+          : { queueId: item.id };
+        const res = await fetch("/api/ajax/video/render", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          status?: string;
+          videoUrl?: string | null;
+          requestId?: string;
+          error?: string;
+        };
+        if (!res.ok || data.status === "failed") {
+          setNotice({ ok: false, text: data.error ?? "Video render failed." });
+          return;
+        }
+        if (data.status === "completed" && data.videoUrl) {
+          const url = data.videoUrl;
+          setVideos((v) => ({ ...v, [item.id]: { status: "completed", url } }));
+          setNotice({ ok: true, text: "Video ready 🎬" });
+        } else {
+          setVideos((v) => ({
+            ...v,
+            [item.id]: { status: "pending", requestId: data.requestId },
+          }));
+          setNotice({ ok: true, text: "Still rendering — click Check in ~30s." });
+        }
+      } catch {
+        setNotice({ ok: false, text: "Network error while rendering." });
+      } finally {
+        setRenderingId(null);
+      }
+    },
+    [videos],
+  );
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -308,6 +358,34 @@ export function TikTokQueuePanel({
               >
                 {livePostingId === item.id ? "Publishing…" : "▶ Publish now"}
               </button>
+              {item.mockup_urls[0] &&
+              !item.mockup_urls[0].startsWith("demo://") ? (
+                videos[item.id]?.status === "completed" &&
+                videos[item.id]?.url ? (
+                  <a
+                    href={videos[item.id]!.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-violet-600/60 bg-violet-950/40 px-2.5 py-1 font-mono text-[10px] font-semibold text-violet-300 hover:border-violet-500"
+                  >
+                    ▶ Video ready
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={renderingId === item.id}
+                    onClick={() => void renderVideo(item)}
+                    className="rounded border border-violet-600/60 bg-violet-950/40 px-2.5 py-1 font-mono text-[10px] font-semibold text-violet-300 hover:border-violet-500 disabled:opacity-50"
+                    title="Animate the hero mockup into a 9:16 video via fal.ai (needs FAL_KEY)"
+                  >
+                    {renderingId === item.id
+                      ? "Rendering…"
+                      : videos[item.id]?.status === "pending"
+                        ? "Check video"
+                        : "🎬 Generate video"}
+                  </button>
+                )
+              ) : null}
               <button
                 type="button"
                 disabled={postingId === item.id}
