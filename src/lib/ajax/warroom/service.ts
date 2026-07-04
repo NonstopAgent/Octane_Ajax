@@ -23,6 +23,12 @@ import { isProviderConfigured } from "@/lib/llm/providers";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
+import {
+  fetchWarRoomSignals,
+  formatSignalsForPrompt,
+} from "@/lib/ajax/warroom/signals";
+export { fetchWarRoomSignals } from "@/lib/ajax/warroom/signals";
+export type { WarRoomSignals } from "@/lib/ajax/warroom/signals";
 
 // War Room routes through the shared task router (see lib/llm/providers): the
 // "strategy" task prefers Claude and falls back to OpenAI automatically. This
@@ -194,7 +200,8 @@ You are handed an ARCHIVE: product ideas and their Product Brain verdicts, listi
 3. Fix the leaks. A "traffic but no sales" listing is proven demand with a broken offer. Recommend a concrete title / price / photo fix for that specific listing, never a vague "optimize".
 4. Cut dead weight. Niches repeatedly rejected, or published with no traffic, should be retired so the operator stops burning cycles on them.
 5. Respect the pricing model. Prices INCLUDE free US shipping (baked in for Etsy's free-shipping ranking boost): mugs $22.99–29.99, posters/prints $27.99–44.99, apparel $29.99–44.99, totes/cases $24.99–34.99; new-shop items price toward the low end. Never recommend prices outside these bands.
-6. Occasion beats aesthetic. The brand wins on gift occasions with urgency — gotcha day, adoption day, pet memorial, retirement, appreciation weeks, milestone birthdays. Favor niches with a built-in "someone has to buy a gift" moment.
+6. Occasion beats aesthetic. The brand wins on gift occasions with urgency — gotcha day, adoption day, pet memorial, retirement, appreciation weeks, milestone birthdays. Personalization (a pet's name, breed, or portrait) and a built-in occasion are the two highest-converting proven levers — favor niches and fixes that add them.
+7. Use the REAL market + health signals below the archive. Actual search demand vs. competing-listing supply beats internal trend scores — prefer niches with proven demand and open supply, and flag saturated red-ocean terms. When shop health is low, prioritize the specific store-QA fixes that raise it BEFORE recommending more new products.
 
 ## CATEGORIES
 - "niche": specific niches/product directions to double down on or try next, grounded in what is approved AND actually getting views/sales.
@@ -281,6 +288,7 @@ export async function runWarRoom(
   }
 
   const archive = await aggregateArchive(supabase, userId);
+  const signals = await fetchWarRoomSignals(supabase, userId);
 
   let rawRecs: RawRec[] = [];
   let strategistModel = "";
@@ -292,7 +300,9 @@ export async function runWarRoom(
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: `ARCHIVE summary (JSON):\n${JSON.stringify(archive)}`,
+          content: `ARCHIVE summary (JSON):\n${JSON.stringify(
+            archive,
+          )}\n\n${formatSignalsForPrompt(signals)}`,
         },
       ],
       jsonInstructions: WARROOM_JSON_INSTRUCTIONS,

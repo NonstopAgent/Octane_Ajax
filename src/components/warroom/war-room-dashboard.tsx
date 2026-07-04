@@ -28,11 +28,33 @@ type Recommendation = {
   createdAt: string;
 };
 
+type Signals = {
+  marketOpportunities: {
+    term: string;
+    searchesPerMonth: number | null;
+    competingListings: number | null;
+  }[];
+  shopHealth: {
+    overallScore: number;
+    listingCount: number;
+    critical: number;
+    warning: number;
+    topFixes: string[];
+  };
+} | null;
+
 type WarRoomDashboardProps = {
   initialRecommendations: Recommendation[];
+  signals?: Signals;
   isAuthenticated: boolean;
   configReady: boolean;
 };
+
+function healthColor(score: number): string {
+  if (score >= 80) return "#34d399";
+  if (score >= 60) return "var(--accent-orange)";
+  return "#f87171";
+}
 
 const CATEGORY_META: Record<
   RecCategory,
@@ -93,6 +115,7 @@ function priorityColor(priority: number): string {
 
 export function WarRoomDashboard({
   initialRecommendations,
+  signals,
   isAuthenticated,
   configReady,
 }: WarRoomDashboardProps) {
@@ -220,12 +243,92 @@ export function WarRoomDashboard({
         badge="Strategy"
         badgeTone="warning"
         title="War Room"
-        description="An AI strategist reads the full Archive — every idea, verdict, listing, order, and live Etsy metric — and proposes revenue-ranked moves. It recommends; you decide and execute."
+        description="An AI strategist reads the full Archive — ideas, verdicts, listings, orders, live Etsy metrics — PLUS real market demand and your shop-health, then proposes revenue-ranked moves. It recommends; you decide and execute."
         aside={runButton}
         sysline="SYS.AJAX.WARROOM :: STRATEGY"
       />
 
       <ToastBanner toast={toast} />
+
+      {signals ? (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="factory-panel">
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                Shop health
+              </h2>
+              <a
+                href="/store-qa"
+                className="text-xs text-[var(--accent-blue)] hover:underline"
+              >
+                Open Store QA →
+              </a>
+            </div>
+            <div className="mt-2 flex items-end gap-3">
+              <span
+                className="font-mono text-4xl font-bold tabular-nums"
+                style={{ color: healthColor(signals.shopHealth.overallScore) }}
+              >
+                {signals.shopHealth.overallScore}
+                <span className="text-base text-[var(--text-muted)]">/100</span>
+              </span>
+              <span className="pb-1 text-xs text-[var(--text-muted)]">
+                {signals.shopHealth.listingCount} listings ·{" "}
+                {signals.shopHealth.critical} critical ·{" "}
+                {signals.shopHealth.warning} warnings
+              </span>
+            </div>
+            {signals.shopHealth.topFixes.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-xs text-[var(--text-muted)]">
+                {signals.shopHealth.topFixes.slice(0, 3).map((f, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-[var(--accent-orange)]" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-emerald-300">
+                Storefront looks clean.
+              </p>
+            )}
+          </div>
+
+          <div className="factory-panel">
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Live market opportunity
+            </h2>
+            {signals.marketOpportunities.length > 0 ? (
+              <ul className="mt-2 space-y-1.5">
+                {signals.marketOpportunities.slice(0, 6).map((o) => (
+                  <li
+                    key={o.term}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="min-w-0 truncate text-[var(--foreground)]">
+                      {o.term}
+                    </span>
+                    <span className="shrink-0 font-mono text-[var(--text-muted)]">
+                      {o.searchesPerMonth != null
+                        ? `${o.searchesPerMonth}/mo`
+                        : "—"}
+                      {" · "}
+                      {o.competingListings != null
+                        ? `${o.competingListings} comp`
+                        : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                No demand data yet — connect Etsy and run a cycle to populate
+                real search terms.
+              </p>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {running && (
         <div className="factory-panel panel-glow-orange flex items-center gap-3">

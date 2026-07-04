@@ -1,5 +1,9 @@
 import { WarRoomDashboard } from "@/components/warroom/war-room-dashboard";
-import { fetchStrategyRecommendations } from "@/lib/ajax/warroom/service";
+import {
+  fetchStrategyRecommendations,
+  fetchWarRoomSignals,
+  type WarRoomSignals,
+} from "@/lib/ajax/warroom/service";
 import { createClient } from "@/lib/supabase/server";
 
 function configReady() {
@@ -15,6 +19,7 @@ export default async function WarRoomPage() {
   let initialRecommendations: Awaited<
     ReturnType<typeof fetchStrategyRecommendations>
   > = [];
+  let signals: WarRoomSignals | null = null;
 
   if (ready) {
     try {
@@ -24,19 +29,20 @@ export default async function WarRoomPage() {
       } = await supabase.auth.getUser();
       if (user) {
         isAuthenticated = true;
-        initialRecommendations = await fetchStrategyRecommendations(
-          supabase,
-          user.id,
-        );
+        [initialRecommendations, signals] = await Promise.all([
+          fetchStrategyRecommendations(supabase, user.id),
+          fetchWarRoomSignals(supabase, user.id),
+        ]);
       }
     } catch (err) {
-      console.error("[war-room page] failed to load recommendations", err);
+      console.error("[war-room page] failed to load", err);
     }
   }
 
   return (
     <WarRoomDashboard
       initialRecommendations={initialRecommendations}
+      signals={signals}
       isAuthenticated={isAuthenticated}
       configReady={ready}
     />
