@@ -24,6 +24,8 @@ export default async function FactoryPage() {
   let isAuthenticated = false;
   let snapshot: Awaited<ReturnType<typeof fetchSweatshopSnapshot>> | null = null;
   let businessLabel = "BUSINESS 01 · GOTCHADAYGOODS";
+  let businessId: string | null = null;
+  let businessIncludeNull = false;
 
   if (ready) {
     try {
@@ -34,14 +36,21 @@ export default async function FactoryPage() {
 
       if (user) {
         isAuthenticated = true;
-        snapshot = await fetchSweatshopSnapshot(supabase, user.id);
         const businesses = await fetchBusinesses(supabase, user.id);
         const active = await getActiveBusiness(supabase, user.id);
         if (active) {
+          businessId = active.id;
+          businessIncludeNull = active.isPrimary;
           const idx = businesses.findIndex((b) => b.id === active.id);
           const n = String((idx >= 0 ? idx : 0) + 1).padStart(2, "0");
           businessLabel = `BUSINESS ${n} · ${active.name.toUpperCase()}`;
         }
+        snapshot = await fetchSweatshopSnapshot(
+          supabase,
+          user.id,
+          businessId,
+          businessIncludeNull,
+        );
       }
     } catch (err) {
       console.error("[factory page] failed to load snapshot", err);
@@ -58,6 +67,8 @@ export default async function FactoryPage() {
       initialAgents={snapshot?.agents ?? []}
       initialMetrics={snapshot?.metrics ?? EMPTY_METRICS}
       businessLabel={businessLabel}
+      businessId={businessId}
+      businessIncludeNull={businessIncludeNull}
     />
   );
 }

@@ -49,7 +49,47 @@ export type SweatshopSnapshot = {
 export async function fetchSweatshopSnapshot(
   supabase: Supabase,
   userId: string,
+  businessId?: string | null,
+  includeNull = false,
 ): Promise<SweatshopSnapshot> {
+  // Per-business scoping via a PostgREST `.or` filter string (no typed-column
+  // dependency). The primary business also sees unstamped (null) rows so
+  // nothing disappears; a secondary business sees only its own.
+  const bizClause = businessId
+    ? includeNull
+      ? `business_id.eq.${businessId},business_id.is.null`
+      : `business_id.eq.${businessId}`
+    : null;
+
+  const ordersBase = supabase
+    .from(TABLES.ORDER_QUEUE)
+    .select("*")
+    .eq("user_id", userId);
+  const tiktokBase = supabase
+    .from(TABLES.TIKTOK_QUEUE)
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  const ideasBase = supabase
+    .from(TABLES.IDEAS)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  const reviewsBase = supabase
+    .from(TABLES.REVIEW_QUEUE)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  const jobsBase = supabase
+    .from(TABLES.CONTENT_JOBS)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "scheduled");
+  const listingsBase = supabase
+    .from(TABLES.LISTINGS)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "published");
+
   const [
     eventsResult,
     ordersResult,
@@ -66,39 +106,17 @@ export async function fetchSweatshopSnapshot(
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(60),
-    supabase
-      .from(TABLES.ORDER_QUEUE)
-      .select("*")
-      .eq("user_id", userId)
+    (bizClause ? ordersBase.or(bizClause) : ordersBase)
       .order("updated_at", { ascending: false })
       .limit(16),
-    supabase
-      .from(TABLES.TIKTOK_QUEUE)
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "pending")
+    (bizClause ? tiktokBase.or(bizClause) : tiktokBase)
       .order("created_at", { ascending: false })
       .limit(12),
     supabase.from(TABLES.AGENTS).select("*").order("slug"),
-    supabase
-      .from(TABLES.IDEAS)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId),
-    supabase
-      .from(TABLES.REVIEW_QUEUE)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "pending"),
-    supabase
-      .from(TABLES.CONTENT_JOBS)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "scheduled"),
-    supabase
-      .from(TABLES.LISTINGS)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "published"),
+    bizClause ? ideasBase.or(bizClause) : ideasBase,
+    bizClause ? reviewsBase.or(bizClause) : reviewsBase,
+    bizClause ? jobsBase.or(bizClause) : jobsBase,
+    bizClause ? listingsBase.or(bizClause) : listingsBase,
   ]);
 
   if (eventsResult.error) throw eventsResult.error;

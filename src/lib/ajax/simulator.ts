@@ -162,9 +162,13 @@ async function assertAgentsExist(supabase: Supabase) {
   }
 }
 
-async function preflightCycle(supabase: Supabase, userId: string) {
+async function preflightCycle(
+  supabase: Supabase,
+  userId: string,
+  businessId?: string | null,
+) {
   await assertAgentsExist(supabase);
-  await assertNoPendingReview(supabase, userId);
+  await assertNoPendingReview(supabase, userId, businessId);
 }
 
 function ideaRowToNovaEvaluated(row: DbIdea): NovaEvaluatedIdea | null {
@@ -259,13 +263,20 @@ async function assertForgeNotComplete(
   }
 }
 
-async function assertNoPendingReview(supabase: Supabase, userId: string) {
-  const { data, error } = await supabase
+async function assertNoPendingReview(
+  supabase: Supabase,
+  userId: string,
+  businessId?: string | null,
+) {
+  const base = supabase
     .from(TABLES.REVIEW_QUEUE)
     .select("id")
     .eq("user_id", userId)
-    .eq("status", "pending")
-    .limit(1);
+    .eq("status", "pending");
+  const { data, error } = await (businessId
+    ? base.or(`business_id.eq.${businessId},business_id.is.null`)
+    : base
+  ).limit(1);
 
   if (error) {
     throw new SimulatorError("Failed to check review queue.", error);
@@ -426,7 +437,7 @@ export async function runNovaStep(
   userId: string,
   businessId?: string | null,
 ): Promise<NovaStepSummary> {
-  await preflightCycle(supabase, userId);
+  await preflightCycle(supabase, userId, businessId);
 
   try {
     return await executeNovaStep(supabase, userId, businessId);
@@ -446,7 +457,7 @@ export async function runForgeStep(
   opts?: RunForgeStepOptions,
   businessId?: string | null,
 ): Promise<AjaxCycleSummary> {
-  await preflightCycle(supabase, userId);
+  await preflightCycle(supabase, userId, businessId);
 
   try {
     return await executeForgeStep(supabase, userId, opts, businessId);

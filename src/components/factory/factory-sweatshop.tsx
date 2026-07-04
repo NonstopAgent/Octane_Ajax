@@ -31,6 +31,8 @@ type FactorySweatshopProps = {
   initialAgents: AjaxAgent[];
   initialMetrics: VisMetrics;
   businessLabel: string;
+  businessId: string | null;
+  businessIncludeNull: boolean;
 };
 
 function toVisAgent(agent: AjaxAgent): VisAgent {
@@ -50,6 +52,8 @@ export function FactorySweatshop({
   initialAgents,
   initialMetrics,
   businessLabel,
+  businessId,
+  businessIncludeNull,
 }: FactorySweatshopProps) {
   const [agents, setAgents] = useState<AjaxAgent[]>(initialAgents);
   const [metrics, setMetrics] = useState<VisMetrics>(initialMetrics);
@@ -75,28 +79,39 @@ export function FactorySweatshop({
     } = await supabase.auth.getUser();
     if (!user) return;
 
+    const bizClause = businessId
+      ? businessIncludeNull
+        ? `business_id.eq.${businessId},business_id.is.null`
+        : `business_id.eq.${businessId}`
+      : null;
+
+    const ideasBase = supabase
+      .from(TABLES.IDEAS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    const reviewsBase = supabase
+      .from(TABLES.REVIEW_QUEUE)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "pending");
+    const jobsBase = supabase
+      .from(TABLES.CONTENT_JOBS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "scheduled");
+    const listingsBase = supabase
+      .from(TABLES.LISTINGS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "published");
+
     const [agentsRes, ideasRes, reviewsRes, jobsRes, listingsRes, eventsRes] =
       await Promise.all([
         supabase.from(TABLES.AGENTS).select("*").order("slug"),
-        supabase
-          .from(TABLES.IDEAS)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id),
-        supabase
-          .from(TABLES.REVIEW_QUEUE)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "pending"),
-        supabase
-          .from(TABLES.CONTENT_JOBS)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "scheduled"),
-        supabase
-          .from(TABLES.LISTINGS)
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("status", "published"),
+        bizClause ? ideasBase.or(bizClause) : ideasBase,
+        bizClause ? reviewsBase.or(bizClause) : reviewsBase,
+        bizClause ? jobsBase.or(bizClause) : jobsBase,
+        bizClause ? listingsBase.or(bizClause) : listingsBase,
         supabase
           .from(TABLES.EVENTS)
           .select("*")
@@ -117,7 +132,7 @@ export function FactorySweatshop({
       const ev = mapEventFromDb(eventsRes.data[0]);
       setLastEventMsg(String(ev.message ?? ""));
     }
-  }, []);
+  }, [businessId, businessIncludeNull]);
 
   const realtimeEnabled = configReady && isAuthenticated;
 
