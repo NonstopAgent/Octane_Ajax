@@ -66,8 +66,10 @@ async function parseJson<T extends Record<string, unknown>>(
 
 export type EtsyTaxonomyProperty = {
   property_id: number;
-  property_name: string;
-  scales?: { scale_id: number; scale_name: string }[];
+  property_name?: string;
+  name?: string;
+  display_name?: string;
+  scales?: { scale_id: number; scale_name?: string; display_name?: string }[];
   possible_values?: { value_id: number; name: string }[];
 };
 
@@ -158,7 +160,14 @@ export async function getTaxonomyProperties(
     parsed.results ??
     parsed.properties ??
     (Array.isArray(parsed) ? (parsed as EtsyTaxonomyProperty[]) : []);
-  return arr as EtsyTaxonomyProperty[];
+  return arr.map((p) => ({
+    ...p,
+    property_name: p.property_name ?? p.display_name ?? p.name,
+    scales: (p.scales ?? []).map((s) => ({
+      ...s,
+      scale_name: s.scale_name ?? s.display_name,
+    })),
+  })) as EtsyTaxonomyProperty[];
 }
 
 /** Reads a listing's taxonomy_id + title (title feeds product-type inference). */
@@ -241,8 +250,8 @@ function findProperty(
     (p) => typeof p.property_name === "string" && p.property_name.length > 0,
   );
   return (
-    named.find((p) => lc.includes(p.property_name.toLowerCase())) ??
-    named.find((p) => lc.some((n) => p.property_name.toLowerCase().includes(n)))
+    named.find((p) => lc.includes(p.property_name!.toLowerCase())) ??
+    named.find((p) => lc.some((n) => p.property_name!.toLowerCase().includes(n)))
   );
 }
 
@@ -300,7 +309,7 @@ export async function applyListingAttributes(
         const scale =
           scales.find((s) =>
             (d.scaleNames ?? []).some((sn) =>
-              s.scale_name.toLowerCase().includes(sn.toLowerCase()),
+              s.scale_name!.toLowerCase().includes(sn.toLowerCase()),
             ),
           ) ?? scales[0];
         if (!scale) {
