@@ -161,8 +161,8 @@ export function FactoryFloor3D(props: Props) {
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x05070f, 0.039);
-    const camera = new THREE.PerspectiveCamera(40, W0 / H0, 0.1, 200);
-    const camBase = new THREE.Vector3(0.5, 12.2, 15.2);
+    const camera = new THREE.PerspectiveCamera(43, W0 / H0, 0.1, 200);
+    const camBase = new THREE.Vector3(0.5, 11.6, 16.0);
     const camLook = new THREE.Vector3(0, -0.4, 0.6);
     camera.position.copy(camBase);
     camera.lookAt(camLook);
@@ -359,9 +359,9 @@ export function FactoryFloor3D(props: Props) {
       const mat = track(new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.22 }));
       scene.add(new THREE.Mesh(geo, mat));
       const orbs: THREE.Sprite[] = [];
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 8; i++) {
         const o = makeGlow(hex, 0.5, 0);
-        o.userData.off = i / 5;
+        o.userData.off = i / 8;
         scene.add(o);
         orbs.push(o);
       }
@@ -381,6 +381,38 @@ export function FactoryFloor3D(props: Props) {
     const motesMat = track(new THREE.PointsMaterial({ color: 0x6fa8ff, size: 0.05, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
     const motes = new THREE.Points(motesGeo, motesMat);
     scene.add(motes);
+
+    // perimeter facility structures — depth + "empire" scale behind the floor
+    const pillarMat = track(
+      new THREE.MeshStandardMaterial({ color: 0x0a1120, emissive: 0x16345e, emissiveIntensity: 0.5, metalness: 0.7, roughness: 0.5 }),
+    );
+    const pillarGeo = track(new THREE.BoxGeometry(0.5, 6, 0.5));
+    for (let i = 0; i < 16; i++) {
+      const ang = (i / 16) * Math.PI * 2;
+      const px = Math.cos(ang) * 15.5;
+      const pz = Math.sin(ang) * 10.5;
+      const pil = new THREE.Mesh(pillarGeo, pillarMat);
+      pil.position.set(px, 3, pz);
+      scene.add(pil);
+      const cap = makeGlow(0x3ce6ff, 1.0, 0.35);
+      cap.position.set(px, 6.1, pz);
+      scene.add(cap);
+    }
+
+    // ambient drones — constant low traffic so the ecosystem never sits still
+    const droneHex = [0x3ce6ff, 0xff8a3c, 0x5cf2a8, 0x4d8cff];
+    const drones: { s: THREE.Sprite; sp: number; off: number; rad: number; y: number }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const s = makeGlow(droneHex[i % 4], 0.32, 0.7);
+      scene.add(s);
+      drones.push({
+        s,
+        sp: 0.04 + Math.random() * 0.05,
+        off: Math.random(),
+        rad: 5 + Math.random() * 6.5,
+        y: 1.4 + Math.random() * 3.6,
+      });
+    }
 
     // raycast click
     const ray = new THREE.Raycaster();
@@ -589,6 +621,15 @@ export function FactoryFloor3D(props: Props) {
         });
       }
 
+      for (const d of drones) {
+        const a = (t * d.sp + d.off) * Math.PI * 2;
+        d.s.position.set(
+          Math.cos(a) * d.rad,
+          d.y + Math.sin(t * 0.8 + d.off * 6) * 0.4,
+          Math.sin(a) * d.rad * 0.7,
+        );
+        d.s.material.opacity = 0.45 + 0.3 * Math.sin(t * 3 + d.off * 9);
+      }
       motes.rotation.y = t * 0.03;
       motes.position.y = Math.sin(t * 0.4) * 0.15;
       renderer.render(scene, camera);
