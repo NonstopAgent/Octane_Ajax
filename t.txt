@@ -1,0 +1,2587 @@
+
+> octane-ajax@0.1.0 test
+> node --import tsx --test tests/security.test.mjs tests/demo-workflow.test.mjs tests/auth.test.mjs tests/pixel-marketing.test.mjs tests/storefront-wiring.test.mjs src/lib/ajax/constants.test.ts src/lib/ajax/status.publish.test.ts src/lib/ajax/pixel-promo-package.test.ts src/lib/ajax/product-brain/product-brain.test.ts src/lib/ajax/product-brain/market-signals.test.ts src/lib/ajax/reviewer/prompts.test.ts src/lib/ajax/nova/nova.test.ts src/lib/ajax/nova/keyword-ingest.test.ts src/lib/ajax/nova/idea-playbook.test.ts src/lib/ajax/forge/forge.test.ts src/lib/ajax/pixel/pixel.test.ts src/lib/ajax/pixel/video-spec.test.ts src/lib/ajax/pixel/marketing-playbook.test.ts src/lib/ajax/video/fal-render.test.ts src/lib/ajax/video/listing-video.test.ts src/lib/ajax/video/jobs.test.ts src/lib/ajax/adapters/gumroad.test.ts src/lib/ajax/adapters/etsy.test.ts src/lib/ajax/adapters/etsy-attributes.test.ts src/lib/ajax/adapters/lemonsqueezy.test.ts src/lib/ajax/adapters/printify.test.ts src/lib/ajax/etsy-auth.test.ts src/lib/etsy/share-link.test.ts src/lib/ajax/autopilot/autopilot.test.ts src/lib/ajax/pod/order-types.test.ts src/lib/ajax/pod/order-fulfillment.test.ts src/lib/llm/json.test.ts src/lib/product/pdf-generator.test.ts src/lib/product/pdf-service.test.ts src/lib/product/mappers.test.ts src/lib/product/structure-to-document.test.ts src/lib/factory/queries.test.ts src/lib/factory/revenue-queries.test.ts src/lib/store/queries.test.ts src/lib/store/public-queries.test.ts src/lib/store/publish.test.ts src/lib/store/publish-gumroad-route.test.ts src/lib/review/display.test.ts src/lib/review/sellability.test.ts src/lib/review/approval-guards.test.ts src/lib/review/etsy-on-approve.test.ts src/lib/store/tags.test.ts src/lib/ajax/store-qa/audit.test.ts
+
+TAP version 13
+# Subtest: etsy attributes
+    # Subtest: desiredAttributesFor infers product type from hints
+    ok 1 - desiredAttributesFor infers product type from hints
+      ---
+      duration_ms: 1.6211
+      type: 'test'
+      ...
+    # Subtest: applyListingAttributes matches Etsy display_name + sets values/materials
+    ok 2 - applyListingAttributes matches Etsy display_name + sets values/materials
+      ---
+      duration_ms: 41.6959
+      type: 'test'
+      ...
+    1..2
+ok 1 - etsy attributes
+  ---
+  duration_ms: 44.0157
+  type: 'suite'
+  ...
+# Subtest: etsy adapter
+    # Subtest: createDraftListing posts urlencoded body with Etsy headers
+    ok 1 - createDraftListing posts urlencoded body with Etsy headers
+      ---
+      duration_ms: 34.8785
+      type: 'test'
+      ...
+    # Subtest: uploadListingImage multipart posts JPEG to images endpoint
+    ok 2 - uploadListingImage multipart posts JPEG to images endpoint
+      ---
+      duration_ms: 0.7622
+      type: 'test'
+      ...
+    # Subtest: uploadListingVideo multipart posts MP4 to videos endpoint
+    ok 3 - uploadListingVideo multipart posts MP4 to videos endpoint
+      ---
+      duration_ms: 0.6106
+      type: 'test'
+      ...
+    # Subtest: uploadListingFile multipart posts PDF to files endpoint
+    ok 4 - uploadListingFile multipart posts PDF to files endpoint
+      ---
+      duration_ms: 0.4025
+      type: 'test'
+      ...
+    # Subtest: throws EtsyAdapterError on API failure
+    ok 5 - throws EtsyAdapterError on API failure
+      ---
+      duration_ms: 0.7086
+      type: 'test'
+      ...
+    1..5
+ok 2 - etsy adapter
+  ---
+  duration_ms: 38.3362
+  type: 'suite'
+  ...
+# Subtest: gumroad adapter
+    # Subtest: maps listing price to cents with default
+    ok 1 - maps listing price to cents with default
+      ---
+      duration_ms: 0.5617
+      type: 'test'
+      ...
+    # Subtest: createProduct posts form body with Bearer auth
+    ok 2 - createProduct posts form body with Bearer auth
+      ---
+      duration_ms: 29.5024
+      type: 'test'
+      ...
+    # Subtest: uploadProductFile multipart posts to product files endpoint
+    ok 3 - uploadProductFile multipart posts to product files endpoint
+      ---
+      duration_ms: 1.2884
+      type: 'test'
+      ...
+    # Subtest: publishProduct PUTs published=true
+    ok 4 - publishProduct PUTs published=true
+      ---
+      duration_ms: 0.4057
+      type: 'test'
+      ...
+    # Subtest: throws GumroadAdapterError on API failure
+    ok 5 - throws GumroadAdapterError on API failure
+      ---
+      duration_ms: 0.5434
+      type: 'test'
+      ...
+    1..5
+ok 3 - gumroad adapter
+  ---
+  duration_ms: 33.0564
+  type: 'suite'
+  ...
+# Subtest: lemonsqueezy adapter
+    # Subtest: re-exports listing price to cents helper
+    ok 1 - re-exports listing price to cents helper
+      ---
+      duration_ms: 0.7539
+      type: 'test'
+      ...
+    # Subtest: createProduct fetches store id then posts JSON:API with store relationship
+    ok 2 - createProduct fetches store id then posts JSON:API with store relationship
+      ---
+      duration_ms: 37.6062
+      type: 'test'
+      ...
+    # Subtest: getDefaultVariant GETs filter by product_id
+    ok 3 - getDefaultVariant GETs filter by product_id
+      ---
+      duration_ms: 0.4318
+      type: 'test'
+      ...
+    # Subtest: setVariantPrice PATCHes price in cents
+    ok 4 - setVariantPrice PATCHes price in cents
+      ---
+      duration_ms: 0.3829
+      type: 'test'
+      ...
+    # Subtest: uploadFile multipart posts to /v1/files with Bearer only
+    ok 5 - uploadFile multipart posts to /v1/files with Bearer only
+      ---
+      duration_ms: 1.2226
+      type: 'test'
+      ...
+    # Subtest: publishProduct PATCHes status published and reads buy_url
+    ok 6 - publishProduct PATCHes status published and reads buy_url
+      ---
+      duration_ms: 0.4023
+      type: 'test'
+      ...
+    # Subtest: throws LemonSqueezyAdapterError on API failure
+    ok 7 - throws LemonSqueezyAdapterError on API failure
+      ---
+      duration_ms: 0.9038
+      type: 'test'
+      ...
+    # Subtest: getDefaultVariant throws when no variants returned
+    ok 8 - getDefaultVariant throws when no variants returned
+      ---
+      duration_ms: 0.4609
+      type: 'test'
+      ...
+    1..8
+ok 4 - lemonsqueezy adapter
+  ---
+  duration_ms: 43.034
+  type: 'suite'
+  ...
+# Subtest: printify adapter — submitOrder
+    # Subtest: returns demo order in demo mode
+    ok 1 - returns demo order in demo mode
+      ---
+      duration_ms: 1.6739
+      type: 'test'
+      ...
+    # Subtest: posts live fulfillment order to Printify API
+    ok 2 - posts live fulfillment order to Printify API
+      ---
+      duration_ms: 34.0882
+      type: 'test'
+      ...
+    1..2
+ok 5 - printify adapter — submitOrder
+  ---
+  duration_ms: 36.4122
+  type: 'suite'
+  ...
+# Subtest: auditListing
+    # Subtest: does nothing for a healthy listing
+    ok 1 - does nothing for a healthy listing
+      ---
+      duration_ms: 1.5727
+      type: 'test'
+      ...
+    # Subtest: fills missing tags automatically
+    ok 2 - fills missing tags automatically
+      ---
+      duration_ms: 0.1314
+      type: 'test'
+      ...
+    # Subtest: fixes paid US shipping automatically
+    ok 3 - fixes paid US shipping automatically
+      ---
+      duration_ms: 0.0701
+      type: 'test'
+      ...
+    # Subtest: recommends (not auto-creates) a return policy
+    ok 4 - recommends (not auto-creates) a return policy
+      ---
+      duration_ms: 0.1564
+      type: 'test'
+      ...
+    # Subtest: queues underpricing as a recommendation, never an auto-fix
+    ok 5 - queues underpricing as a recommendation, never an auto-fix
+      ---
+      duration_ms: 0.1732
+      type: 'test'
+      ...
+    # Subtest: pushes marketing for stalled listings past the grace period
+    ok 6 - pushes marketing for stalled listings past the grace period
+      ---
+      duration_ms: 0.0632
+      type: 'test'
+      ...
+    # Subtest: gives new listings a traffic grace period
+    ok 7 - gives new listings a traffic grace period
+      ---
+      duration_ms: 0.0513
+      type: 'test'
+      ...
+    1..7
+ok 6 - auditListing
+  ---
+  duration_ms: 2.9019
+  type: 'suite'
+  ...
+# Subtest: buildTagFill
+    # Subtest: keeps existing tags first, dedupes, and caps at 13
+    ok 1 - keeps existing tags first, dedupes, and caps at 13
+      ---
+      duration_ms: 0.2819
+      type: 'test'
+      ...
+    # Subtest: drops tags over Etsy's 20-char limit
+    ok 2 - drops tags over Etsy's 20-char limit
+      ---
+      duration_ms: 0.1869
+      type: 'test'
+      ...
+    1..2
+ok 7 - buildTagFill
+  ---
+  duration_ms: 0.8164
+  type: 'suite'
+  ...
+# Subtest: ajax constants
+    # Subtest: defines agent microcopy for Nova, Forge, Pixel
+    ok 1 - defines agent microcopy for Nova, Forge, Pixel
+      ---
+      duration_ms: 1.3649
+      type: 'test'
+      ...
+    # Subtest: defines review gate microcopy
+    ok 2 - defines review gate microcopy
+      ---
+      duration_ms: 0.0956
+      type: 'test'
+      ...
+    # Subtest: returns activity line when agent is working
+    ok 3 - returns activity line when agent is working
+      ---
+      duration_ms: 0.0752
+      type: 'test'
+      ...
+    # Subtest: returns standing by when idle
+    ok 4 - returns standing by when idle
+      ---
+      duration_ms: 0.0486
+      type: 'test'
+      ...
+    # Subtest: has ordered pipeline stages ending at storefront
+    ok 5 - has ordered pipeline stages ending at storefront
+      ---
+      duration_ms: 2.9977
+      type: 'test'
+      ...
+    # Subtest: resolves display names
+    ok 6 - resolves display names
+      ---
+      duration_ms: 0.0736
+      type: 'test'
+      ...
+    1..6
+ok 8 - ajax constants
+  ---
+  duration_ms: 5.4605
+  type: 'suite'
+  ...
+# Subtest: etsy-auth
+    # Subtest: builds authorize URL with PKCE and Etsy connect endpoint
+    ok 1 - builds authorize URL with PKCE and Etsy connect endpoint
+      ---
+      duration_ms: 1.7627
+      type: 'test'
+      ...
+    # Subtest: parses Etsy user id prefix from access token
+    ok 2 - parses Etsy user id prefix from access token
+      ---
+      duration_ms: 0.1436
+      type: 'test'
+      ...
+    # Subtest: exchanges authorization code at Etsy token endpoint
+    ok 3 - exchanges authorization code at Etsy token endpoint
+      ---
+      duration_ms: 2.7315
+      type: 'test'
+      ...
+    # Subtest: refreshes tokens with refresh_token grant
+    ok 4 - refreshes tokens with refresh_token grant
+      ---
+      duration_ms: 0.5585
+      type: 'test'
+      ...
+    1..4
+ok 9 - etsy-auth
+  ---
+  duration_ms: 6.0046
+  type: 'suite'
+  ...
+# Subtest: etsy-pkce
+    # Subtest: produces stable S256 challenge for verifier
+    ok 1 - produces stable S256 challenge for verifier
+      ---
+      duration_ms: 0.1183
+      type: 'test'
+      ...
+    1..1
+ok 10 - etsy-pkce
+  ---
+  duration_ms: 0.3392
+  type: 'suite'
+  ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 1400,
+#   estimatedUsd: '0.000615',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# Subtest: Forge LLM schema
+    # Subtest: parses valid mocked Forge output with exactly 13 seo tags
+    ok 1 - parses valid mocked Forge output with exactly 13 seo tags
+      ---
+      duration_ms: 2.1785
+      type: 'test'
+      ...
+    # Subtest: rejects invalid podDetails (short artwork prompt)
+    ok 2 - rejects invalid podDetails (short artwork prompt)
+      ---
+      duration_ms: 0.4667
+      type: 'test'
+      ...
+    # Subtest: rejects wrong seoTags count
+    ok 3 - rejects wrong seoTags count
+      ---
+      duration_ms: 0.17
+      type: 'test'
+      ...
+    1..3
+ok 11 - Forge LLM schema
+  ---
+  duration_ms: 3.4452
+  type: 'suite'
+  ...
+# Subtest: guardrailedPrice
+    # Subtest: floors prices below $9.99
+    ok 1 - floors prices below $9.99
+      ---
+      duration_ms: 0.1009
+      type: 'test'
+      ...
+    # Subtest: caps prices above $149.99 at $49.99
+    ok 2 - caps prices above $149.99 at $49.99
+      ---
+      duration_ms: 0.0452
+      type: 'test'
+      ...
+    # Subtest: passes through prices in range
+    ok 3 - passes through prices in range
+      ---
+      duration_ms: 0.0464
+      type: 'test'
+      ...
+    1..3
+ok 12 - guardrailedPrice
+  ---
+  duration_ms: 0.3673
+  type: 'suite'
+  ...
+# Subtest: runForgeGeneration
+    # Subtest: uses mocked LLM output when a client is injected
+    ok 1 - uses mocked LLM output when a client is injected
+      ---
+      duration_ms: 7.0441
+      type: 'test'
+      ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 1400,
+#   estimatedUsd: '0.000615',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 1400,
+#   estimatedUsd: '0.000615',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+    # Subtest: falls back when LLM suggested price violates the schema cap
+    ok 2 - falls back when LLM suggested price violates the schema cap
+      ---
+      duration_ms: 509.3456
+      type: 'test'
+      ...
+    # Subtest: guardrails LLM suggested prices below $9.99
+    ok 3 - guardrails LLM suggested prices below $9.99
+      ---
+      duration_ms: 1.4358
+      type: 'test'
+      ...
+    # Subtest: falls back deterministically when forceFallback is set
+    ok 4 - falls back deterministically when forceFallback is set
+      ---
+      duration_ms: 4.1087
+      type: 'test'
+      ...
+    # Subtest: falls back when OPENAI_API_KEY is missing
+    ok 5 - falls back when OPENAI_API_KEY is missing
+      ---
+      duration_ms: 0.6889
+      type: 'test'
+      ...
+    1..5
+ok 13 - runForgeGeneration
+  ---
+  duration_ms: 523.1398
+  type: 'suite'
+  ...
+# Subtest: forgeResultToGenerationLlm
+    # Subtest: maps LLM runs to product_generations LLM columns
+    ok 1 - maps LLM runs to product_generations LLM columns
+      ---
+      duration_ms: 1.0341
+      type: 'test'
+      ...
+    # Subtest: leaves LLM columns null for fallback runs
+    ok 2 - leaves LLM columns null for fallback runs
+      ---
+      duration_ms: 0.4804
+      type: 'test'
+      ...
+    1..2
+ok 14 - forgeResultToGenerationLlm
+  ---
+  duration_ms: 1.6592
+  type: 'suite'
+  ...
+# Subtest: Forge compliance mapping
+    # Subtest: does not persist forge review notes as compliance artifacts
+    ok 1 - does not persist forge review notes as compliance artifacts
+      ---
+      duration_ms: 0.593
+      type: 'test'
+      ...
+    1..1
+ok 15 - Forge compliance mapping
+  ---
+  duration_ms: 0.7261
+  type: 'suite'
+  ...
+# Subtest: AI disclosure helper
+    # Subtest: appends disclosure when missing from copy
+    ok 1 - appends disclosure when missing from copy
+      ---
+      duration_ms: 0.0764
+      type: 'test'
+      ...
+    1..1
+ok 16 - AI disclosure helper
+  ---
+  duration_ms: 0.1274
+  type: 'suite'
+  ...
+# Subtest: Forge security boundary
+    # Subtest: simulator imports forge, not llm directly
+    ok 1 - simulator imports forge, not llm directly
+      ---
+      duration_ms: 9.4276
+      type: 'test'
+      ...
+    1..1
+ok 17 - Forge security boundary
+  ---
+  duration_ms: 9.5579
+  type: 'suite'
+  ...
+# Subtest: idea playbook
+    # Subtest: names the proven levers (personalization, occasion, saturation, seasonal)
+    ok 1 - names the proven levers (personalization, occasion, saturation, seasonal)
+      ---
+      duration_ms: 0.8545
+      type: 'test'
+      ...
+    # Subtest: is embedded in Nova's system prompt alongside the pet scope
+    ok 2 - is embedded in Nova's system prompt alongside the pet scope
+      ---
+      duration_ms: 0.2403
+      type: 'test'
+      ...
+    1..2
+ok 18 - idea playbook
+  ---
+  duration_ms: 4.013
+  type: 'suite'
+  ...
+# Subtest: refreshEtsyKeywordCounts
+    # Subtest: inserts new terms and updates existing ones with real counts
+    ok 1 - inserts new terms and updates existing ones with real counts
+      ---
+      duration_ms: 0.9528
+      type: 'test'
+      ...
+    # Subtest: writes nothing when the API returns no counts
+    ok 2 - writes nothing when the API returns no counts
+      ---
+      duration_ms: 0.1287
+      type: 'test'
+      ...
+    1..2
+ok 19 - refreshEtsyKeywordCounts
+  ---
+  duration_ms: 1.7418
+  type: 'suite'
+  ...
+# Subtest: saveManualKeywords
+    # Subtest: saves operator demand numbers as source 'manual'
+    ok 1 - saves operator demand numbers as source 'manual'
+      ---
+      duration_ms: 0.1807
+      type: 'test'
+      ...
+    # Subtest: a demand-only update does not clobber an existing competing count
+    ok 2 - a demand-only update does not clobber an existing competing count
+      ---
+      duration_ms: 0.1069
+      type: 'test'
+      ...
+    1..2
+ok 20 - saveManualKeywords
+  ---
+  duration_ms: 0.3689
+  type: 'suite'
+  ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 300,
+#   estimatedUsd: '0.000135',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 300,
+#   estimatedUsd: '0.000135',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# Subtest: buildNovaIdeationUserPrompt
+    # Subtest: omits past-cycle block when pastContext is absent
+    ok 1 - omits past-cycle block when pastContext is absent
+      ---
+      duration_ms: 0.6604
+      type: 'test'
+      ...
+    # Subtest: appends IMPORTANT CONTEXT when pastContext is provided
+    ok 2 - appends IMPORTANT CONTEXT when pastContext is provided
+      ---
+      duration_ms: 0.2231
+      type: 'test'
+      ...
+    1..2
+ok 21 - buildNovaIdeationUserPrompt
+  ---
+  duration_ms: 1.5869
+  type: 'suite'
+  ...
+# Subtest: Nova past context extraction
+    # Subtest: prefers product_ideas.niche over raw_payload
+    ok 1 - prefers product_ideas.niche over raw_payload
+      ---
+      duration_ms: 0.208
+      type: 'test'
+      ...
+    # Subtest: falls back to raw_payload.niche when column is empty
+    ok 2 - falls back to raw_payload.niche when column is empty
+      ---
+      duration_ms: 0.0603
+      type: 'test'
+      ...
+    # Subtest: extracts niches from joined listing rows and dedupes
+    ok 3 - extracts niches from joined listing rows and dedupes
+      ---
+      duration_ms: 1.1796
+      type: 'test'
+      ...
+    # Subtest: buildNovaPastContext returns undefined when all inputs are empty
+    ok 4 - buildNovaPastContext returns undefined when all inputs are empty
+      ---
+      duration_ms: 0.1379
+      type: 'test'
+      ...
+    1..4
+ok 22 - Nova past context extraction
+  ---
+  duration_ms: 1.8479
+  type: 'suite'
+  ...
+# Subtest: Nova LLM schema
+    # Subtest: parses valid mocked LLM output
+    ok 1 - parses valid mocked LLM output
+      ---
+      duration_ms: 1.8858
+      type: 'test'
+      ...
+    1..1
+ok 23 - Nova LLM schema
+  ---
+  duration_ms: 2.1394
+  type: 'suite'
+  ...
+# Subtest: runNovaIdeation
+    # Subtest: uses mocked LLM output when a client is injected
+    ok 1 - uses mocked LLM output when a client is injected
+      ---
+      duration_ms: 6.6067
+      type: 'test'
+      ...
+    # Subtest: filters blocked ideas from LLM output
+    ok 2 - filters blocked ideas from LLM output
+      ---
+      duration_ms: 1.0996
+      type: 'test'
+      ...
+    # Subtest: falls back deterministically when forceFallback is set
+    ok 3 - falls back deterministically when forceFallback is set
+      ---
+      duration_ms: 2.0603
+      type: 'test'
+      ...
+    # Subtest: falls back when OPENAI_API_KEY is missing
+    ok 4 - falls back when OPENAI_API_KEY is missing
+      ---
+      duration_ms: 0.8292
+      type: 'test'
+      ...
+    1..4
+ok 24 - runNovaIdeation
+  ---
+  duration_ms: 10.7761
+  type: 'suite'
+  ...
+# Subtest: Product Brain persistence mapping
+    # Subtest: maps brain_score, brain_validation, brain_verdict, brain_evaluated_at
+    ok 1 - maps brain_score, brain_validation, brain_verdict, brain_evaluated_at
+      ---
+      duration_ms: 1.7778
+      type: 'test'
+      ...
+    1..1
+ok 25 - Product Brain persistence mapping
+  ---
+  duration_ms: 1.8602
+  type: 'suite'
+  ...
+# Subtest: Forge idea selection
+    # Subtest: prefers approve_for_generation over needs_revision
+    ok 1 - prefers approve_for_generation over needs_revision
+      ---
+      duration_ms: 0.1534
+      type: 'test'
+      ...
+    # Subtest: picks highest trend score within the same verdict tier
+    ok 2 - picks highest trend score within the same verdict tier
+      ---
+      duration_ms: 0.0764
+      type: 'test'
+      ...
+    # Subtest: allows safe needs_revision only when no approved ideas exist
+    ok 3 - allows safe needs_revision only when no approved ideas exist
+      ---
+      duration_ms: 0.0558
+      type: 'test'
+      ...
+    # Subtest: rejects needs_revision when risk level is not safe
+    ok 4 - rejects needs_revision when risk level is not safe
+      ---
+      duration_ms: 0.3229
+      type: 'test'
+      ...
+    # Subtest: never selects blocked ideas
+    ok 5 - never selects blocked ideas
+      ---
+      duration_ms: 0.075
+      type: 'test'
+      ...
+    1..5
+ok 26 - Forge idea selection
+  ---
+  duration_ms: 1.1725
+  type: 'suite'
+  ...
+# Subtest: Nova security boundary
+    # Subtest: nova service module is server-only and not re-exported from client paths
+    ok 1 - nova service module is server-only and not re-exported from client paths
+      ---
+      duration_ms: 10.3144
+      type: 'test'
+      ...
+    1..1
+ok 27 - Nova security boundary
+  ---
+  duration_ms: 11.1168
+  type: 'suite'
+  ...
+# Subtest: buildPixelPromoPackage
+    # Subtest: builds captions, platform copy, hooks, and hashtags from listing context
+    ok 1 - builds captions, platform copy, hooks, and hashtags from listing context
+      ---
+      duration_ms: 2.4352
+      type: 'test'
+      ...
+    # Subtest: schedules content job updates with metadata when column exists
+    ok 2 - schedules content job updates with metadata when column exists
+      ---
+      duration_ms: 1.0794
+      type: 'test'
+      ...
+    1..2
+ok 28 - buildPixelPromoPackage
+  ---
+  duration_ms: 4.1781
+  type: 'suite'
+  ...
+# Subtest: marketing playbook
+    # Subtest: names the proven conversion levers
+    ok 1 - names the proven conversion levers
+      ---
+      duration_ms: 0.7649
+      type: 'test'
+      ...
+    # Subtest: is embedded in Pixel's marketing system prompt
+    ok 2 - is embedded in Pixel's marketing system prompt
+      ---
+      duration_ms: 0.1114
+      type: 'test'
+      ...
+    1..2
+ok 29 - marketing playbook
+  ---
+  duration_ms: 1.5411
+  type: 'suite'
+  ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 200,
+#   estimatedUsd: '0.000084',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# Subtest: PixelMarketingLlmSchema
+    # Subtest: parses valid mocked LLM output
+    ok 1 - parses valid mocked LLM output
+      ---
+      duration_ms: 1.8188
+      type: 'test'
+      ...
+    1..1
+ok 30 - PixelMarketingLlmSchema
+  ---
+  duration_ms: 2.4384
+  type: 'suite'
+  ...
+# Subtest: generatePixelMarketing
+    # Subtest: uses mocked LLM output when a client is injected
+    ok 1 - uses mocked LLM output when a client is injected
+      ---
+      duration_ms: 5.2346
+      type: 'test'
+      ...
+    # Subtest: falls back to deterministic package when forceFallback is set
+    ok 2 - falls back to deterministic package when forceFallback is set
+      ---
+      duration_ms: 1.5151
+      type: 'test'
+      ...
+    # Subtest: falls back when LLM returns invalid JSON
+    ok 3 - falls back when LLM returns invalid JSON
+      ---
+      duration_ms: 518.6325
+      type: 'test'
+      ...
+    1..3
+ok 31 - generatePixelMarketing
+  ---
+  duration_ms: 525.6493
+  type: 'suite'
+  ...
+# Subtest: buildVideoSpec
+    # Subtest: produces a 9:16 spec within the playbook duration bounds
+    ok 1 - produces a 9:16 spec within the playbook duration bounds
+      ---
+      duration_ms: 1.4128
+      type: 'test'
+      ...
+    # Subtest: opens on a hook and ends on a CTA, every beat within the max
+    ok 2 - opens on a hook and ends on a CTA, every beat within the max
+      ---
+      duration_ms: 0.4875
+      type: 'test'
+      ...
+    # Subtest: detects a gotcha-day occasion and puts it in the CTA
+    ok 3 - detects a gotcha-day occasion and puts it in the CTA
+      ---
+      duration_ms: 0.1716
+      type: 'test'
+      ...
+    # Subtest: picks warm audio energy for emotional (memorial) niches
+    ok 4 - picks warm audio energy for emotional (memorial) niches
+      ---
+      duration_ms: 0.1096
+      type: 'test'
+      ...
+    # Subtest: carries the hashtag list through, capped at the playbook max
+    ok 5 - carries the hashtag list through, capped at the playbook max
+      ---
+      duration_ms: 0.1989
+      type: 'test'
+      ...
+    # Subtest: still builds a valid spec with no mockups (text-only sources)
+    ok 6 - still builds a valid spec with no mockups (text-only sources)
+      ---
+      duration_ms: 0.109
+      type: 'test'
+      ...
+    1..6
+ok 32 - buildVideoSpec
+  ---
+  duration_ms: 3.2968
+  type: 'suite'
+  ...
+# Subtest: order-fulfillment
+    # Subtest: maps Etsy shipping to Printify address_to shape
+    ok 1 - maps Etsy shipping to Printify address_to shape
+      ---
+      duration_ms: 0.5759
+      type: 'test'
+      ...
+    # Subtest: resolves shipping from order metadata with demo fallback
+    ok 2 - resolves shipping from order metadata with demo fallback
+      ---
+      duration_ms: 0.89
+      type: 'test'
+      ...
+    # Subtest: submits demo Printify production for a fulfillment_ready order
+    ok 3 - submits demo Printify production for a fulfillment_ready order
+      ---
+      duration_ms: 0.6213
+      type: 'test'
+      ...
+    1..3
+ok 33 - order-fulfillment
+  ---
+  duration_ms: 2.8133
+  type: 'suite'
+  ...
+# Subtest: order-types IP guardrails
+    # Subtest: blocks copyrighted franchise terms
+    ok 1 - blocks copyrighted franchise terms
+      ---
+      duration_ms: 0.6902
+      type: 'test'
+      ...
+    # Subtest: blocks marvel and superhero references in style prompts
+    ok 2 - blocks marvel and superhero references in style prompts
+      ---
+      duration_ms: 0.1212
+      type: 'test'
+      ...
+    # Subtest: rewrites watercolor preset into original art prompt
+    ok 3 - rewrites watercolor preset into original art prompt
+      ---
+      duration_ms: 0.2046
+      type: 'test'
+      ...
+    # Subtest: rewrites renaissance, line-art, and pop-art presets
+    ok 4 - rewrites renaissance, line-art, and pop-art presets
+      ---
+      duration_ms: 0.181
+      type: 'test'
+      ...
+    # Subtest: sanitizes custom styles without infringing terms
+    ok 5 - sanitizes custom styles without infringing terms
+      ---
+      duration_ms: 0.08
+      type: 'test'
+      ...
+    # Subtest: rejects empty style preference
+    ok 6 - rejects empty style preference
+      ---
+      duration_ms: 0.0458
+      type: 'test'
+      ...
+    1..6
+ok 34 - order-types IP guardrails
+  ---
+  duration_ms: 1.9946
+  type: 'suite'
+  ...
+# Subtest: order-types state machine
+    # Subtest: defines five order queue statuses
+    ok 1 - defines five order queue statuses
+      ---
+      duration_ms: 0.9488
+      type: 'test'
+      ...
+    # Subtest: allows pending → processing → fulfillment_ready → production_submitted
+    ok 2 - allows pending → processing → fulfillment_ready → production_submitted
+      ---
+      duration_ms: 0.3724
+      type: 'test'
+      ...
+    # Subtest: allows failure from pending, processing, or fulfillment_ready
+    ok 3 - allows failure from pending, processing, or fulfillment_ready
+      ---
+      duration_ms: 0.1266
+      type: 'test'
+      ...
+    # Subtest: blocks invalid transitions
+    ok 4 - blocks invalid transitions
+      ---
+      duration_ms: 1.2941
+      type: 'test'
+      ...
+    1..4
+ok 35 - order-types state machine
+  ---
+  duration_ms: 2.9534
+  type: 'suite'
+  ...
+# Subtest: order-types webhook extraction
+    # Subtest: extracts personalization fields from mock Etsy payload
+    ok 1 - extracts personalization fields from mock Etsy payload
+      ---
+      duration_ms: 0.2258
+      type: 'test'
+      ...
+    # Subtest: falls back to transaction variations for photo and style
+    ok 2 - falls back to transaction variations for photo and style
+      ---
+      duration_ms: 0.0706
+      type: 'test'
+      ...
+    # Subtest: accepts demo photo URLs for scaffold mode
+    ok 3 - accepts demo photo URLs for scaffold mode
+      ---
+      duration_ms: 0.0886
+      type: 'test'
+      ...
+    # Subtest: extracts personalization from live Etsy receipt transaction variations
+    ok 4 - extracts personalization from live Etsy receipt transaction variations
+      ---
+      duration_ms: 0.0716
+      type: 'test'
+      ...
+    # Subtest: unwraps nested Etsy event envelopes
+    ok 5 - unwraps nested Etsy event envelopes
+      ---
+      duration_ms: 0.0597
+      type: 'test'
+      ...
+    # Subtest: extracts shipping from Etsy receipt fields
+    ok 6 - extracts shipping from Etsy receipt fields
+      ---
+      duration_ms: 0.2623
+      type: 'test'
+      ...
+    1..6
+ok 36 - order-types webhook extraction
+  ---
+  duration_ms: 0.8875
+  type: 'suite'
+  ...
+# Subtest: matchMarketSignals
+    # Subtest: matches an idea to the best real keyword row by token overlap
+    ok 1 - matches an idea to the best real keyword row by token overlap
+      ---
+      duration_ms: 0.7937
+      type: 'test'
+      ...
+    # Subtest: returns nulls when no keyword rows are given
+    ok 2 - returns nulls when no keyword rows are given
+      ---
+      duration_ms: 0.0911
+      type: 'test'
+      ...
+    1..2
+ok 37 - matchMarketSignals
+  ---
+  duration_ms: 1.5061
+  type: 'suite'
+  ...
+# Subtest: evaluateMarketOpportunity
+    # Subtest: recommends LIST when real demand is healthy and supply is low
+    ok 1 - recommends LIST when real demand is healthy and supply is low
+      ---
+      duration_ms: 0.7515
+      type: 'test'
+      ...
+    # Subtest: recommends SKIP when the niche is a saturated red ocean
+    ok 2 - recommends SKIP when the niche is a saturated red ocean
+      ---
+      duration_ms: 0.6027
+      type: 'test'
+      ...
+    # Subtest: does not hard-skip when there is no demand data (advisory only)
+    ok 3 - does not hard-skip when there is no demand data (advisory only)
+      ---
+      duration_ms: 0.12
+      type: 'test'
+      ...
+    # Subtest: rewards proven bestseller patterns (personalization + occasion)
+    ok 4 - rewards proven bestseller patterns (personalization + occasion)
+      ---
+      duration_ms: 0.1342
+      type: 'test'
+      ...
+    # Subtest: scores margin from retail vs estimated POD cost
+    ok 5 - scores margin from retail vs estimated POD cost
+      ---
+      duration_ms: 0.2173
+      type: 'test'
+      ...
+    # Subtest: estimates POD cost by format
+    ok 6 - estimates POD cost by format
+      ---
+      duration_ms: 0.2953
+      type: 'test'
+      ...
+    1..6
+ok 38 - evaluateMarketOpportunity
+  ---
+  duration_ms: 2.622
+  type: 'suite'
+  ...
+# Subtest: product brain validators
+    # Subtest: blocks copyrighted or trademark references
+    ok 1 - blocks copyrighted or trademark references
+      ---
+      duration_ms: 2.5773
+      type: 'test'
+      ...
+    # Subtest: blocks medical treatment claims
+    ok 2 - blocks medical treatment claims
+      ---
+      duration_ms: 0.5094
+      type: 'test'
+      ...
+    1..2
+ok 39 - product brain validators
+  ---
+  duration_ms: 3.737
+  type: 'suite'
+  ...
+# Subtest: product brain scoring
+    # Subtest: scores specific utility ideas higher than generic planners
+    ok 1 - scores specific utility ideas higher than generic planners
+      ---
+      duration_ms: 0.4542
+      type: 'test'
+      ...
+    # Subtest: raises compliance risk when blocked claims appear in copy
+    ok 2 - raises compliance risk when blocked claims appear in copy
+      ---
+      duration_ms: 0.1914
+      type: 'test'
+      ...
+    # Subtest: returns a human-readable score explanation
+    ok 3 - returns a human-readable score explanation
+      ---
+      duration_ms: 0.2035
+      type: 'test'
+      ...
+    1..3
+ok 40 - product brain scoring
+  ---
+  duration_ms: 0.9642
+  type: 'suite'
+  ...
+# Subtest: product brain verdicts
+    # Subtest: marks vague generic "Daily Planner" ideas as needs_revision
+    ok 1 - marks vague generic "Daily Planner" ideas as needs_revision
+      ---
+      duration_ms: 0.6512
+      type: 'test'
+      ...
+    # Subtest: approves specific utility products for generation
+    ok 2 - approves specific utility products for generation
+      ---
+      duration_ms: 1.0598
+      type: 'test'
+      ...
+    # Subtest: blocks copyrighted or trademark product ideas
+    ok 3 - blocks copyrighted or trademark product ideas
+      ---
+      duration_ms: 0.1474
+      type: 'test'
+      ...
+    # Subtest: blocks medical treatment claims
+    ok 4 - blocks medical treatment claims
+      ---
+      duration_ms: 0.1812
+      type: 'test'
+      ...
+    # Subtest: marks vague products with no clear audience as needs_revision
+    ok 5 - marks vague products with no clear audience as needs_revision
+      ---
+      duration_ms: 0.3114
+      type: 'test'
+      ...
+    # Subtest: blocks when compliance risk is high even if utility scores are strong
+    ok 6 - blocks when compliance risk is high even if utility scores are strong
+      ---
+      duration_ms: 0.2534
+      type: 'test'
+      ...
+    1..6
+ok 41 - product brain verdicts
+  ---
+  duration_ms: 3.0823
+  type: 'suite'
+  ...
+# Subtest: buildReviewerSystemPrompt
+    # Subtest: names the brand and always includes the five scoring dimensions
+    ok 1 - names the brand and always includes the five scoring dimensions
+      ---
+      duration_ms: 0.6701
+      type: 'test'
+      ...
+    # Subtest: hard-enforces store niche fit when a niche is provided
+    ok 2 - hard-enforces store niche fit when a niche is provided
+      ---
+      duration_ms: 0.1729
+      type: 'test'
+      ...
+    # Subtest: omits the store-fit block when no niche is given
+    ok 3 - omits the store-fit block when no niche is given
+      ---
+      duration_ms: 0.147
+      type: 'test'
+      ...
+    # Subtest: JSON instructions request all five subscores
+    ok 4 - JSON instructions request all five subscores
+      ---
+      duration_ms: 0.0988
+      type: 'test'
+      ...
+    1..4
+ok 42 - buildReviewerSystemPrompt
+  ---
+  duration_ms: 1.7367
+  type: 'suite'
+  ...
+# Subtest: listing publish transitions
+    # Subtest: exposes all listing statuses including published
+    ok 1 - exposes all listing statuses including published
+      ---
+      duration_ms: 0.7195
+      type: 'test'
+      ...
+    # Subtest: ends published and rejected states with no outbound edges
+    ok 2 - ends published and rejected states with no outbound edges
+      ---
+      duration_ms: 6.2385
+      type: 'test'
+      ...
+    # Subtest: requires human review before publish (no skip to published)
+    ok 3 - requires human review before publish (no skip to published)
+      ---
+      duration_ms: 1.3445
+      type: 'test'
+      ...
+    # Subtest: allows demo path Forge → review → approve → Pixel → storefront
+    ok 4 - allows demo path Forge → review → approve → Pixel → storefront
+      ---
+      duration_ms: 0.0803
+      type: 'test'
+      ...
+    # Subtest: allows reject from pending_review only
+    ok 5 - allows reject from pending_review only
+      ---
+      duration_ms: 0.1615
+      type: 'test'
+      ...
+    1..5
+ok 43 - listing publish transitions
+  ---
+  duration_ms: 9.2054
+  type: 'suite'
+  ...
+# Subtest: review gate transitions
+    # Subtest: locks review after approve or reject
+    ok 1 - locks review after approve or reject
+      ---
+      duration_ms: 0.1365
+      type: 'test'
+      ...
+    1..1
+ok 44 - review gate transitions
+  ---
+  duration_ms: 0.1876
+  type: 'suite'
+  ...
+# Subtest: auditListing
+    # Subtest: scores a complete, proven listing high with no criticals
+    ok 1 - scores a complete, proven listing high with no criticals
+      ---
+      duration_ms: 1.9703
+      type: 'test'
+      ...
+    # Subtest: flags missing title, price, and image as critical
+    ok 2 - flags missing title, price, and image as critical
+      ---
+      duration_ms: 0.7757
+      type: 'test'
+      ...
+    # Subtest: flags a demo placeholder image as missing
+    ok 3 - flags a demo placeholder image as missing
+      ---
+      duration_ms: 0.1859
+      type: 'test'
+      ...
+    1..3
+ok 45 - auditListing
+  ---
+  duration_ms: 3.6631
+  type: 'suite'
+  ...
+# Subtest: auditStore
+    # Subtest: aggregates scores and flags duplicate titles
+    ok 1 - aggregates scores and flags duplicate titles
+      ---
+      duration_ms: 0.3533
+      type: 'test'
+      ...
+    # Subtest: returns a clean report for an empty shop
+    ok 2 - returns a clean report for an empty shop
+      ---
+      duration_ms: 0.1409
+      type: 'test'
+      ...
+    1..2
+ok 46 - auditStore
+  ---
+  duration_ms: 0.5845
+  type: 'suite'
+  ...
+# Subtest: buildFalInput
+    # Subtest: forces 9:16, maps duration, and keeps the product faithful
+    ok 1 - forces 9:16, maps duration, and keeps the product faithful
+      ---
+      duration_ms: 0.5876
+      type: 'test'
+      ...
+    1..1
+ok 47 - buildFalInput
+  ---
+  duration_ms: 1.151
+  type: 'suite'
+  ...
+# Subtest: fal-render (configured)
+    # Subtest: submits and returns a request id, with a Key auth header
+    ok 1 - submits and returns a request id, with a Key auth header
+      ---
+      duration_ms: 0.8039
+      type: 'test'
+      ...
+    # Subtest: reports failure when submit is rejected
+    ok 2 - reports failure when submit is rejected
+      ---
+      duration_ms: 0.2848
+      type: 'test'
+      ...
+    # Subtest: polls pending, then returns the MP4 URL on completion
+    ok 3 - polls pending, then returns the MP4 URL on completion
+      ---
+      duration_ms: 0.7419
+      type: 'test'
+      ...
+    1..3
+ok 48 - fal-render (configured)
+  ---
+  duration_ms: 1.9673
+  type: 'suite'
+  ...
+# Subtest: fal-render (not configured)
+    # Subtest: is dormant without FAL_KEY
+    ok 1 - is dormant without FAL_KEY
+      ---
+      duration_ms: 0.1217
+      type: 'test'
+      ...
+    1..1
+ok 49 - fal-render (not configured)
+  ---
+  duration_ms: 0.1714
+  type: 'suite'
+  ...
+# Subtest: enqueueVideoJob
+    # Subtest: inserts a pending job row
+    ok 1 - inserts a pending job row
+      ---
+      duration_ms: 0.8614
+      type: 'test'
+      ...
+    1..1
+ok 50 - enqueueVideoJob
+  ---
+  duration_ms: 1.557
+  type: 'suite'
+  ...
+# Subtest: drainVideoJobs
+    # Subtest: attaches a completed etsy_listing render to the listing
+    ok 1 - attaches a completed etsy_listing render to the listing
+      ---
+      duration_ms: 1.46
+      type: 'test'
+      ...
+    # Subtest: posts a completed social render to social
+    ok 2 - posts a completed social render to social
+      ---
+      duration_ms: 1.1495
+      type: 'test'
+      ...
+    # Subtest: leaves a still-rendering job pending and bumps attempts
+    ok 3 - leaves a still-rendering job pending and bumps attempts
+      ---
+      duration_ms: 0.1549
+      type: 'test'
+      ...
+    1..3
+ok 51 - drainVideoJobs
+  ---
+  duration_ms: 2.9112
+  type: 'suite'
+  ...
+# Subtest: renderAndAttachListingVideo
+    # Subtest: skips (does not throw) when FAL_KEY is not set
+    ok 1 - skips (does not throw) when FAL_KEY is not set
+      ---
+      duration_ms: 0.8944
+      type: 'test'
+      ...
+    # Subtest: renders a 1:1 clip and uploads it to the listing
+    ok 2 - renders a 1:1 clip and uploads it to the listing
+      ---
+      duration_ms: 1.8892
+      type: 'test'
+      ...
+    1..2
+ok 52 - renderAndAttachListingVideo
+  ---
+  duration_ms: 3.4875
+  type: 'suite'
+  ...
+# Subtest: getShareSaveBaseUrl
+    # Subtest: defaults to the operator share domain
+    ok 1 - defaults to the operator share domain
+      ---
+      duration_ms: 1.0001
+      type: 'test'
+      ...
+    # Subtest: normalizes env overrides (scheme + trailing slash)
+    ok 2 - normalizes env overrides (scheme + trailing slash)
+      ---
+      duration_ms: 0.2996
+      type: 'test'
+      ...
+    1..2
+ok 53 - getShareSaveBaseUrl
+  ---
+  duration_ms: 2.0164
+  type: 'suite'
+  ...
+# Subtest: extractEtsyListingId
+    # Subtest: accepts raw numeric ids
+    ok 1 - accepts raw numeric ids
+      ---
+      duration_ms: 0.2086
+      type: 'test'
+      ...
+    # Subtest: extracts the id from listing URLs
+    ok 2 - extracts the id from listing URLs
+      ---
+      duration_ms: 0.3343
+      type: 'test'
+      ...
+    # Subtest: returns null for non-listing values
+    ok 3 - returns null for non-listing values
+      ---
+      duration_ms: 0.3348
+      type: 'test'
+      ...
+    1..3
+ok 54 - extractEtsyListingId
+  ---
+  duration_ms: 1.0513
+  type: 'suite'
+  ...
+# Subtest: buildShareSaveUrl
+    # Subtest: builds a listing link when the id is known
+    ok 1 - builds a listing link when the id is known
+      ---
+      duration_ms: 0.2743
+      type: 'test'
+      ...
+    # Subtest: derives the id from a stored listing URL
+    ok 2 - derives the id from a stored listing URL
+      ---
+      duration_ms: 0.242
+      type: 'test'
+      ...
+    # Subtest: falls back to the shop link when no id is derivable
+    ok 3 - falls back to the shop link when no id is derivable
+      ---
+      duration_ms: 0.1877
+      type: 'test'
+      ...
+    1..3
+ok 55 - buildShareSaveUrl
+  ---
+  duration_ms: 1.0388
+  type: 'suite'
+  ...
+# Subtest: fetchFactorySnapshot store metrics
+    # Subtest: counts published listings for storefront metrics
+    ok 1 - counts published listings for storefront metrics
+      ---
+      duration_ms: 1.7422
+      type: 'test'
+      ...
+    1..1
+ok 56 - fetchFactorySnapshot store metrics
+  ---
+  duration_ms: 2.2858
+  type: 'suite'
+  ...
+# Subtest: getWeekStartIso
+    # Subtest: returns Monday 00:00 UTC for a mid-week date
+    ok 1 - returns Monday 00:00 UTC for a mid-week date
+      ---
+      duration_ms: 1.3701
+      type: 'test'
+      ...
+    # Subtest: rolls back to previous Monday when called on Sunday
+    ok 2 - rolls back to previous Monday when called on Sunday
+      ---
+      duration_ms: 0.1042
+      type: 'test'
+      ...
+    1..2
+ok 57 - getWeekStartIso
+  ---
+  duration_ms: 2.0317
+  type: 'suite'
+  ...
+# Subtest: getPublishedListingCount
+    # Subtest: counts published listings for the user
+    ok 1 - counts published listings for the user
+      ---
+      duration_ms: 0.2593
+      type: 'test'
+      ...
+    1..1
+ok 58 - getPublishedListingCount
+  ---
+  duration_ms: 0.3222
+  type: 'suite'
+  ...
+# Subtest: getWeeklyGenerationCount
+    # Subtest: filters generations by user and week start
+    ok 1 - filters generations by user and week start
+      ---
+      duration_ms: 0.1652
+      type: 'test'
+      ...
+    1..1
+ok 59 - getWeeklyGenerationCount
+  ---
+  duration_ms: 0.2255
+  type: 'suite'
+  ...
+# Subtest: getWeeklyApprovedListingCount
+    # Subtest: counts approved or published listings created this week
+    ok 1 - counts approved or published listings created this week
+      ---
+      duration_ms: 0.2339
+      type: 'test'
+      ...
+    1..1
+ok 60 - getWeeklyApprovedListingCount
+  ---
+  duration_ms: 0.5272
+  type: 'suite'
+  ...
+# Subtest: getPipelineFunnel
+    # Subtest: returns ideas and passed for the week, approved and published all time
+    ok 1 - returns ideas and passed for the week, approved and published all time
+      ---
+      duration_ms: 1.0934
+      type: 'test'
+      ...
+    1..1
+ok 61 - getPipelineFunnel
+  ---
+  duration_ms: 1.245
+  type: 'suite'
+  ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 60,
+#   estimatedUsd: '0.000017',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+# Subtest: completeJson
+    # Subtest: parses and validates structured JSON from a mocked OpenAI client
+    ok 1 - parses and validates structured JSON from a mocked OpenAI client
+      ---
+      duration_ms: 3.2736
+      type: 'test'
+      ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 60,
+#   estimatedUsd: '0.000017',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+    # Subtest: retries when the model returns invalid JSON then succeeds
+    ok 2 - retries when the model returns invalid JSON then succeeds
+      ---
+      duration_ms: 521.3946
+      type: 'test'
+      ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 60,
+#   estimatedUsd: '0.000017',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+    # Subtest: retries when JSON fails Zod validation then succeeds
+    ok 3 - retries when JSON fails Zod validation then succeeds
+      ---
+      duration_ms: 515.1711
+      type: 'test'
+      ...
+# [llm:cost] {
+#   model: 'gpt-4o-mini',
+#   tokens: 60,
+#   estimatedUsd: '0.000017',
+#   persisted: false
+# }
+# [llm:usage] failed to log usage: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY
+    # Subtest: retries on retryable API errors then succeeds
+    ok 4 - retries on retryable API errors then succeeds
+      ---
+      duration_ms: 514.0454
+      type: 'test'
+      ...
+    # Subtest: throws after exhausting retries on persistent invalid output
+    ok 5 - throws after exhausting retries on persistent invalid output
+      ---
+      duration_ms: 515.0989
+      type: 'test'
+      ...
+    # Subtest: does not retry non-retryable configuration errors
+    ok 6 - does not retry non-retryable configuration errors
+      ---
+      duration_ms: 1.222
+      type: 'test'
+      ...
+    1..6
+ok 62 - completeJson
+  ---
+  duration_ms: 2072.3608
+  type: 'suite'
+  ...
+# Subtest: product mappers — Product Brain on product_ideas
+    # Subtest: maps a full brain snapshot from DB columns
+    ok 1 - maps a full brain snapshot from DB columns
+      ---
+      duration_ms: 0.7321
+      type: 'test'
+      ...
+    # Subtest: returns null when brain verdict or evaluated_at is missing
+    ok 2 - returns null when brain verdict or evaluated_at is missing
+      ---
+      duration_ms: 0.0951
+      type: 'test'
+      ...
+    # Subtest: round-trips evaluateProductIdea through DB update shape
+    ok 3 - round-trips evaluateProductIdea through DB update shape
+      ---
+      duration_ms: 5.5493
+      type: 'test'
+      ...
+    1..3
+ok 63 - product mappers — Product Brain on product_ideas
+  ---
+  duration_ms: 7.0749
+  type: 'suite'
+  ...
+# Subtest: product mappers — product_generations
+    # Subtest: maps generation rows into domain objects with podDetails and compliance
+    ok 1 - maps generation rows into domain objects with podDetails and compliance
+      ---
+      duration_ms: 0.7512
+      type: 'test'
+      ...
+    # Subtest: defaults invalid generation_status to pending
+    ok 2 - defaults invalid generation_status to pending
+      ---
+      duration_ms: 0.0864
+      type: 'test'
+      ...
+    # Subtest: maps domain inserts and partial updates to DB column names
+    ok 3 - maps domain inserts and partial updates to DB column names
+      ---
+      duration_ms: 0.2117
+      type: 'test'
+      ...
+    1..3
+ok 64 - product mappers — product_generations
+  ---
+  duration_ms: 1.2585
+  type: 'suite'
+  ...
+# Subtest: review approval guards
+    # Subtest: detects demo bypass from simulated raw payload
+    ok 1 - detects demo bypass from simulated raw payload
+      ---
+      duration_ms: 0.6998
+      type: 'test'
+      ...
+    # Subtest: blocks approval when Printify product is not ready
+    ok 2 - blocks approval when Printify product is not ready
+      ---
+      duration_ms: 0.4149
+      type: 'test'
+      ...
+    # Subtest: allows approval when Printify product is ready
+    ok 3 - allows approval when Printify product is ready
+      ---
+      duration_ms: 0.0966
+      type: 'test'
+      ...
+    # Subtest: skips POD guard in demo bypass mode
+    ok 4 - skips POD guard in demo bypass mode
+      ---
+      duration_ms: 0.0567
+      type: 'test'
+      ...
+    # Subtest: blocks approval when sellability checklist fails
+    ok 5 - blocks approval when sellability checklist fails
+      ---
+      duration_ms: 0.2451
+      type: 'test'
+      ...
+    # Subtest: allows approval when sellability passes
+    ok 6 - allows approval when sellability passes
+      ---
+      duration_ms: 0.3475
+      type: 'test'
+      ...
+    # Subtest: skips sellability guard in demo bypass mode
+    ok 7 - skips sellability guard in demo bypass mode
+      ---
+      duration_ms: 0.0599
+      type: 'test'
+      ...
+    1..7
+ok 65 - review approval guards
+  ---
+  duration_ms: 2.7179
+  type: 'suite'
+  ...
+# Subtest: review display helpers
+    # Subtest: filters informational forge flags out of compliance flags
+    ok 1 - filters informational forge flags out of compliance flags
+      ---
+      duration_ms: 2.5038
+      type: 'test'
+      ...
+    # Subtest: does not count AI disclosure as compliance risk
+    ok 2 - does not count AI disclosure as compliance risk
+      ---
+      duration_ms: 0.4635
+      type: 'test'
+      ...
+    # Subtest: omits informational flags from compliance messages
+    ok 3 - omits informational flags from compliance messages
+      ---
+      duration_ms: 0.1
+      type: 'test'
+      ...
+    # Subtest: includes real policy warnings in compliance messages
+    ok 4 - includes real policy warnings in compliance messages
+      ---
+      duration_ms: 0.3063
+      type: 'test'
+      ...
+    # Subtest: returns caution approve UI for needs_revision
+    ok 5 - returns caution approve UI for needs_revision
+      ---
+      duration_ms: 0.215
+      type: 'test'
+      ...
+    # Subtest: disables approve for blocked brain verdict
+    ok 6 - disables approve for blocked brain verdict
+      ---
+      duration_ms: 0.125
+      type: 'test'
+      ...
+    # Subtest: keeps standard approve UI for approve_for_generation
+    ok 7 - keeps standard approve UI for approve_for_generation
+      ---
+      duration_ms: 0.13
+      type: 'test'
+      ...
+    # Subtest: disables approve with blocked styling when sellability checklist fails
+    ok 8 - disables approve with blocked styling when sellability checklist fails
+      ---
+      duration_ms: 0.5192
+      type: 'test'
+      ...
+    # Subtest: lists failed sellability check labels
+    ok 9 - lists failed sellability check labels
+      ---
+      duration_ms: 0.197
+      type: 'test'
+      ...
+    # Subtest: detects fulfillment-only sellability block
+    ok 10 - detects fulfillment-only sellability block
+      ---
+      duration_ms: 0.8798
+      type: 'test'
+      ...
+    # Subtest: shows compliance reject message when compliance check fails
+    ok 11 - shows compliance reject message when compliance check fails
+      ---
+      duration_ms: 0.1827
+      type: 'test'
+      ...
+    # Subtest: uses blocked label for brain-blocked verdict
+    ok 12 - uses blocked label for brain-blocked verdict
+      ---
+      duration_ms: 0.0551
+      type: 'test'
+      ...
+    # Subtest: resolves approve API errors including 403 payloads
+    ok 13 - resolves approve API errors including 403 payloads
+      ---
+      duration_ms: 0.0648
+      type: 'test'
+      ...
+    # Subtest: exposes download UI only when PDF is ready with a storage path
+    ok 14 - exposes download UI only when PDF is ready with a storage path
+      ---
+      duration_ms: 0.0612
+      type: 'test'
+      ...
+    # Subtest: builds server download route for generation id
+    ok 15 - builds server download route for generation id
+      ---
+      duration_ms: 0.0539
+      type: 'test'
+      ...
+    1..15
+ok 66 - review display helpers
+  ---
+  duration_ms: 7.1481
+  type: 'suite'
+  ...
+# Subtest: publishListingToEtsyOnApprove
+    # Subtest: logs etsy_skipped when Etsy is not connected
+    ok 1 - logs etsy_skipped when Etsy is not connected
+      ---
+      duration_ms: 0.8516
+      type: 'test'
+      ...
+    # Subtest: logs etsy_publish_failed when PDF path is missing
+    ok 2 - logs etsy_publish_failed when PDF path is missing
+      ---
+      duration_ms: 0.1727
+      type: 'test'
+      ...
+    # Subtest: never throws when Etsy publish fails
+    ok 3 - never throws when Etsy publish fails
+      ---
+      duration_ms: 0.2019
+      type: 'test'
+      ...
+    1..3
+ok 67 - publishListingToEtsyOnApprove
+  ---
+  duration_ms: 1.905
+  type: 'suite'
+  ...
+# Subtest: sellability checklist
+    # Subtest: passes all checks for a complete forge fallback generation
+    ok 1 - passes all checks for a complete forge fallback generation
+      ---
+      duration_ms: 1.0717
+      type: 'test'
+      ...
+    # Subtest: fails incomplete podDetails
+    ok 2 - fails incomplete podDetails
+      ---
+      duration_ms: 0.1272
+      type: 'test'
+      ...
+    # Subtest: passes blueprint checks for valid podDetails
+    ok 3 - passes blueprint checks for valid podDetails
+      ---
+      duration_ms: 0.0778
+      type: 'test'
+      ...
+    # Subtest: ignores ai_disclosure flag for compliance check
+    ok 4 - ignores ai_disclosure flag for compliance check
+      ---
+      duration_ms: 0.1733
+      type: 'test'
+      ...
+    # Subtest: ignores forge review_note flag for compliance check
+    ok 5 - ignores forge review_note flag for compliance check
+      ---
+      duration_ms: 0.0653
+      type: 'test'
+      ...
+    # Subtest: requires ready status and printify product id for fulfillment ready
+    ok 6 - requires ready status and printify product id for fulfillment ready
+      ---
+      duration_ms: 0.1833
+      type: 'test'
+      ...
+    1..6
+ok 68 - sellability checklist
+  ---
+  duration_ms: 2.3227
+  type: 'suite'
+  ...
+# Subtest: fetchPublicStoreListings
+    # Subtest: queries published listings only without user_id filter
+    ok 1 - queries published listings only without user_id filter
+      ---
+      duration_ms: 3.7766
+      type: 'test'
+      ...
+    1..1
+ok 69 - fetchPublicStoreListings
+  ---
+  duration_ms: 4.5094
+  type: 'suite'
+  ...
+# Subtest: publish-gumroad route
+    # Subtest: requires auth
+    ok 1 - requires auth
+      ---
+      duration_ms: 4.4672
+      type: 'test'
+      ...
+    # Subtest: blocks listings owned by another user
+    ok 2 - blocks listings owned by another user
+      ---
+      duration_ms: 0.5986
+      type: 'test'
+      ...
+    # Subtest: blocks missing or failed PDFs
+    ok 3 - blocks missing or failed PDFs
+      ---
+      duration_ms: 0.5165
+      type: 'test'
+      ...
+    # Subtest: saves gumroad_url and gumroad_product_id on success
+    ok 4 - saves gumroad_url and gumroad_product_id on success
+      ---
+      duration_ms: 0.9259
+      type: 'test'
+      ...
+    # Subtest: does not delete or unpublish the listing when store publish fails
+    ok 5 - does not delete or unpublish the listing when store publish fails
+      ---
+      duration_ms: 0.8604
+      type: 'test'
+      ...
+    1..5
+ok 70 - publish-gumroad route
+  ---
+  duration_ms: 8.1388
+  type: 'suite'
+  ...
+# Subtest: normalizeGumroadUrl
+    # Subtest: accepts https gumroad product URLs
+    ok 1 - accepts https gumroad product URLs
+      ---
+      duration_ms: 0.8392
+      type: 'test'
+      ...
+    # Subtest: rejects non-gumroad hosts
+    ok 2 - rejects non-gumroad hosts
+      ---
+      duration_ms: 0.35
+      type: 'test'
+      ...
+    1..2
+ok 71 - normalizeGumroadUrl
+  ---
+  duration_ms: 1.8232
+  type: 'suite'
+  ...
+# Subtest: normalizeManualCheckoutUrl
+    # Subtest: accepts https checkout URLs loosely
+    ok 1 - accepts https checkout URLs loosely
+      ---
+      duration_ms: 0.1797
+      type: 'test'
+      ...
+    # Subtest: rejects non-https URLs
+    ok 2 - rejects non-https URLs
+      ---
+      duration_ms: 0.0696
+      type: 'test'
+      ...
+    1..2
+ok 72 - normalizeManualCheckoutUrl
+  ---
+  duration_ms: 0.332
+  type: 'suite'
+  ...
+# Subtest: saveManualListingCheckoutUrl
+    # Subtest: persists gumroad_url and sets status published when approved
+    ok 1 - persists gumroad_url and sets status published when approved
+      ---
+      duration_ms: 1.5969
+      type: 'test'
+      ...
+    # Subtest: does not change status when already published
+    ok 2 - does not change status when already published
+      ---
+      duration_ms: 0.3376
+      type: 'test'
+      ...
+    1..2
+ok 73 - saveManualListingCheckoutUrl
+  ---
+  duration_ms: 2.3061
+  type: 'suite'
+  ...
+# Subtest: publishListingWithGumroad
+    # Subtest: persists gumroad_url and sets status published
+    ok 1 - persists gumroad_url and sets status published
+      ---
+      duration_ms: 0.3552
+      type: 'test'
+      ...
+    1..1
+ok 74 - publishListingWithGumroad
+  ---
+  duration_ms: 0.4525
+  type: 'suite'
+  ...
+# Subtest: fetchStoreListings
+    # Subtest: queries approved and published listings for the operator storefront
+    ok 1 - queries approved and published listings for the operator storefront
+      ---
+      duration_ms: 1.9433
+      type: 'test'
+      ...
+    1..1
+ok 75 - fetchStoreListings
+  ---
+  duration_ms: 2.5078
+  type: 'suite'
+  ...
+# Subtest: collectStoreTags
+    # Subtest: merges seo keywords and forge seoTags without duplicates
+    ok 1 - merges seo keywords and forge seoTags without duplicates
+      ---
+      duration_ms: 2.4492
+      type: 'test'
+      ...
+    # Subtest: includes generation metadata tags when present
+    ok 2 - includes generation metadata tags when present
+      ---
+      duration_ms: 0.2656
+      type: 'test'
+      ...
+    1..2
+ok 76 - collectStoreTags
+  ---
+  duration_ms: 12.9664
+  type: 'suite'
+  ...
+# Subtest: auth wiring
+    # Subtest: has middleware for session refresh
+    ok 1 - has middleware for session refresh
+      ---
+      duration_ms: 0.9862
+      type: 'test'
+      ...
+    # Subtest: protects command routes
+    ok 2 - protects command routes
+      ---
+      duration_ms: 0.4555
+      type: 'test'
+      ...
+    # Subtest: has login page and auth callback
+    ok 3 - has login page and auth callback
+      ---
+      duration_ms: 0.189
+      type: 'test'
+      ...
+    1..3
+ok 77 - auth wiring
+  ---
+  duration_ms: 2.344
+  type: 'suite'
+  ...
+# Subtest: demo workflow wiring
+    # Subtest: includes route src/app/api/ajax/reset-demo/route.ts
+    ok 1 - includes route src/app/api/ajax/reset-demo/route.ts
+      ---
+      duration_ms: 1.4316
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/run-nova/route.ts
+    ok 2 - includes route src/app/api/ajax/run-nova/route.ts
+      ---
+      duration_ms: 1.3211
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/run-forge/route.ts
+    ok 3 - includes route src/app/api/ajax/run-forge/route.ts
+      ---
+      duration_ms: 1.0663
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/run-cycle/route.ts
+    ok 4 - includes route src/app/api/ajax/run-cycle/route.ts
+      ---
+      duration_ms: 0.4082
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/review/approve/route.ts
+    ok 5 - includes route src/app/api/ajax/review/approve/route.ts
+      ---
+      duration_ms: 0.4382
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/run-pixel/route.ts
+    ok 6 - includes route src/app/api/ajax/run-pixel/route.ts
+      ---
+      duration_ms: 0.2525
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/factory-snapshot/route.ts
+    ok 7 - includes route src/app/api/ajax/factory-snapshot/route.ts
+      ---
+      duration_ms: 0.4571
+      type: 'test'
+      ...
+    # Subtest: includes route src/app/api/ajax/product-generations/[id]/pdf-download/route.ts
+    ok 8 - includes route src/app/api/ajax/product-generations/[id]/pdf-download/route.ts
+      ---
+      duration_ms: 0.4997
+      type: 'test'
+      ...
+    # Subtest: staged steps block when review is pending
+    ok 9 - staged steps block when review is pending
+      ---
+      duration_ms: 1.3979
+      type: 'test'
+      ...
+    # Subtest: nova and forge routes delegate to staged simulator steps
+    ok 10 - nova and forge routes delegate to staged simulator steps
+      ---
+      duration_ms: 1.7384
+      type: 'test'
+      ...
+    # Subtest: run-cycle does not run Nova and Forge in one blocking handler
+    ok 11 - run-cycle does not run Nova and Forge in one blocking handler
+      ---
+      duration_ms: 2.0337
+      type: 'test'
+      ...
+    # Subtest: nova step persists ideas; forge step creates listing and review
+    ok 12 - nova step persists ideas; forge step creates listing and review
+      ---
+      duration_ms: 0.7687
+      type: 'test'
+      ...
+    # Subtest: approve creates an Etsy draft + Pixel in the background (no Lemon Squeezy)
+    ok 13 - approve creates an Etsy draft + Pixel in the background (no Lemon Squeezy)
+      ---
+      duration_ms: 0.5166
+      type: 'test'
+      ...
+    # Subtest: approve does not require PDF ready
+    ok 14 - approve does not require PDF ready
+      ---
+      duration_ms: 0.3024
+      type: 'test'
+      ...
+    # Subtest: rejects approving blocked brain verdict server-side
+    ok 15 - rejects approving blocked brain verdict server-side
+      ---
+      duration_ms: 0.2506
+      type: 'test'
+      ...
+    # Subtest: forge selection prefers approved ideas and safe needs_revision
+    ok 16 - forge selection prefers approved ideas and safe needs_revision
+      ---
+      duration_ms: 1.2391
+      type: 'test'
+      ...
+    # Subtest: keeps AI disclosure out of compliance warnings
+    ok 17 - keeps AI disclosure out of compliance warnings
+      ---
+      duration_ms: 0.9528
+      type: 'test'
+      ...
+    # Subtest: simulator queues POD fulfillment async without bypassing review gate
+    ok 18 - simulator queues POD fulfillment async without bypassing review gate
+      ---
+      duration_ms: 0.6205
+      type: 'test'
+      ...
+    # Subtest: PDF generation pipeline is fully retired
+    ok 19 - PDF generation pipeline is fully retired
+      ---
+      duration_ms: 0.3522
+      type: 'test'
+      ...
+    # Subtest: review asset panel is POD-first with no manual PDF generation
+    ok 20 - review asset panel is POD-first with no manual PDF generation
+      ---
+      duration_ms: 0.4516
+      type: 'test'
+      ...
+    # Subtest: approve review enforces POD and sellability guards
+    ok 21 - approve review enforces POD and sellability guards
+      ---
+      duration_ms: 0.6556
+      type: 'test'
+      ...
+    # Subtest: staged steps recovery idles agents on failure
+    ok 22 - staged steps recovery idles agents on failure
+      ---
+      duration_ms: 1.205
+      type: 'test'
+      ...
+    # Subtest: forge step can reuse ideas from a prior nova run
+    ok 23 - forge step can reuse ideas from a prior nova run
+      ---
+      duration_ms: 0.4222
+      type: 'test'
+      ...
+    # Subtest: factory dashboard runs staged nova then forge
+    ok 24 - factory dashboard runs staged nova then forge
+      ---
+      duration_ms: 1.0189
+      type: 'test'
+      ...
+    # Subtest: pixel simulator schedules content
+    ok 25 - pixel simulator schedules content
+      ---
+      duration_ms: 0.31
+      type: 'test'
+      ...
+    # Subtest: listing lifecycle transitions are defined in status module
+    ok 26 - listing lifecycle transitions are defined in status module
+      ---
+      duration_ms: 0.342
+      type: 'test'
+      ...
+    # Subtest: approve queues Pixel before publish
+    ok 27 - approve queues Pixel before publish
+      ---
+      duration_ms: 0.6655
+      type: 'test'
+      ...
+    # Subtest: run-pixel route delegates to pixel simulator publish
+    ok 28 - run-pixel route delegates to pixel simulator publish
+      ---
+      duration_ms: 0.3113
+      type: 'test'
+      ...
+    1..28
+ok 78 - demo workflow wiring
+  ---
+  duration_ms: 23.065
+  type: 'suite'
+  ...
+# Subtest: pixel marketing wiring
+    # Subtest: uses generatePixelMarketing with deterministic fallback
+    ok 1 - uses generatePixelMarketing with deterministic fallback
+      ---
+      duration_ms: 0.6963
+      type: 'test'
+      ...
+    # Subtest: logs marketing metadata on content_scheduled factory events
+    ok 2 - logs marketing metadata on content_scheduled factory events
+      ---
+      duration_ms: 0.3711
+      type: 'test'
+      ...
+    # Subtest: queues TikTok slideshow packages after Pixel marketing
+    ok 3 - queues TikTok slideshow packages after Pixel marketing
+      ---
+      duration_ms: 0.2479
+      type: 'test'
+      ...
+    # Subtest: publishes listings after scheduling (demo storefront only)
+    ok 4 - publishes listings after scheduling (demo storefront only)
+      ---
+      duration_ms: 0.1663
+      type: 'test'
+      ...
+    # Subtest: exposes run-pixel API with session-scoped Supabase client
+    ok 5 - exposes run-pixel API with session-scoped Supabase client
+      ---
+      duration_ms: 0.0598
+      type: 'test'
+      ...
+    # Subtest: marketing page is server-only and does not import LLM
+    ok 6 - marketing page is server-only and does not import LLM
+      ---
+      duration_ms: 0.1733
+      type: 'test'
+      ...
+    # Subtest: adds the Content (marketing) tab to navigation
+    ok 7 - adds the Content (marketing) tab to navigation
+      ---
+      duration_ms: 0.1236
+      type: 'test'
+      ...
+    1..7
+ok 79 - pixel marketing wiring
+  ---
+  duration_ms: 3.4732
+  type: 'suite'
+  ...
+# Subtest: client secret exposure
+    # Subtest: scans use client modules
+    ok 1 - scans use client modules
+      ---
+      duration_ms: 0.9339
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\agents\\agent-memory-card.tsx
+    ok 2 - does not expose server secrets in src\\components\\agents\\agent-memory-card.tsx
+      ---
+      duration_ms: 0.2269
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\agents\\agents-dashboard.tsx
+    ok 3 - does not expose server secrets in src\\components\\agents\\agents-dashboard.tsx
+      ---
+      duration_ms: 0.163
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\auth\\auth-form.tsx
+    ok 4 - does not expose server secrets in src\\components\\auth\\auth-form.tsx
+      ---
+      duration_ms: 0.082
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\businesses\\businesses-dashboard.tsx
+    ok 5 - does not expose server secrets in src\\components\\businesses\\businesses-dashboard.tsx
+      ---
+      duration_ms: 0.0921
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\dashboard\\dashboard-view.tsx
+    ok 6 - does not expose server secrets in src\\components\\dashboard\\dashboard-view.tsx
+      ---
+      duration_ms: 0.1283
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\agent-sprite.tsx
+    ok 7 - does not expose server secrets in src\\components\\factory\\agent-sprite.tsx
+      ---
+      duration_ms: 0.1206
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\agent-status-panel.tsx
+    ok 8 - does not expose server secrets in src\\components\\factory\\agent-status-panel.tsx
+      ---
+      duration_ms: 0.1286
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\control-panel.tsx
+    ok 9 - does not expose server secrets in src\\components\\factory\\control-panel.tsx
+      ---
+      duration_ms: 0.1533
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\event-feed.tsx
+    ok 10 - does not expose server secrets in src\\components\\factory\\event-feed.tsx
+      ---
+      duration_ms: 0.3256
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\factory-dashboard.tsx
+    ok 11 - does not expose server secrets in src\\components\\factory\\factory-dashboard.tsx
+      ---
+      duration_ms: 0.1162
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\factory-floor-3d.tsx
+    ok 12 - does not expose server secrets in src\\components\\factory\\factory-floor-3d.tsx
+      ---
+      duration_ms: 0.3782
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\factory-map.tsx
+    ok 13 - does not expose server secrets in src\\components\\factory\\factory-map.tsx
+      ---
+      duration_ms: 0.0482
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\factory-sweatshop.tsx
+    ok 14 - does not expose server secrets in src\\components\\factory\\factory-sweatshop.tsx
+      ---
+      duration_ms: 0.1186
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\factory-vis-map.tsx
+    ok 15 - does not expose server secrets in src\\components\\factory\\factory-vis-map.tsx
+      ---
+      duration_ms: 0.1448
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\live-status-bar.tsx
+    ok 16 - does not expose server secrets in src\\components\\factory\\live-status-bar.tsx
+      ---
+      duration_ms: 0.0451
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\metrics-strip.tsx
+    ok 17 - does not expose server secrets in src\\components\\factory\\metrics-strip.tsx
+      ---
+      duration_ms: 0.1413
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\pipeline-room-station.tsx
+    ok 18 - does not expose server secrets in src\\components\\factory\\pipeline-room-station.tsx
+      ---
+      duration_ms: 0.0489
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\room-station.tsx
+    ok 19 - does not expose server secrets in src\\components\\factory\\room-station.tsx
+      ---
+      duration_ms: 0.0796
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\tiktok-queue-panel.tsx
+    ok 20 - does not expose server secrets in src\\components\\factory\\tiktok-queue-panel.tsx
+      ---
+      duration_ms: 0.1201
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\factory\\toast-banner.tsx
+    ok 21 - does not expose server secrets in src\\components\\factory\\toast-banner.tsx
+      ---
+      duration_ms: 0.0388
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\layout\\factory-shell.tsx
+    ok 22 - does not expose server secrets in src\\components\\layout\\factory-shell.tsx
+      ---
+      duration_ms: 0.0652
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\layout\\user-menu.tsx
+    ok 23 - does not expose server secrets in src\\components\\layout\\user-menu.tsx
+      ---
+      duration_ms: 0.043
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\marketing\\copy-field.tsx
+    ok 24 - does not expose server secrets in src\\components\\marketing\\copy-field.tsx
+      ---
+      duration_ms: 0.0453
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\review\\reject-modal.tsx
+    ok 25 - does not expose server secrets in src\\components\\review\\reject-modal.tsx
+      ---
+      duration_ms: 0.0534
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\review\\review-card.tsx
+    ok 26 - does not expose server secrets in src\\components\\review\\review-card.tsx
+      ---
+      duration_ms: 0.1066
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\review\\review-dashboard.tsx
+    ok 27 - does not expose server secrets in src\\components\\review\\review-dashboard.tsx
+      ---
+      duration_ms: 0.0995
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\review\\review-external-links-panel.tsx
+    ok 28 - does not expose server secrets in src\\components\\review\\review-external-links-panel.tsx
+      ---
+      duration_ms: 0.0619
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\review\\review-pdf-panel.tsx
+    ok 29 - does not expose server secrets in src\\components\\review\\review-pdf-panel.tsx
+      ---
+      duration_ms: 0.0758
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\store\\gumroad-publish-action.tsx
+    ok 30 - does not expose server secrets in src\\components\\store\\gumroad-publish-action.tsx
+      ---
+      duration_ms: 0.0671
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\store\\manual-gumroad-url-form.tsx
+    ok 31 - does not expose server secrets in src\\components\\store\\manual-gumroad-url-form.tsx
+      ---
+      duration_ms: 0.0544
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\components\\warroom\\war-room-dashboard.tsx
+    ok 32 - does not expose server secrets in src\\components\\warroom\\war-room-dashboard.tsx
+      ---
+      duration_ms: 0.1219
+      type: 'test'
+      ...
+    # Subtest: does not expose server secrets in src\\hooks\\useAjaxRealtime.ts
+    ok 33 - does not expose server secrets in src\\hooks\\useAjaxRealtime.ts
+      ---
+      duration_ms: 0.0678
+      type: 'test'
+      ...
+    1..33
+ok 80 - client secret exposure
+  ---
+  duration_ms: 5.5835
+  type: 'suite'
+  ...
+# Subtest: migrations RLS
+    # Subtest: enables RLS on all pipeline tables (init migration)
+    ok 1 - enables RLS on all pipeline tables (init migration)
+      ---
+      duration_ms: 1.029
+      type: 'test'
+      ...
+    # Subtest: scopes product_pdfs storage to authenticated owners (milestone 2)
+    ok 2 - scopes product_pdfs storage to authenticated owners (milestone 2)
+      ---
+      duration_ms: 0.5925
+      type: 'test'
+      ...
+    # Subtest: enables RLS on product_generations (phase 2 migration)
+    ok 3 - enables RLS on product_generations (phase 2 migration)
+      ---
+      duration_ms: 0.5382
+      type: 'test'
+      ...
+    # Subtest: stores gumroad_product_id on product_listings
+    ok 4 - stores gumroad_product_id on product_listings
+      ---
+      duration_ms: 0.387
+      type: 'test'
+      ...
+    # Subtest: stores mockup_storage_path on product_generations and allows JPEG in product_pdfs
+    ok 5 - stores mockup_storage_path on product_generations and allows JPEG in product_pdfs
+      ---
+      duration_ms: 0.4752
+      type: 'test'
+      ...
+    # Subtest: enables RLS on etsy_credentials with owner-only policies
+    ok 6 - enables RLS on etsy_credentials with owner-only policies
+      ---
+      duration_ms: 0.5744
+      type: 'test'
+      ...
+    # Subtest: allows public read of published listings only (gumroad store migration)
+    ok 7 - allows public read of published listings only (gumroad store migration)
+      ---
+      duration_ms: 0.3745
+      type: 'test'
+      ...
+    1..7
+ok 81 - migrations RLS
+  ---
+  duration_ms: 4.1425
+  type: 'suite'
+  ...
+# Subtest: supabase browser barrel
+    # Subtest: does not export service role client from client entrypoints
+    ok 1 - does not export service role client from client entrypoints
+      ---
+      duration_ms: 0.4084
+      type: 'test'
+      ...
+    1..1
+ok 82 - supabase browser barrel
+  ---
+  duration_ms: 0.4514
+  type: 'suite'
+  ...
+# Subtest: marketplace adapters stay server-side
+    # Subtest: does not import Etsy adapter from run-pixel or pixel simulator
+    ok 1 - does not import Etsy adapter from run-pixel or pixel simulator
+      ---
+      duration_ms: 1.9907
+      type: 'test'
+      ...
+    1..1
+ok 83 - marketplace adapters stay server-side
+  ---
+  duration_ms: 2.0378
+  type: 'suite'
+  ...
+# Subtest: staged pipeline LLM wiring guard
+    # Subtest: does not import the LLM layer in staged API routes
+    ok 1 - does not import the LLM layer in staged API routes
+      ---
+      duration_ms: 1.6629
+      type: 'test'
+      ...
+    1..1
+ok 84 - staged pipeline LLM wiring guard
+  ---
+  duration_ms: 1.7557
+  type: 'suite'
+  ...
+# Subtest: storefront prototype wiring
+    # Subtest: documents publish path via Pixel simulator (demo storefront)
+    ok 1 - documents publish path via Pixel simulator (demo storefront)
+      ---
+      duration_ms: 2.3383
+      type: 'test'
+      ...
+    # Subtest: uses factory snapshot published count for storefront metrics
+    ok 2 - uses factory snapshot published count for storefront metrics
+      ---
+      duration_ms: 0.493
+      type: 'test'
+      ...
+    # Subtest: includes public /store route when storefront UI is present
+    ok 3 - includes public /store route when storefront UI is present
+      ---
+      duration_ms: 0.8742
+      type: 'test'
+      ...
+    1..3
+ok 85 - storefront prototype wiring
+  ---
+  duration_ms: 4.3833
+  type: 'suite'
+  ...
+1..85
+# tests 318
+# suites 85
+# pass 318
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5581.3117

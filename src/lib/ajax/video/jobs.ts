@@ -227,9 +227,10 @@ export async function drainVideoJobs(
 }
 
 /**
- * On approve: submit the renders and enqueue jobs (no waiting). A 1:1 clip for
- * the Etsy listing always; a 9:16 clip for social only when Ayrshare is set up.
- * Each render is billed separately (~$0.30), so social is skipped when unused.
+ * On approve: submit the render(s) and enqueue jobs (no waiting). Default is
+ * listing-only — a 1:1 clip for the Etsy listing. The 9:16 social clip is added
+ * only when the operator opts in (SOCIAL_VIDEO_AUTOPOST=true) AND Ayrshare is
+ * connected. Each render is billed separately (~$0.30).
  */
 export async function enqueueApprovalVideos(
   supabase: Supabase,
@@ -272,11 +273,17 @@ export async function enqueueApprovalVideos(
     out.etsy = e.ok;
   }
 
+  // Social auto-post is OFF by default (listing video is the point). It fires
+  // only when the operator opts in with SOCIAL_VIDEO_AUTOPOST=true AND Ayrshare
+  // is connected — so connecting social for manual posting won't silently start
+  // spending a second render per approval.
   let socialOn = false;
-  try {
-    socialOn = (await import("@/lib/social/ayrshare")).isSocialConfigured();
-  } catch {
-    socialOn = false;
+  if (process.env.SOCIAL_VIDEO_AUTOPOST === "true") {
+    try {
+      socialOn = (await import("@/lib/social/ayrshare")).isSocialConfigured();
+    } catch {
+      socialOn = false;
+    }
   }
   if (socialOn) {
     const socialSubmit = await submitVideoRender({
