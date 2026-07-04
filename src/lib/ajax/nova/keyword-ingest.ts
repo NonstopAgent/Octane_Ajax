@@ -51,9 +51,12 @@ export type IngestResult = {
   terms: string[];
 };
 
-/** True when live Etsy competition data can be fetched. */
+/** True when live Etsy competition data can be fetched. Etsy's x-api-key needs
+ * BOTH the keystring and the shared secret, so require both. */
 export function isKeywordIngestConfigured(): boolean {
-  return Boolean(process.env.ETSY_CLIENT_ID?.trim());
+  return Boolean(
+    process.env.ETSY_CLIENT_ID?.trim() && process.env.ETSY_CLIENT_SECRET?.trim(),
+  );
 }
 
 /** Fetch the REAL count of active Etsy listings matching a term (supply signal). */
@@ -244,7 +247,7 @@ export async function bootstrapKeywordsIfEmpty(opts: {
   userId: string;
 }): Promise<boolean> {
   const apiKey = process.env.ETSY_CLIENT_ID?.trim();
-  if (!apiKey) return false;
+  if (!apiKey || !isKeywordIngestConfigured()) return false;
   try {
     const { count } = await opts.supabase
       .from(TABLES.MARKET_KEYWORDS)

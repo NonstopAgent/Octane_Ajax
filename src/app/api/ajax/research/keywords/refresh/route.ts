@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            "Live keyword data needs an Etsy API key. Add ETSY_CLIENT_ID to your Vercel environment, or POST { keywords: [...] } with your own real numbers.",
+            "Live keyword data needs Etsy API keys. Add BOTH ETSY_CLIENT_ID and ETSY_CLIENT_SECRET to your Vercel environment, or POST { keywords: [...] } with your own real numbers.",
         },
         { status: 400 },
       );
