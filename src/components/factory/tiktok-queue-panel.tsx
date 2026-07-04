@@ -38,7 +38,43 @@ export function TikTokQueuePanel({
   const [items, setItems] = useState<TikTokQueueRow[]>(initialItems);
   const [loading, setLoading] = useState(false);
   const [postingId, setPostingId] = useState<string | null>(null);
+  const [livePostingId, setLivePostingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const publishNow = useCallback(async (item: TikTokQueueRow) => {
+    setLivePostingId(item.id);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/ajax/social/publish", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queueId: item.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        posts?: { platform: string; postUrl?: string }[];
+      };
+      if (!res.ok || !data.ok) {
+        setNotice({ ok: false, text: data.error ?? "Publish failed." });
+        return;
+      }
+      const where = (data.posts ?? [])
+        .map((p) => p.platform)
+        .filter(Boolean)
+        .join(", ");
+      setNotice({ ok: true, text: where ? `Posted to ${where}.` : "Posted." });
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+    } catch {
+      setNotice({ ok: false, text: "Network error while publishing." });
+    } finally {
+      setLivePostingId(null);
+    }
+  }, []);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -129,8 +165,8 @@ export function TikTokQueuePanel({
               TikTok queue
             </h2>
             <p className="mt-1 font-mono text-[11px] text-zinc-500">
-              Semi-auto slideshow packages from Pixel — post manually, then mark
-              done.
+              Promo packages from Pixel — Publish now to post to your socials
+              (Ayrshare), or copy to post by hand.
             </p>
           </div>
           <div className="text-right">
@@ -145,6 +181,18 @@ export function TikTokQueuePanel({
       </header>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {notice ? (
+          <p
+            className={`rounded border px-3 py-2 font-mono text-[10px] ${
+              notice.ok
+                ? "border-emerald-800/50 bg-emerald-950/30 text-emerald-300"
+                : "border-red-800/50 bg-red-950/30 text-red-300"
+            }`}
+          >
+            {notice.text}
+          </p>
+        ) : null}
+
         {loading && items.length === 0 ? (
           <p className="font-mono text-xs text-zinc-600">Loading queue…</p>
         ) : null}
@@ -251,6 +299,15 @@ export function TikTokQueuePanel({
                   Download assets
                 </a>
               ) : null}
+              <button
+                type="button"
+                disabled={livePostingId === item.id}
+                onClick={() => void publishNow(item)}
+                className="rounded border border-amber-600/60 bg-amber-950/40 px-2.5 py-1 font-mono text-[10px] font-semibold text-amber-300 hover:border-amber-500 disabled:opacity-50"
+                title="Publish this package to your linked socials via Ayrshare"
+              >
+                {livePostingId === item.id ? "Publishing…" : "▶ Publish now"}
+              </button>
               <button
                 type="button"
                 disabled={postingId === item.id}
