@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 process.env.ETSY_CLIENT_ID = process.env.ETSY_CLIENT_ID ?? "test-key";
 process.env.ETSY_CLIENT_SECRET = process.env.ETSY_CLIENT_SECRET ?? "test-secret";
+
 import {
   applyListingAttributes,
   desiredAttributesFor,
@@ -18,17 +19,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe("etsy attributes", () => {
   it("desiredAttributesFor infers product type from hints", () => {
     const mug = desiredAttributesFor(["Senior Dog Tribute Mug"]);
-    assert.ok(mug.properties.some((p) => p.names.includes("Capacity")));
+    assert.ok(mug.properties.some((p) => p.names.includes("Graphic")));
+    assert.ok(mug.properties.some((p) => p.names.includes("Primary color")));
     assert.deepEqual(mug.materials, ["Ceramic"]);
 
     const poster = desiredAttributesFor([
       "Adopted & Loved Rescue Dog Poster",
     ]);
-    assert.ok(poster.properties.some((p) => p.names.includes("Orientation")));
-    assert.ok(poster.properties.some((p) => p.names.includes("Primary color")));
+    assert.ok(poster.properties.some((p) => p.names.includes("Room")));
+    assert.ok(poster.properties.some((p) => p.names.includes("Style")));
   });
 
-  it("applyListingAttributes sets offered properties + materials", async () => {
+  it("applyListingAttributes matches Etsy display_name + sets values/materials", async () => {
     const calls: { url: string; method: string; body: string }[] = [];
     const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
@@ -42,17 +44,21 @@ describe("etsy attributes", () => {
         return jsonResponse({ taxonomy_id: 1, title: "Senior Dog Tribute Mug" });
       }
       if (/\/seller-taxonomy\/nodes\/1\/properties/.test(u)) {
+        // Etsy returns display_name / name (NOT property_name).
         return jsonResponse({
+          count: 2,
           results: [
             {
               property_id: 10,
-              property_name: "Graphic",
+              name: "graphic_internal",
+              display_name: "Graphic",
               possible_values: [{ value_id: 100, name: "Animal" }],
             },
             {
-              property_id: 11,
-              property_name: "Capacity",
-              scales: [{ scale_id: 5, scale_name: "Fluid ounces" }],
+              property_id: 20,
+              name: "color_primary",
+              display_name: "Primary color",
+              possible_values: [{ value_id: 200, name: "White" }],
             },
           ],
         });
@@ -70,7 +76,7 @@ describe("etsy attributes", () => {
 
     assert.equal(result.taxonomyId, 1);
     assert.ok(result.set.some((s) => s.startsWith("Graphic=Animal")));
-    assert.ok(result.set.some((s) => s.startsWith("Capacity=11")));
+    assert.ok(result.set.some((s) => s.startsWith("Primary color=White")));
     assert.ok(result.set.some((s) => s.startsWith("materials=Ceramic")));
 
     const put10 = calls.find(
@@ -79,13 +85,6 @@ describe("etsy attributes", () => {
     assert.ok(put10, "PUT graphic property");
     assert.match(put10!.body, /value_ids%5B%5D=100/);
     assert.match(put10!.body, /values%5B%5D=Animal/);
-
-    const put11 = calls.find(
-      (c) => c.method === "PUT" && /\/properties\/11$/.test(c.url),
-    );
-    assert.ok(put11, "PUT capacity property");
-    assert.match(put11!.body, /scale_id=5/);
-    assert.match(put11!.body, /values%5B%5D=11/);
 
     const patch = calls.find(
       (c) => c.method === "PATCH" && /\/listings\/555$/.test(c.url),

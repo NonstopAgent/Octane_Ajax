@@ -94,12 +94,8 @@ export function desiredAttributesFor(hints: string[]): DesiredAttributes {
     return {
       properties: [
         { names: ["Graphic", "Theme"], value: "Animal" },
-        {
-          names: ["Capacity"],
-          value: "11",
-          numeric: true,
-          scaleNames: ["Fluid ounces", "Ounces"],
-        },
+        { names: ["Primary color"], value: "White" },
+        { names: ["Secondary color"], value: "Beige" },
       ],
       materials: ["Ceramic"],
     };
@@ -107,12 +103,10 @@ export function desiredAttributesFor(hints: string[]): DesiredAttributes {
   if (/poster|art print|wall art|\bprint\b|wall d[eé]cor/.test(h)) {
     return {
       properties: [
-        { names: ["Orientation"], value: "Vertical" },
         { names: ["Primary color"], value: "Beige" },
         { names: ["Secondary color"], value: "Green" },
-        { names: ["Subject", "Graphic", "Theme"], value: "Animal" },
         { names: ["Room"], value: "Living room" },
-        { names: ["Frame", "Frame type", "Framing"], value: "Unframed" },
+        { names: ["Style"], value: "Contemporary" },
       ],
       materials: ["Paper"],
     };
