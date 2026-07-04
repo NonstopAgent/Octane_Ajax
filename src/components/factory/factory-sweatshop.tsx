@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EventFeed } from "@/components/factory/event-feed";
 import { RoomStation } from "@/components/factory/room-station";
 import { TikTokQueuePanel } from "@/components/factory/tiktok-queue-panel";
@@ -55,6 +55,7 @@ export function FactorySweatshop({
   const [cyclePhase, setCyclePhase] = useState<"nova" | "forge" | null>(null);
   const [runningPixel, setRunningPixel] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [autopilot, setAutopilot] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [lastEventMsg, setLastEventMsg] = useState<string | undefined>(
     initialEvents[0] ? String(initialEvents[0].message ?? "") : undefined,
@@ -227,6 +228,35 @@ export function FactorySweatshop({
     }
   }, [showToast, refresh]);
 
+  // Autopilot — the "it runs itself" loop. When on, it kicks off a Nova→Forge
+  // cycle whenever the floor is idle and nothing is waiting at the Review Gate.
+  // It's self-limiting: a pending review pauses it until you approve, and it
+  // never publishes or spends beyond one LLM cycle. Refs avoid stale closures.
+  const autopilotRef = useRef(autopilot);
+  const gateRef = useRef({ running, runningPixel, resetting, pending: metrics.pendingReviews });
+  useEffect(() => {
+    autopilotRef.current = autopilot;
+  }, [autopilot]);
+  useEffect(() => {
+    gateRef.current = { running, runningPixel, resetting, pending: metrics.pendingReviews };
+  }, [running, runningPixel, resetting, metrics.pendingReviews]);
+  useEffect(() => {
+    if (!autopilot) return;
+    const id = window.setInterval(() => {
+      const g = gateRef.current;
+      if (
+        autopilotRef.current &&
+        !g.running &&
+        !g.runningPixel &&
+        !g.resetting &&
+        g.pending === 0
+      ) {
+        void runCycle();
+      }
+    }, 18000);
+    return () => window.clearInterval(id);
+  }, [autopilot, runCycle]);
+
   if (!configReady) {
     return (
       <div className="factory-panel panel-glow-orange max-w-xl">
@@ -270,10 +300,12 @@ export function FactorySweatshop({
         cyclePhase={cyclePhase}
         runningPixel={runningPixel}
         resetting={resetting}
+        autopilot={autopilot}
         lastEventMessage={lastEventMsg}
         onRunCycle={() => void runCycle()}
         onRunPixel={() => void runPixel()}
         onResetFactory={() => void resetFactory()}
+        onToggleAutopilot={() => setAutopilot((v) => !v)}
       />
 
       {/* Room 2, Room 3, and event log below the map */}

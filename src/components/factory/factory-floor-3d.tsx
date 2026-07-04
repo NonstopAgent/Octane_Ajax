@@ -25,10 +25,12 @@ type Props = {
   cyclePhase: "nova" | "forge" | null;
   runningPixel: boolean;
   resetting: boolean;
+  autopilot: boolean;
   lastEventMessage?: string;
   onRunCycle: () => void;
   onRunPixel: () => void;
   onResetFactory: () => void;
+  onToggleAutopilot: () => void;
 };
 
 type RoomId = "research" | "forge" | "review" | "pixel" | "store" | "operator";
@@ -82,6 +84,7 @@ type LiveState = {
   metrics: VisMetrics;
   running: boolean;
   cyclePhase: "nova" | "forge" | null;
+  autopilot: boolean;
 };
 
 type RoomObj = {
@@ -118,22 +121,24 @@ export function FactoryFloor3D(props: Props) {
     cyclePhase,
     runningPixel,
     resetting,
+    autopilot,
     lastEventMessage,
     onRunCycle,
     onRunPixel,
     onResetFactory,
+    onToggleAutopilot,
   } = props;
 
   const mountRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
-  const liveRef = useRef<LiveState>({ agents, metrics, running, cyclePhase });
+  const liveRef = useRef<LiveState>({ agents, metrics, running, cyclePhase, autopilot });
   const selectedRef = useRef<RoomId | null>(null);
   const [selected, setSelected] = useState<RoomId | null>(null);
 
   // keep the animation loop fed with the latest live data
   useEffect(() => {
-    liveRef.current = { agents, metrics, running, cyclePhase };
-  }, [agents, metrics, running, cyclePhase]);
+    liveRef.current = { agents, metrics, running, cyclePhase, autopilot };
+  }, [agents, metrics, running, cyclePhase, autopilot]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -571,12 +576,15 @@ export function FactoryFloor3D(props: Props) {
       for (const k of Object.keys(conv)) {
         const c = conv[k];
         const on = flow[k];
-        c.mat.opacity += ((on ? 0.6 : 0.15) - c.mat.opacity) * 0.08;
-        const speed = on ? 0.5 : 0.12;
+        const idleOp = live.autopilot ? 0.28 : 0.15;
+        const idleSpd = live.autopilot ? 0.22 : 0.12;
+        const idleOrb = live.autopilot ? 0.4 : 0.26;
+        c.mat.opacity += ((on ? 0.6 : idleOp) - c.mat.opacity) * 0.08;
+        const speed = on ? 0.5 : idleSpd;
         c.orbs.forEach((o, oi) => {
           const f = (t * speed + (o.userData.off as number)) % 1;
           o.position.copy(c.curve.getPoint(f));
-          o.material.opacity = on ? 0.9 : 0.26;
+          o.material.opacity = on ? 0.9 : idleOrb;
           o.scale.setScalar((on ? 0.5 : 0.3) + 0.15 * Math.sin(t * (on ? 10 : 3) + oi * 2));
         });
       }
@@ -631,7 +639,11 @@ export function FactoryFloor3D(props: Props) {
       : "Review gate · clear",
     `Nova archive · ${metrics.productIdeas} ideas on file`,
     `Pixel · ${metrics.scheduledContent} promo${metrics.scheduledContent === 1 ? "" : "s"} staged`,
-    "Autopilot healthy · daily sweep scheduled",
+    autopilot
+      ? metrics.pendingReviews > 0
+        ? "Autopilot paused · a draft is awaiting your approval"
+        : "Autopilot engaged · agents self-running the produce loop"
+      : "Autopilot idle · press AUTOPILOT to let the floor self-run",
   ];
   const tickerLines = lastEventMessage ? [lastEventMessage, ...ambientLines] : ambientLines;
   const tickerText = tickerLines[tick % tickerLines.length];
@@ -646,6 +658,7 @@ export function FactoryFloor3D(props: Props) {
         <div className="ff3d-glass ff3d-brand">
           <span className="ff3d-logo">OCTANE&nbsp;AJAX</span>
           <span className="ff3d-eco">AI&nbsp;AGENT&nbsp;ECOSYSTEM</span>
+          <span className="ff3d-biz">BUSINESS&nbsp;01 · GOTCHADAYGOODS</span>
           <span className="ff3d-op">OPERATOR: <b>LOGAN ALVAREZ</b>{" // @lilchulo"}</span>
         </div>
         <div className="ff3d-glass ff3d-stats">
@@ -655,6 +668,9 @@ export function FactoryFloor3D(props: Props) {
           <span>ACTIVE <b>{activeCount}</b></span>
           <span>QUEUE <b style={{ color: metrics.pendingReviews > 0 ? "#ffc24a" : "#eaf2ff" }}>{metrics.pendingReviews}</b></span>
           <span>LIVE <b style={{ color: "#5cf2a8" }}>{metrics.publishedListings}</b></span>
+          {autopilot && (
+            <span className="ff3d-auto">◉ AUTOPILOT{metrics.pendingReviews > 0 ? " · AWAITS REVIEW" : ""}</span>
+          )}
           {phaseText && <span className="ff3d-phase">▶ {phaseText}</span>}
         </div>
       </div>
@@ -675,6 +691,14 @@ export function FactoryFloor3D(props: Props) {
         </button>
         <button type="button" className="ff3d-btn ff3d-ghost" disabled={busy} onClick={onResetFactory}>
           {resetting ? "Resetting…" : "⟳ Reset"}
+        </button>
+        <button
+          type="button"
+          className={"ff3d-btn " + (autopilot ? "ff3d-auto-on" : "ff3d-ghost")}
+          onClick={onToggleAutopilot}
+          title="Auto-runs research→build cycles until a review is pending. Uses LLM credits per cycle; never publishes without your approval."
+        >
+          {autopilot ? "◉ AUTOPILOT ON" : "○ AUTOPILOT"}
         </button>
         <div className="ff3d-ticker">
           <span className="ff3d-tl">LIVE</span>
@@ -919,6 +943,9 @@ const CSS = `
 .ff3d-eco{ font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700; letter-spacing:.2em; color:#5cf2a8; text-transform:uppercase; padding:2px 7px; border:1px solid rgba(92,242,168,.35); border-radius:6px; background:rgba(92,242,168,.08); text-shadow:0 0 10px rgba(92,242,168,.4); }
 .ff3d-online{ width:8px; height:8px; border-radius:50%; background:#5cf2a8; box-shadow:0 0 10px #5cf2a8; animation:ff3dblink 1.8s infinite; }
 .ff3d-onlbl{ color:#5cf2a8 !important; font-weight:700; }
+.ff3d-biz{ font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700; letter-spacing:.14em; color:#93a4c4; text-transform:uppercase; padding:2px 7px; border:1px solid rgba(120,180,255,.2); border-radius:6px; background:rgba(0,0,0,.25); }
+.ff3d-auto{ color:#5cf2a8 !important; font-weight:700; text-shadow:0 0 10px rgba(92,242,168,.6); animation:ff3dblink 1.1s infinite; }
+.ff3d-auto-on{ border-color:rgba(92,242,168,.7) !important; color:#08160f !important; background:linear-gradient(180deg,#7ef0b0,#2fbf7a) !important; box-shadow:0 0 18px -4px rgba(92,242,168,.6); }
 .ff3d-stats{ display:flex; align-items:center; gap:11px; padding:7px 13px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#93a4c4; text-transform:uppercase; }
 .ff3d-stats b{ color:#eaf2ff; font-size:11px; }
 .ff3d-light{ width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.2); }
