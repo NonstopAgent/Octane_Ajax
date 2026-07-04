@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { RejectModal } from "@/components/review/reject-modal";
-import { ReviewCard } from "@/components/review/review-card";
+import { ReviewCard, type AiReviewResult } from "@/components/review/review-card";
 import { ReviewExternalLinksPanel } from "@/components/review/review-external-links-panel";
 import type { ProductListing } from "@/lib/ajax/types";
 import {
@@ -41,6 +41,8 @@ export function ReviewDashboard({
   const [approveErrors, setApproveErrors] = useState<Record<string, string>>(
     {},
   );
+  const [aiResults, setAiResults] = useState<Record<string, AiReviewResult>>({});
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
 
   const showToast = useCallback((tone: ToastTone, message: string) => {
     setToast({ tone, message });
@@ -122,6 +124,60 @@ export function ReviewDashboard({
       showToast("error", "Network error during approval.");
     } finally {
       setActingOn(null);
+    }
+  };
+
+  const runAiReview = async (reviewId: string) => {
+    setAiBusy(reviewId);
+    try {
+      const res = await fetch("/api/ajax/review/ai-review", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as
+        | (AiReviewResult & { ok: true })
+        | { ok?: false; error?: string };
+
+      if (!res.ok || !("ok" in data) || data.ok !== true) {
+        const message =
+          ("error" in data && data.error) || "AI review failed.";
+        showToast("error", message);
+        return;
+      }
+
+      const result = data as AiReviewResult;
+      setAiResults((prev) => ({ ...prev, [reviewId]: result }));
+
+      if (result.acted === "approved") {
+        showToast(
+          "success",
+          `AI cleared it · ${result.overallScore}/100. Etsy draft created.`,
+        );
+        setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      } else if (result.acted === "rejected") {
+        showToast(
+          "error",
+          `AI rejected · ${result.overallScore}/100. Sent back to the agents.`,
+        );
+        setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      } else {
+        const tone =
+          result.verdict === "approve"
+            ? "success"
+            : result.verdict === "reject"
+              ? "error"
+              : "info";
+        showToast(
+          tone,
+          `AI verdict: ${result.verdict} · ${result.overallScore}/100.`,
+        );
+      }
+    } catch {
+      showToast("error", "Network error during AI review.");
+    } finally {
+      setAiBusy(null);
     }
   };
 
@@ -225,6 +281,9 @@ export function ReviewDashboard({
                 review={review}
                 busy={actingOn === review.id}
                 approveError={approveErrors[review.id] ?? null}
+                aiResult={aiResults[review.id] ?? null}
+                aiBusy={aiBusy === review.id}
+                onAiReview={() => runAiReview(review.id)}
                 onApprove={() => approve(review.id)}
                 onReject={() => setRejectTarget(review)}
                 onGenerationChange={(patch) =>

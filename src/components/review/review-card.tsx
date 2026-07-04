@@ -23,10 +23,29 @@ function formatCreated(iso: string) {
   });
 }
 
+export type AiReviewResult = {
+  verdict: "approve" | "revise" | "reject";
+  overallScore: number;
+  subscores: {
+    seo: number;
+    sellability: number;
+    brand: number;
+    quality: number;
+    compliance: number;
+  };
+  reasons: string[];
+  fixes: string[];
+  model: string;
+  acted: "approved" | "rejected" | null;
+};
+
 type ReviewCardProps = {
   review: PendingReviewDetail;
   busy: boolean;
   approveError?: string | null;
+  aiResult?: AiReviewResult | null;
+  aiBusy?: boolean;
+  onAiReview?: () => void;
   onApprove: () => void;
   onReject: () => void;
   onGenerationChange?: (patch: {
@@ -39,6 +58,9 @@ export function ReviewCard({
   review,
   busy,
   approveError,
+  aiResult,
+  aiBusy,
+  onAiReview,
   onApprove,
   onReject,
   onGenerationChange,
@@ -139,6 +161,17 @@ export function ReviewCard({
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
+          {onAiReview ? (
+            <Button
+              variant="secondary"
+              className="h-10"
+              disabled={busy || aiBusy}
+              onClick={onAiReview}
+              title="Grade this listing against the proven Etsy playbook"
+            >
+              {aiBusy ? "AI reviewing…" : "AI review"}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             className="factory-control factory-control-reject h-10"
@@ -177,6 +210,8 @@ export function ReviewCard({
           {approveUi.cautionMessage}
         </div>
       ) : null}
+
+      {aiResult ? <AiVerdictPanel result={aiResult} /> : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[12rem_1fr]">
         <div className="space-y-3">
@@ -247,6 +282,111 @@ export function ReviewCard({
         onGenerationChange={onGenerationChange}
       />
     </article>
+  );
+}
+
+const VERDICT_UI: Record<
+  AiReviewResult["verdict"],
+  { label: string; tone: "blue" | "warning" | "orange"; blurb: string }
+> = {
+  approve: {
+    label: "AI verdict · Approve",
+    tone: "blue",
+    blurb: "Clears the proven Etsy bar — strong enough to ship.",
+  },
+  revise: {
+    label: "AI verdict · Revise",
+    tone: "warning",
+    blurb: "Fixable — apply the fixes below, then it's ready.",
+  },
+  reject: {
+    label: "AI verdict · Reject",
+    tone: "orange",
+    blurb: "Below the bar or non-compliant — send back to the agents.",
+  },
+};
+
+const SUBSCORE_LABELS: Array<{ key: keyof AiReviewResult["subscores"]; label: string }> = [
+  { key: "seo", label: "SEO" },
+  { key: "sellability", label: "Sellability" },
+  { key: "brand", label: "Brand" },
+  { key: "quality", label: "Quality" },
+  { key: "compliance", label: "Compliance" },
+];
+
+function AiVerdictPanel({ result }: { result: AiReviewResult }) {
+  const ui = VERDICT_UI[result.verdict];
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--border-dim)] bg-black/25 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <StatusBadge label={ui.label} tone={ui.tone} />
+          {result.acted ? (
+            <StatusBadge
+              label={`Auto-${result.acted}`}
+              tone={result.acted === "approved" ? "blue" : "orange"}
+            />
+          ) : null}
+        </div>
+        <span className="font-mono text-lg font-bold text-[var(--foreground)]">
+          {result.overallScore}
+          <span className="text-xs text-[var(--text-muted)]">/100</span>
+        </span>
+      </div>
+
+      <p className="mt-2 text-xs text-[var(--text-muted)]">{ui.blurb}</p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {SUBSCORE_LABELS.map(({ key, label }) => {
+          const score = result.subscores[key];
+          const bar = score >= 78 ? "bg-emerald-400" : score >= 55 ? "bg-amber-400" : "bg-red-400";
+          return (
+            <div key={key}>
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                <span>{label}</span>
+                <span className="font-mono">{score}</span>
+              </div>
+              <div className="mt-1 h-1.5 w-full rounded-full bg-white/10">
+                <div
+                  className={`h-1.5 rounded-full ${bar}`}
+                  style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {result.reasons.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+            Why
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-[var(--foreground)]">
+            {result.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {result.fixes.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent-blue)]">
+            Fixes to ship it
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-[var(--foreground)]">
+            {result.fixes.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="mt-3 font-mono text-[10px] text-[var(--text-muted)]">
+        Graded by {result.model} against the Etsy playbook
+      </p>
+    </div>
   );
 }
 
