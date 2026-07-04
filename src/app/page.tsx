@@ -1,10 +1,34 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AgentCard } from "@/components/ui/agent-card";
 import { ButtonLink } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AGENTS, FACTORY_STATIONS } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/server";
 
-export default function HomePage() {
+function configReady() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
+}
+
+export default async function HomePage() {
+  // Logged-in operators land straight on the living ecosystem floor.
+  if (configReady()) {
+    let authed = false;
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      authed = Boolean(user);
+    } catch {
+      authed = false;
+    }
+    if (authed) redirect("/factory");
+  }
+
   return (
     <div className="factory-grid-bg flex min-h-full flex-col">
       <header className="border-b border-[var(--border-dim)]">

@@ -364,7 +364,7 @@ export function FactoryFloor3D(props: Props) {
     });
 
     // particles
-    const motesN = 170;
+    const motesN = 240;
     const motesPos = new Float32Array(motesN * 3);
     for (let i = 0; i < motesN; i++) {
       motesPos[i * 3] = (Math.random() - 0.5) * 30;
@@ -480,14 +480,17 @@ export function FactoryFloor3D(props: Props) {
         if (def.id === "store") active = live.metrics.publishedListings > 0 && active;
         const hov = hovered === def.id;
 
-        const tgtEmi = alert ? 0.55 : active ? 0.5 : hov ? 0.28 : 0.15;
+        // idle breathing so every zone stays alive even with no active work
+        const breathe = 0.5 + 0.5 * Math.sin(t * 1.1 + def.x * 0.7 + def.z * 0.5);
+
+        const tgtEmi = alert ? 0.55 : active ? 0.5 : hov ? 0.28 : 0.16 + 0.06 * breathe;
         o.topMat.emissiveIntensity += (tgtEmi - o.topMat.emissiveIntensity) * 0.12;
-        const tgtLi = alert ? 1.4 : active ? 1.3 : hov ? 0.7 : 0.22;
+        const tgtLi = alert ? 1.4 : active ? 1.3 : hov ? 0.7 : 0.24 + 0.14 * breathe;
         o.light.intensity += (tgtLi - o.light.intensity) * 0.1;
-        const tgtGo = active || alert ? 0.5 : hov ? 0.3 : 0.0;
+        const tgtGo = active || alert ? 0.5 : hov ? 0.3 : 0.06 + 0.06 * breathe;
         o.glow.material.opacity += (tgtGo - o.glow.material.opacity) * 0.1;
         o.edgeMat.color.setHex(alert ? 0xffc24a : def.hex);
-        o.edgeMat.opacity = active || alert ? 0.8 + 0.2 * Math.sin(t * 5) : 0.7;
+        o.edgeMat.opacity = active || alert ? 0.8 + 0.2 * Math.sin(t * 5) : 0.6 + 0.14 * breathe;
         if (o.holo) {
           o.holo.position.y = 1.25 + Math.sin(t * 2) * 0.06;
           (o.holo.material as THREE.MeshStandardMaterial).opacity = alert ? 0.9 : 0.4;
@@ -513,7 +516,7 @@ export function FactoryFloor3D(props: Props) {
         const wait = bySlug[slug]?.status === "waiting_review";
         const hx = a.room.w / 2 - 0.7;
         const hz = a.room.d / 2 - 0.7;
-        const spd = work ? 1.6 : 0.55;
+        const spd = work ? 1.6 : 0.85;
         const dx = a.target.x - a.group.position.x;
         const dz = a.target.z - a.group.position.z;
         const d = Math.hypot(dx, dz);
@@ -526,7 +529,7 @@ export function FactoryFloor3D(props: Props) {
           } else {
             a.target.set(a.room.x + (Math.random() * 2 - 1) * hx, 0.55, a.room.z + (Math.random() * 2 - 1) * hz);
           }
-          a.dwell = work ? 0.1 + Math.random() * 0.4 : 0.7 + Math.random() * 1.6;
+          a.dwell = work ? 0.1 + Math.random() * 0.4 : 0.35 + Math.random() * 1.0;
         } else {
           const step = Math.min(d, spd * dts);
           a.group.position.x += (dx / d) * step;
@@ -537,12 +540,13 @@ export function FactoryFloor3D(props: Props) {
         const bob = moving ? Math.abs(Math.sin(t * 13)) * 0.08 : work ? Math.sin(t * 4) * 0.03 : Math.sin(t * 1.5) * 0.02;
         a.group.position.y = bob;
         a.group.rotation.y += (a.face - a.group.rotation.y) * 0.18;
-        const ei = work ? 1.15 : wait ? 0.8 : 0.5;
+        const idlePulse = 0.5 + 0.5 * Math.sin(t * 2.2 + a.room.x);
+        const ei = work ? 1.15 : wait ? 0.8 : 0.46 + 0.16 * idlePulse;
         a.bodyMat.emissiveIntensity += (ei - a.bodyMat.emissiveIntensity) * 0.1;
         a.headMat.emissiveIntensity = a.bodyMat.emissiveIntensity + 0.2;
-        a.light.intensity = work ? 1.1 : 0.45;
-        a.halo.material.opacity = work ? 0.95 : 0.5;
-        a.halo.scale.setScalar(1.3 + (moving ? 0.15 * Math.sin(t * 14) : 0));
+        a.light.intensity = work ? 1.1 : 0.4 + 0.2 * idlePulse;
+        a.halo.material.opacity = work ? 0.95 : 0.4 + 0.18 * idlePulse;
+        a.halo.scale.setScalar(1.3 + (moving ? 0.15 * Math.sin(t * 14) : 0.08 * idlePulse));
 
         proj.set(a.group.position.x, a.group.position.y + 0.95, a.group.position.z).project(camera);
         const ax = (proj.x * 0.5 + 0.5) * rect.width;
@@ -554,28 +558,31 @@ export function FactoryFloor3D(props: Props) {
         a.label.innerHTML = "<b>" + AGENT_NAME[slug] + "</b>" + (work ? " · live" : wait ? " · review" : "");
       }
 
-      // conveyors driven by cyclePhase
+      // conveyors — always a gentle ambient flow so the ecosystem never looks
+      // parked; bright + fast when a cycle is actually moving product through.
       const c1on = live.running && live.cyclePhase === "nova";
       const c2on = live.running && live.cyclePhase === "forge";
-      const flow: Record<string, boolean> = { c1: c1on, c2: c2on, c3: false, c4: false };
+      const flow: Record<string, boolean> = {
+        c1: c1on,
+        c2: c2on,
+        c3: live.metrics.pendingReviews > 0,
+        c4: live.metrics.publishedListings > 0,
+      };
       for (const k of Object.keys(conv)) {
         const c = conv[k];
         const on = flow[k];
-        c.mat.opacity = on ? 0.6 : 0.18;
-        c.orbs.forEach((o) => {
-          if (on) {
-            const f = ((t * 0.5) + (o.userData.off as number)) % 1;
-            const p = c.curve.getPoint(f);
-            o.position.copy(p);
-            o.material.opacity = 0.9;
-            o.scale.setScalar(0.5 + 0.2 * Math.sin(t * 10 + (o.userData.off as number) * 9));
-          } else {
-            o.material.opacity = 0;
-          }
+        c.mat.opacity += ((on ? 0.6 : 0.15) - c.mat.opacity) * 0.08;
+        const speed = on ? 0.5 : 0.12;
+        c.orbs.forEach((o, oi) => {
+          const f = (t * speed + (o.userData.off as number)) % 1;
+          o.position.copy(c.curve.getPoint(f));
+          o.material.opacity = on ? 0.9 : 0.26;
+          o.scale.setScalar((on ? 0.5 : 0.3) + 0.15 * Math.sin(t * (on ? 10 : 3) + oi * 2));
         });
       }
 
-      motes.rotation.y = t * 0.02;
+      motes.rotation.y = t * 0.03;
+      motes.position.y = Math.sin(t * 0.4) * 0.15;
       renderer.render(scene, camera);
       raf = requestAnimationFrame(render);
     };
@@ -610,6 +617,25 @@ export function FactoryFloor3D(props: Props) {
   const phaseText = running ? (cyclePhase === "nova" ? "NOVA SCANNING" : "FORGE BUILDING") : runningPixel ? "PIXEL PACKAGING" : null;
   const busy = running || runningPixel || resetting;
 
+  // rotating ambient status so the ticker always feels live between events
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 4200);
+    return () => window.clearInterval(id);
+  }, []);
+  const ambientLines = [
+    `Ecosystem online · ${activeCount} agent${activeCount === 1 ? "" : "s"} active`,
+    `Storefront · ${metrics.publishedListings} live listing${metrics.publishedListings === 1 ? "" : "s"}`,
+    metrics.pendingReviews > 0
+      ? `Review gate · ${metrics.pendingReviews} awaiting your approval`
+      : "Review gate · clear",
+    `Nova archive · ${metrics.productIdeas} ideas on file`,
+    `Pixel · ${metrics.scheduledContent} promo${metrics.scheduledContent === 1 ? "" : "s"} staged`,
+    "Autopilot healthy · daily sweep scheduled",
+  ];
+  const tickerLines = lastEventMessage ? [lastEventMessage, ...ambientLines] : ambientLines;
+  const tickerText = tickerLines[tick % tickerLines.length];
+
   return (
     <div className="ff3d-wrap">
       <div className="ff3d-canvas" ref={mountRef} />
@@ -619,9 +645,12 @@ export function FactoryFloor3D(props: Props) {
       <div className="ff3d-hud-top">
         <div className="ff3d-glass ff3d-brand">
           <span className="ff3d-logo">OCTANE&nbsp;AJAX</span>
+          <span className="ff3d-eco">AI&nbsp;AGENT&nbsp;ECOSYSTEM</span>
           <span className="ff3d-op">OPERATOR: <b>LOGAN ALVAREZ</b>{" // @lilchulo"}</span>
         </div>
         <div className="ff3d-glass ff3d-stats">
+          <span className="ff3d-online" />
+          <span className="ff3d-onlbl">ONLINE</span>
           <span className="ff3d-light" data-on={activeCount > 0} />
           <span>ACTIVE <b>{activeCount}</b></span>
           <span>QUEUE <b style={{ color: metrics.pendingReviews > 0 ? "#ffc24a" : "#eaf2ff" }}>{metrics.pendingReviews}</b></span>
@@ -630,7 +659,7 @@ export function FactoryFloor3D(props: Props) {
         </div>
       </div>
 
-      <div className="ff3d-hint">▸ One floor — click any zone for its tools · drag to look</div>
+      <div className="ff3d-hint">▸ Live AI agent ecosystem · click any zone · drag to look</div>
 
       {/* controls */}
       <div className="ff3d-controls">
@@ -648,8 +677,8 @@ export function FactoryFloor3D(props: Props) {
           {resetting ? "Resetting…" : "⟳ Reset"}
         </button>
         <div className="ff3d-ticker">
-          <span className="ff3d-tl">FLOOR</span>
-          <span className="ff3d-tt">{lastEventMessage ?? "Floor online — click a zone or press Run Cycle."}</span>
+          <span className="ff3d-tl">LIVE</span>
+          <span className="ff3d-tt" key={tick}>{tickerText}</span>
         </div>
       </div>
 
@@ -887,6 +916,9 @@ const CSS = `
 .ff3d-logo{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:14px; letter-spacing:.12em; color:#e7f4ff; text-shadow:0 0 16px rgba(60,230,255,.5); }
 .ff3d-op{ font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#93a4c4; text-transform:uppercase; }
 .ff3d-op b{ color:#3ce6ff; }
+.ff3d-eco{ font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700; letter-spacing:.2em; color:#5cf2a8; text-transform:uppercase; padding:2px 7px; border:1px solid rgba(92,242,168,.35); border-radius:6px; background:rgba(92,242,168,.08); text-shadow:0 0 10px rgba(92,242,168,.4); }
+.ff3d-online{ width:8px; height:8px; border-radius:50%; background:#5cf2a8; box-shadow:0 0 10px #5cf2a8; animation:ff3dblink 1.8s infinite; }
+.ff3d-onlbl{ color:#5cf2a8 !important; font-weight:700; }
 .ff3d-stats{ display:flex; align-items:center; gap:11px; padding:7px 13px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:#93a4c4; text-transform:uppercase; }
 .ff3d-stats b{ color:#eaf2ff; font-size:11px; }
 .ff3d-light{ width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.2); }
@@ -905,7 +937,8 @@ const CSS = `
 .ff3d-spin{ width:11px; height:11px; border:1.7px solid currentColor; border-top-color:transparent; border-radius:50%; animation:ff3dspin .7s linear infinite; }
 .ff3d-ticker{ margin-left:auto; display:flex; align-items:center; gap:8px; min-width:0; flex:1 1 200px; }
 .ff3d-tl{ font-family:'JetBrains Mono',monospace; font-size:8.5px; font-weight:700; letter-spacing:.14em; color:#3ce6ff; opacity:.7; flex:0 0 auto; }
-.ff3d-tt{ font-family:'JetBrains Mono',monospace; font-size:10px; color:#93a4c4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ff3d-tt{ font-family:'JetBrains Mono',monospace; font-size:10px; color:#93a4c4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; animation:ff3dfade .5s ease; }
+@keyframes ff3dfade{ from{ opacity:0; transform:translateX(6px); } to{ opacity:1; transform:none; } }
 .ff3d-scrim{ position:absolute; inset:0; z-index:16; background:rgba(3,6,14,.45); backdrop-filter:blur(2px); }
 .ff3d-inspector{ position:absolute; top:0; right:0; bottom:0; width:min(340px,90%); z-index:17; background:linear-gradient(160deg,rgba(12,18,34,.98),rgba(7,10,20,.99)); border-left:1px solid rgba(120,180,255,.16); box-shadow:-34px 0 64px -34px #000; display:flex; flex-direction:column; overflow:hidden; animation:ff3dslide .28s cubic-bezier(.4,0,.2,1); }
 @keyframes ff3dslide{ from{ transform:translateX(102%);} to{ transform:translateX(0);} }
