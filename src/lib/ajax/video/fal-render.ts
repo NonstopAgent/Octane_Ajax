@@ -55,7 +55,11 @@ function authHeaders(): Record<string, string> {
  * Map a video spec + mockup into a fal image-to-video request. Keeps the product
  * faithful (no hallucinated redesign) and forces vertical 9:16 short-form framing.
  */
-export function buildFalInput(spec: VideoSpec, imageUrl: string): FalInput {
+export function buildFalInput(
+  spec: VideoSpec,
+  imageUrl: string,
+  aspectRatio: FalInput["aspect_ratio"] = "9:16",
+): FalInput {
   // Defensive: the route may pass a partial spec from external JSON.
   const hook = spec.hookVariants?.[0] ?? "";
   const motion = spec.shots?.[0]?.motion ?? "zoom_in";
@@ -79,13 +83,17 @@ export function buildFalInput(spec: VideoSpec, imageUrl: string): FalInput {
     prompt,
     image_url: imageUrl,
     duration: durationSec >= 8 ? "10" : "5",
-    aspect_ratio: "9:16",
+    aspect_ratio: aspectRatio,
   };
 }
 
 /** Submit a render job to the fal queue; returns a request_id to poll. */
 export async function submitVideoRender(
-  args: { imageUrl: string; spec: VideoSpec },
+  args: {
+    imageUrl: string;
+    spec: VideoSpec;
+    aspectRatio?: FalInput["aspect_ratio"];
+  },
   opts: { fetchImpl?: FetchImpl } = {},
 ): Promise<RenderResult> {
   const model = videoModel();
@@ -97,7 +105,9 @@ export async function submitVideoRender(
     const res = await doFetch(`${FAL_QUEUE_BASE}/${model}`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify(buildFalInput(args.spec, args.imageUrl)),
+      body: JSON.stringify(
+        buildFalInput(args.spec, args.imageUrl, args.aspectRatio),
+      ),
       signal: AbortSignal.timeout(15000),
     });
     const json = (await res.json().catch(() => ({}))) as {
@@ -181,7 +191,11 @@ export async function pollVideoRender(
 
 /** Submit then poll within a time budget. Returns the MP4 if ready, else pending. */
 export async function renderVideoAndWait(
-  args: { imageUrl: string; spec: VideoSpec },
+  args: {
+    imageUrl: string;
+    spec: VideoSpec;
+    aspectRatio?: FalInput["aspect_ratio"];
+  },
   opts: {
     fetchImpl?: FetchImpl;
     maxWaitMs?: number;

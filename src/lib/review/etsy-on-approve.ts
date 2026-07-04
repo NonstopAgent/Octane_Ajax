@@ -134,8 +134,9 @@ export async function publishListingToEtsyOnApprove(
       accessToken: credentials.access_token,
     });
 
+    let mockupBuffer: Buffer | null = null;
     try {
-      const mockupBuffer = await downloadMockup(mockupPath);
+      mockupBuffer = await downloadMockup(mockupPath);
       await adapter.uploadListingImage(
         created.listing_id,
         mockupBuffer,
@@ -155,6 +156,44 @@ export async function publishListingToEtsyOnApprove(
         `Etsy draft created but mockup image upload failed: ${imageMessage}`,
         { listingId, provider: "etsy", mockupPath },
       );
+    }
+
+    // Autonomous: render a square product video from the mockup and attach it to
+    // the listing. Best-effort, gated by FAL_KEY — skips silently without a key
+    // and never blocks or breaks the publish if rendering/upload fails.
+    if (mockupBuffer) {
+      try {
+        const { renderAndAttachListingVideo } = await import(
+          "@/lib/ajax/video/listing-video"
+        );
+        const vid = await renderAndAttachListingVideo({
+          adapter,
+          listingId: created.listing_id,
+          shopId: credentials.shop_id,
+          accessToken: credentials.access_token,
+          mockupBuffer,
+          title,
+        });
+        if (vid.ok) {
+          await insertGumroadEvent(
+            supabase,
+            userId,
+            "etsy_video_attached",
+            "Attached an AI product video to the Etsy listing.",
+            { listingId, provider: "etsy", etsyVideoId: vid.etsyVideoId },
+          );
+        } else if (!vid.skipped) {
+          await insertGumroadEvent(
+            supabase,
+            userId,
+            "etsy_video_skipped",
+            `Listing video not attached: ${vid.reason}`,
+            { listingId, provider: "etsy" },
+          );
+        }
+      } catch {
+        // never let the video step break publishing
+      }
     }
 
     const { data: updated, error } = await supabase

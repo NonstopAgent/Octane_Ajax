@@ -78,6 +78,31 @@ describe("etsy adapter", () => {
     assert.equal(headers.get("Content-Type"), null);
   });
 
+  it("uploadListingVideo multipart posts MP4 to videos endpoint", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return jsonResponse({ listing_video_id: 777002 });
+    }) as typeof fetch;
+
+    const adapter = createEtsyAdapter({ clientId: "etsy-key", sharedSecret: "etsy-secret", fetchImpl });
+    const result = await adapter.uploadListingVideo(
+      "999001",
+      Buffer.from([0x00, 0x00, 0x00]),
+      "clip.mp4",
+      "12345",
+      "42.token-value",
+      "product video",
+    );
+
+    assert.equal(result.listing_video_id, "777002");
+    assert.match(calls[0]!.url, /\/shops\/12345\/listings\/999001\/videos$/);
+    assert.ok(calls[0]!.init.body instanceof FormData);
+    const headers = new Headers(calls[0]!.init.headers);
+    assert.equal(headers.get("x-api-key"), "etsy-key:etsy-secret");
+    assert.equal(headers.get("Authorization"), "Bearer 42.token-value");
+  });
+
   it("uploadListingFile multipart posts PDF to files endpoint", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fetchImpl = (async (url: string | URL, init?: RequestInit) => {

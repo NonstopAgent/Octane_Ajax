@@ -72,7 +72,7 @@ describe("fal-render (configured)", () => {
   });
 
   it("polls pending, then returns the MP4 URL on completion", async () => {
-    const pending = (async (url: string) =>
+    const pending = (async () =>
       res({ status: "IN_PROGRESS" })) as unknown as typeof fetch;
     const p = await pollVideoRender("req-1", { fetchImpl: pending });
     assert.equal(p.status, "pending");

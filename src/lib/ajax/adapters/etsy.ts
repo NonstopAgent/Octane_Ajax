@@ -370,6 +370,45 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     },
 
     /**
+     * Attach a product video to a listing (Etsy allows one; audio is stripped;
+     * 5–15s, ≤100MB, mp4/h264, 1:1 recommended). Mirrors uploadListingImage.
+     */
+    async uploadListingVideo(
+      listingId: string,
+      videoBuffer: Buffer,
+      filename: string,
+      shopId: string,
+      accessToken: string,
+      name?: string,
+    ): Promise<{ listing_video_id: string }> {
+      const form = new FormData();
+      form.append(
+        "video",
+        new Blob([new Uint8Array(videoBuffer)], { type: "video/mp4" }),
+        filename,
+      );
+      form.append("name", (name ?? filename).slice(0, 70));
+
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/videos`,
+        {
+          method: "POST",
+          headers: authHeaders(apiKeyHeader, accessToken),
+          body: form,
+        },
+      );
+
+      const parsed = await parseEtsyJson<{ listing_video_id?: number }>(
+        response,
+      );
+      const videoId =
+        parsed.listing_video_id != null
+          ? String(parsed.listing_video_id)
+          : "unknown";
+      return { listing_video_id: videoId };
+    },
+
+    /**
      * Reads the shop's active listings with lifetime views + favorites. Etsy
      * exposes only lifetime counters (no daily series), so the analytics poller
      * snapshots these daily and derives velocity from the deltas.
