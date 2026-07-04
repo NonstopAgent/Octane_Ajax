@@ -43,6 +43,7 @@ export const NAV_ITEMS = [
   { href: "/factory", label: "Factory", description: "Live AI agent ecosystem" },
   { href: "/dashboard", label: "Dashboard", description: "Command center" },
   { href: "/review", label: "Review", description: "Approve or reject" },
+  { href: "/store-qa", label: "Store QA", description: "Whole-shop quality sweep" },
   {
     href: "/marketing",
     label: "Content",
