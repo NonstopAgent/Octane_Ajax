@@ -141,7 +141,7 @@ export function FactorySweatshop({
     onRefresh: refreshAgentsAndMetrics,
   });
 
-  const runCycle = useCallback(async () => {
+  const runCycle = useCallback(async (autoReview = false) => {
     setRunning(true);
     setCyclePhase("nova");
     try {
@@ -181,7 +181,48 @@ export function FactorySweatshop({
         return;
       }
 
-      showToast("success", forgeData.message ?? "Cycle paused at Review Gate.");
+      // Autopilot: let the AI reviewer clear the gate on its own. Approve →
+      // Etsy DRAFT (never live); reject → back to agents; revise → stays pending,
+      // which pauses autopilot for you. Manual runs still stop at the gate.
+      if (autoReview && forgeData.review?.id) {
+        try {
+          const arRes = await fetch("/api/ajax/review/ai-review", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reviewId: forgeData.review.id,
+              autonomous: true,
+            }),
+          });
+          const ar = await arRes.json().catch(() => ({}));
+          if (!arRes.ok || !ar?.ok) {
+            showToast(
+              "info",
+              ar?.error ?? "AI review unavailable — listing left at the gate.",
+            );
+          } else if (ar.acted === "approved") {
+            showToast(
+              "success",
+              `AI approved (${ar.overallScore}/100) — Etsy draft created.`,
+            );
+          } else if (ar.acted === "rejected") {
+            showToast(
+              "info",
+              `AI rejected (${ar.overallScore}/100) — sent back to the agents.`,
+            );
+          } else {
+            showToast(
+              "info",
+              `AI says revise (${ar.overallScore}/100) — left at the gate for you.`,
+            );
+          }
+        } catch {
+          showToast("info", "AI review failed — listing left at the gate.");
+        }
+      } else {
+        showToast("success", forgeData.message ?? "Cycle paused at Review Gate.");
+      }
       await refresh();
     } catch {
       showToast("error", "Request failed or timed out.");
@@ -245,10 +286,12 @@ export function FactorySweatshop({
     }
   }, [showToast, refresh]);
 
-  // Autopilot — the "it runs itself" loop. When on, it kicks off a Nova→Forge
-  // cycle whenever the floor is idle and nothing is waiting at the Review Gate.
-  // It's self-limiting: a pending review pauses it until you approve, and it
-  // never publishes or spends beyond one LLM cycle. Refs avoid stale closures.
+  // Autopilot — the "it runs itself" loop. When on, it runs a full
+  // Nova→Forge→AI-Review cycle whenever the floor is idle and nothing is waiting
+  // at the gate. The AI reviewer auto-clears strong listings (approve → Etsy
+  // DRAFT only, never live) and sends weak ones back; a "revise" verdict leaves
+  // the item pending, which pauses autopilot for you. It never publishes live or
+  // spends beyond one cycle + one review. Refs avoid stale closures.
   const autopilotRef = useRef(autopilot);
   const gateRef = useRef({ running, runningPixel, resetting, pending: metrics.pendingReviews });
   useEffect(() => {
@@ -268,7 +311,7 @@ export function FactorySweatshop({
         !g.resetting &&
         g.pending === 0
       ) {
-        void runCycle();
+        void runCycle(true);
       }
     }, 18000);
     return () => window.clearInterval(id);
