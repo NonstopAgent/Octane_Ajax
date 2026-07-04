@@ -26,6 +26,7 @@ type Props = {
   runningPixel: boolean;
   resetting: boolean;
   autopilot: boolean;
+  businessLabel: string;
   lastEventMessage?: string;
   onRunCycle: () => void;
   onRunPixel: () => void;
@@ -122,6 +123,7 @@ export function FactoryFloor3D(props: Props) {
     runningPixel,
     resetting,
     autopilot,
+    businessLabel,
     lastEventMessage,
     onRunCycle,
     onRunPixel,
@@ -699,7 +701,7 @@ export function FactoryFloor3D(props: Props) {
         <div className="ff3d-glass ff3d-brand">
           <span className="ff3d-logo">OCTANE&nbsp;AJAX</span>
           <span className="ff3d-eco">AI&nbsp;AGENT&nbsp;ECOSYSTEM</span>
-          <span className="ff3d-biz">BUSINESS&nbsp;01 · GOTCHADAYGOODS</span>
+          <span className="ff3d-biz">{businessLabel}</span>
           <span className="ff3d-op">OPERATOR: <b>LOGAN ALVAREZ</b>{" // @lilchulo"}</span>
         </div>
         <div className="ff3d-glass ff3d-stats">

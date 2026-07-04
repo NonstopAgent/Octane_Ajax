@@ -9,6 +9,42 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      businesses: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          slug: string | null;
+          niche: string | null;
+          brand: string | null;
+          status: string;
+          is_primary: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string;
+          name: string;
+          slug?: string | null;
+          niche?: string | null;
+          brand?: string | null;
+          status?: string;
+          is_primary?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          slug?: string | null;
+          niche?: string | null;
+          brand?: string | null;
+          status?: string;
+          is_primary?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       ajax_agents: {
         Row: {
           id: string;

@@ -4,6 +4,7 @@ export const PROTECTED_PATHS = [
   "/factory",
   "/review",
   "/agents",
+  "/businesses",
   "/settings",
 ] as const;
 

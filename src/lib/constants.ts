@@ -54,5 +54,10 @@ export const NAV_ITEMS = [
     label: "War Room",
     description: "Strategy intelligence",
   },
+  {
+    href: "/businesses",
+    label: "Businesses",
+    description: "Ecosystem of shops",
+  },
   { href: "/settings", label: "Settings", description: "Connections & config" },
 ] as const;

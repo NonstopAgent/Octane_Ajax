@@ -1,5 +1,6 @@
 import { FactorySweatshop } from "@/components/factory/factory-sweatshop";
 import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
+import { fetchPrimaryBusiness } from "@/lib/businesses/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { VisMetrics } from "@/components/factory/factory-vis-map";
 
@@ -21,6 +22,7 @@ export default async function FactoryPage() {
   const ready = configReady();
   let isAuthenticated = false;
   let snapshot: Awaited<ReturnType<typeof fetchSweatshopSnapshot>> | null = null;
+  let businessLabel = "BUSINESS 01 · GOTCHADAYGOODS";
 
   if (ready) {
     try {
@@ -32,6 +34,8 @@ export default async function FactoryPage() {
       if (user) {
         isAuthenticated = true;
         snapshot = await fetchSweatshopSnapshot(supabase, user.id);
+        const primary = await fetchPrimaryBusiness(supabase, user.id);
+        if (primary) businessLabel = `BUSINESS 01 · ${primary.name.toUpperCase()}`;
       }
     } catch (err) {
       console.error("[factory page] failed to load snapshot", err);
@@ -47,6 +51,7 @@ export default async function FactoryPage() {
       initialTikTokQueue={snapshot?.tiktokQueue ?? []}
       initialAgents={snapshot?.agents ?? []}
       initialMetrics={snapshot?.metrics ?? EMPTY_METRICS}
+      businessLabel={businessLabel}
     />
   );
 }

@@ -30,6 +30,7 @@ type FactorySweatshopProps = {
   initialTikTokQueue: TikTokQueueRow[];
   initialAgents: AjaxAgent[];
   initialMetrics: VisMetrics;
+  businessLabel: string;
 };
 
 function toVisAgent(agent: AjaxAgent): VisAgent {
@@ -48,6 +49,7 @@ export function FactorySweatshop({
   initialTikTokQueue,
   initialAgents,
   initialMetrics,
+  businessLabel,
 }: FactorySweatshopProps) {
   const [agents, setAgents] = useState<AjaxAgent[]>(initialAgents);
   const [metrics, setMetrics] = useState<VisMetrics>(initialMetrics);
@@ -301,6 +303,7 @@ export function FactorySweatshop({
         runningPixel={runningPixel}
         resetting={resetting}
         autopilot={autopilot}
+        businessLabel={businessLabel}
         lastEventMessage={lastEventMsg}
         onRunCycle={() => void runCycle()}
         onRunPixel={() => void runPixel()}

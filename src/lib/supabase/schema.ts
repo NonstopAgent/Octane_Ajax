@@ -113,6 +113,7 @@ export type TikTokQueueStatusDb = (typeof TIKTOK_QUEUE_STATUSES)[number];
 export type FactoryRoom = (typeof FACTORY_ROOMS)[keyof typeof FACTORY_ROOMS];
 
 export const TABLES = {
+  BUSINESSES: "businesses",
   AGENTS: "ajax_agents",
   TASKS: "ajax_tasks",
   IDEAS: "product_ideas",
