@@ -5,6 +5,13 @@ import {
   validateProductIdea,
 } from "@/lib/ajax/product-brain";
 import type { ProductBrainInput } from "@/lib/ajax/product-brain/types";
+import {
+  evaluateMarketOpportunity,
+  matchMarketSignals,
+  type MarketIdeaInput,
+  type MarketKeywordRow,
+  type MarketOpportunity,
+} from "@/lib/ajax/product-brain/market-signals";
 import { mapFakeDraftsToNovaRaw } from "@/lib/ajax/nova/fallback";
 import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 import {
@@ -65,9 +72,37 @@ function computeTrendScore(
   return base;
 }
 
+function toMarketInput(raw: NovaRawIdea): MarketIdeaInput {
+  return {
+    title: raw.productConcept,
+    niche: raw.niche,
+    targetBuyer: raw.targetBuyer,
+    problemSolved: raw.problemSolved,
+    keywords: raw.keywords,
+    format: raw.format,
+    priceUsd: raw.suggestedPrice,
+  };
+}
+
+/**
+ * Blend the text-based trend score with the DATA-BACKED market score — but only
+ * when real demand data was matched. A saturated/no-demand idea ("skip") is
+ * capped so a proven-market idea always outranks it. No data ⇒ score unchanged.
+ */
+function blendTrendWithMarket(
+  base: number,
+  market: MarketOpportunity,
+): number {
+  if (!market.hasData) return base;
+  let blended = Math.round(0.5 * base + 0.5 * market.marketScore);
+  if (market.recommendation === "skip") blended = Math.min(blended, 45);
+  return Math.max(0, Math.min(100, blended));
+}
+
 function evaluateRawIdea(
   raw: NovaRawIdea,
   llmModel?: string,
+  keywords?: MarketKeywordRow[] | null,
 ): NovaEvaluatedIdea | null {
   const input = toBrainInput(raw);
   const score = scoreProductIdea(input);
@@ -78,12 +113,18 @@ function evaluateRawIdea(
     return null;
   }
 
+  const market = evaluateMarketOpportunity(
+    toMarketInput(raw),
+    matchMarketSignals(toMarketInput(raw), keywords),
+  );
+
   return {
     ...raw,
     score,
     validation,
     verdict,
-    trendScore: computeTrendScore(score, verdict),
+    trendScore: blendTrendWithMarket(computeTrendScore(score, verdict), market),
+    market,
     llmModel,
   };
 }
@@ -91,10 +132,11 @@ function evaluateRawIdea(
 function evaluateRawIdeas(
   rawIdeas: NovaRawIdea[],
   llmModel?: string,
+  keywords?: MarketKeywordRow[] | null,
 ): NovaEvaluatedIdea[] {
   const evaluated: NovaEvaluatedIdea[] = [];
   for (const raw of rawIdeas) {
-    const idea = evaluateRawIdea(raw, llmModel);
+    const idea = evaluateRawIdea(raw, llmModel, keywords);
     if (idea) evaluated.push(idea);
   }
   return evaluated;
@@ -141,13 +183,17 @@ export async function runNovaIdeation(
   const useLlm =
     !options?.forceFallback && (options?.client != null || isOpenAiConfigured());
 
+  // Real demand/supply rows (searches/mo, competing listings) ground selection.
+  const keywordRows: MarketKeywordRow[] | null =
+    options?.marketContext?.operatorKeywords ?? null;
+
   if (useLlm) {
     try {
       const { raw, model } = await fetchLlmRawIdeas(runId, options);
-      let ideas = evaluateRawIdeas(raw, model);
+      let ideas = evaluateRawIdeas(raw, model, keywordRows);
 
       if (ideas.length === 0) {
-        ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId));
+        ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId), undefined, keywordRows);
         return {
           mode: "fallback",
           ideas,
@@ -166,7 +212,7 @@ export async function runNovaIdeation(
     }
   }
 
-  const ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId));
+  const ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId), undefined, keywordRows);
   if (ideas.length === 0) {
     throw new Error(
       "Nova ideation produced no ideas that passed Product Brain. Check demo fallback catalog.",
@@ -246,6 +292,10 @@ export function mapNovaIdeasToDbInserts(
       reasoning: idea.reasoning,
       source: idea.source,
     };
+
+    if (idea.market) {
+      rawPayload.market = idea.market as unknown as Json;
+    }
 
     if (result.mode === "llm" && result.llmModel) {
       rawPayload.llmModel = result.llmModel;

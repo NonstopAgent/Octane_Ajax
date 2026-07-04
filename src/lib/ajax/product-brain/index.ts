@@ -28,6 +28,16 @@ export {
 
 export { scoreProductIdea, explainProductScore } from "@/lib/ajax/product-brain/scoring";
 export {
+  evaluateMarketOpportunity,
+  matchMarketSignals,
+  estimatePodCost,
+  type MarketOpportunity,
+  type MarketRecommendation,
+  type MarketIdeaInput,
+  type MarketKeywordRow,
+  type MarketSignals,
+} from "@/lib/ajax/product-brain/market-signals";
+export {
   validateProductIdea,
   type ProductValidationResult,
 } from "@/lib/ajax/product-brain/validators";

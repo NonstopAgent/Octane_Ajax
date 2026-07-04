@@ -10,6 +10,7 @@ import type {
   ProductCategory,
   ProductFormat,
 } from "@/lib/ajax/product-brain/types";
+import type { MarketOpportunity } from "@/lib/ajax/product-brain/market-signals";
 
 export const NOVA_PROMPT_VERSION = "nova-ideation-pet-v3";
 
@@ -56,6 +57,8 @@ export interface NovaEvaluatedIdea extends NovaRawIdea {
   validation: ProductBrainValidation;
   verdict: ProductBrainVerdict;
   trendScore: number;
+  /** Data-backed market opportunity (present when market signals were evaluated). */
+  market?: MarketOpportunity;
   llmModel?: string;
 }
 
