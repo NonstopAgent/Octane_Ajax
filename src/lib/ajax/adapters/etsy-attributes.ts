@@ -207,8 +207,8 @@ function findProperty(
 ): EtsyTaxonomyProperty | undefined {
   const lc = names.map((n) => n.toLowerCase());
   return (
-    props.find((p) => lc.includes(p.property_name.toLowerCase())) ??
-    props.find((p) => lc.some((n) => p.property_name.toLowerCase().includes(n)))
+    props.find((p) => typeof p.property_name === "string" && lc.includes(p.property_name.toLowerCase())) ??
+    props.find((p) => typeof p.property_name === "string" && lc.some((n) => p.property_name.toLowerCase().includes(n)))
   );
 }
 
@@ -216,6 +216,7 @@ export type ApplyResult = {
   taxonomyId: number | null;
   set: string[];
   skipped: string[];
+  available?: string[];
 };
 
 /**
@@ -242,6 +243,9 @@ export async function applyListingAttributes(
   const effectiveHints = hints.length ? hints : meta.title ? [meta.title] : [];
   const desired = desiredAttributesFor(effectiveHints);
   const props = await getTaxonomyProperties(meta.taxonomyId, fetchImpl);
+  const available = props
+    .map((p) => p.property_name)
+    .filter((n): n is string => typeof n === "string");
 
   for (const d of desired.properties) {
     const prop = findProperty(props, d.names);
@@ -251,7 +255,9 @@ export async function applyListingAttributes(
     }
     try {
       if (d.numeric) {
-        const scales = prop.scales ?? [];
+        const scales = (prop.scales ?? []).filter(
+          (s) => typeof s.scale_name === "string",
+        );
         const scale =
           scales.find((s) =>
             (d.scaleNames ?? []).some((sn) =>
@@ -272,7 +278,9 @@ export async function applyListingAttributes(
         );
         set.push(`${prop.property_name}=${d.value} ${scale.scale_name}`);
       } else {
-        const values = prop.possible_values ?? [];
+        const values = (prop.possible_values ?? []).filter(
+          (v) => typeof v.name === "string",
+        );
         const pv =
           values.find((v) => v.name.toLowerCase() === d.value.toLowerCase()) ??
           values.find((v) =>
@@ -316,7 +324,7 @@ export async function applyListingAttributes(
     }
   }
 
-  return { taxonomyId: meta.taxonomyId, set, skipped };
+  return { taxonomyId: meta.taxonomyId, set, skipped, available };
 }
 
 /** Lists the shop's active + draft listings (id, title, state) for reconcile. */
