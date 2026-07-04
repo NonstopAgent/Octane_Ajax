@@ -15,6 +15,7 @@ import {
   fetchEtsyMarketContext,
   formatEtsyContextForPrompt,
 } from "@/lib/ajax/nova/etsy-research";
+import { bootstrapKeywordsIfEmpty } from "@/lib/ajax/nova/keyword-ingest";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -204,6 +205,14 @@ async function fetchYouTubeBuzz(
 export async function fetchMarketResearch(
   opts?: ResearchSeedOptions,
 ): Promise<MarketResearchContext | null> {
+  // Zero-touch: on the first cycle (no keywords yet), pull real Etsy competition
+  // data so the market scorer has facts to work with. Best-effort, non-blocking.
+  if (opts?.supabase && opts.userId) {
+    await bootstrapKeywordsIfEmpty({
+      supabase: opts.supabase,
+      userId: opts.userId,
+    });
+  }
   const operatorKeywords = await fetchOperatorKeywords(opts);
   const seeds = await resolveResearchSeeds(opts, operatorKeywords);
   const [etsy, trends, youtube] = await Promise.all([
