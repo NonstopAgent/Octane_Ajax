@@ -167,6 +167,24 @@ export function TikTokQueuePanel({
     }
   }, [enabled, loadItems]);
 
+  // Drain the async video queue while the operator is active: finish any renders
+  // that are ready (attach Etsy videos, post social) and refresh on completion.
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => {
+      void fetch("/api/ajax/video/poll", {
+        method: "POST",
+        credentials: "include",
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.done > 0) void loadItems();
+        })
+        .catch(() => {});
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [enabled, loadItems]);
+
   const markPosted = useCallback(async (id: string) => {
     setPostingId(id);
     try {

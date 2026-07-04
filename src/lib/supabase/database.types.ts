@@ -813,6 +813,57 @@ export interface Database {
         };
         Relationships: [];
       };
+      video_jobs: {
+        Row: {
+          id: string;
+          user_id: string;
+          business_id: string | null;
+          kind: string;
+          request_id: string;
+          status: string;
+          etsy_listing_id: string | null;
+          post_text: string | null;
+          platforms: string[] | null;
+          video_url: string | null;
+          attempts: number;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          business_id?: string | null;
+          kind: string;
+          request_id: string;
+          status?: string;
+          etsy_listing_id?: string | null;
+          post_text?: string | null;
+          platforms?: string[] | null;
+          video_url?: string | null;
+          attempts?: number;
+          last_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          business_id?: string | null;
+          kind?: string;
+          request_id?: string;
+          status?: string;
+          etsy_listing_id?: string | null;
+          post_text?: string | null;
+          platforms?: string[] | null;
+          video_url?: string | null;
+          attempts?: number;
+          last_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       strategy_recommendations: {
         Row: {
           id: string;

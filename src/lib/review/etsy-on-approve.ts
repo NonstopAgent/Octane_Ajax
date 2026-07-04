@@ -158,37 +158,29 @@ export async function publishListingToEtsyOnApprove(
       );
     }
 
-    // Autonomous: render a square product video from the mockup and attach it to
-    // the listing. Best-effort, gated by FAL_KEY — skips silently without a key
-    // and never blocks or breaks the publish if rendering/upload fails.
+    // Autonomous: submit the video renders and enqueue them (no waiting here).
+    // The poll endpoint + cron backstop attach the 1:1 clip to the Etsy listing
+    // and post the 9:16 clip to social when each render finishes. Gated by
+    // FAL_KEY; never blocks or breaks the publish.
     if (mockupBuffer) {
       try {
-        const { renderAndAttachListingVideo } = await import(
-          "@/lib/ajax/video/listing-video"
-        );
-        const vid = await renderAndAttachListingVideo({
-          adapter,
-          listingId: created.listing_id,
-          shopId: credentials.shop_id,
-          accessToken: credentials.access_token,
+        const { enqueueApprovalVideos } = await import("@/lib/ajax/video/jobs");
+        const q = await enqueueApprovalVideos(supabase, {
+          userId,
           mockupBuffer,
           title,
+          etsyListingId: created.listing_id,
+          listingUrl: created.url,
         });
-        if (vid.ok) {
+        if (q.etsy || q.social) {
           await insertGumroadEvent(
             supabase,
             userId,
-            "etsy_video_attached",
-            "Attached an AI product video to the Etsy listing.",
-            { listingId, provider: "etsy", etsyVideoId: vid.etsyVideoId },
-          );
-        } else if (!vid.skipped) {
-          await insertGumroadEvent(
-            supabase,
-            userId,
-            "etsy_video_skipped",
-            `Listing video not attached: ${vid.reason}`,
-            { listingId, provider: "etsy" },
+            "video_render_queued",
+            `Queued a product video render${
+              q.social ? " + social post" : ""
+            }; it attaches when the render finishes.`,
+            { listingId, provider: "etsy", etsy: q.etsy, social: q.social },
           );
         }
       } catch {
