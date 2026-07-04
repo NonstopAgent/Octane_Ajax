@@ -85,11 +85,7 @@ async function run(req: NextRequest) {
         await listShopListingSummaries(creds.shop_id, creds.access_token)
       ).map((s) => s.listingId);
 
-    const results: {
-      listingId: string;
-      set: string[];
-      skipped: string[];
-    }[] = [];
+    const results: Record<string, unknown>[] = [];
     for (const listingId of targetIds) {
       try {
         const r = await applyListingAttributes(
@@ -98,7 +94,7 @@ async function run(req: NextRequest) {
           creds.access_token,
           [],
         );
-        results.push({ listingId, set: r.set, skipped: r.skipped });
+        results.push({ listingId, taxonomyId: r.taxonomyId, set: r.set, skipped: r.skipped, available: r.available });
       } catch (err) {
         results.push({
           listingId,
