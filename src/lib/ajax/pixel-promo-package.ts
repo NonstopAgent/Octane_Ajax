@@ -1,4 +1,5 @@
 import type { PodDetails, ProductStructure } from "@/lib/product/domain";
+import { buildVideoSpec, type VideoSpec } from "@/lib/ajax/pixel/video-spec";
 import type {
   Json,
   TablesUpdate,
@@ -15,6 +16,8 @@ export type PixelPromoMetadata = {
   pinterestDescription: string;
   tiktokHookIdeas: string[];
   hashtags: string[];
+  /** Playbook-grounded 9:16 short-form video plan (hook, timed shots, audio, CTA). */
+  videoSpec?: VideoSpec;
   /** Trackable Share & Save product URL to include when posting. */
   productUrl?: string | null;
   /** Traceability for future LLM prompts — not for publishing as-is. */
@@ -258,6 +261,16 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
   const scheduledFor = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const assetUrl = `demo://octane-ajax/promo/${input.jobId}/slideshow.mp4`;
 
+  const mockupCount = podDetails ? 3 : Math.max(1, pageTitles.length);
+  const videoSpec = buildVideoSpec({
+    productTitle: displayTitle,
+    niche,
+    format,
+    mockupCount,
+    productUrl,
+    hashtags,
+  });
+
   const metadata: PixelPromoMetadata = {
     shortCaption,
     longCaption,
@@ -265,6 +278,7 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
     pinterestDescription,
     tiktokHookIdeas,
     hashtags,
+    videoSpec,
     productUrl,
     source: {
       listingTitle: displayTitle,
