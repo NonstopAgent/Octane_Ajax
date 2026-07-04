@@ -4,6 +4,7 @@ import { ALLOWED_PRODUCT_CATEGORIES, PRODUCT_FORMATS } from "@/lib/ajax/product-
 import { NOVA_PROMPT_VERSION } from "@/lib/ajax/nova/types";
 import type { MarketResearchContext } from "@/lib/ajax/nova/research";
 import { formatMarketResearchForPrompt } from "@/lib/ajax/nova/research";
+import { buildIdeaPlaybookPrompt } from "@/lib/ajax/nova/idea-playbook";
 
 export type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 
@@ -33,6 +34,8 @@ Only suggest physical print-on-demand products. Each idea must name a specific p
 
 Prioritize niches with a built-in PURCHASE OCCASION or urgency — a moment when someone must buy a pet gift (gotcha day / adoption anniversary, a new rescue or homecoming, pet memorial or loss, "happy barkday", pet-parent appreciation). Aesthetic interest alone, with no buying occasion, scores poorly with the operator.
 
+${buildIdeaPlaybookPrompt()}
+
 Etsy POD pricing guidance (prices INCLUDE free US shipping — the shop bakes shipping into the price because Etsy ranks free-shipping listings higher): mugs $22.99–$29.99, posters and art prints $27.99–$44.99, apparel $29.99–$44.99, tote bags and phone cases $24.99–$34.99; new shops should price toward the lower end of each band.
 
 You have access to the operator's history when provided. NEVER repeat a niche that was rejected. Explore adjacent but distinct PET niches to approved products. Diversify across pet types, buyer identities, and formats.`;
@@ -54,7 +57,7 @@ export const NOVA_IDEATION_JSON_INSTRUCTIONS = `Return JSON with this exact shap
   ]
 }
 
-Generate exactly 3 ideas. Ideas must be distinct niches AND vary product formats. Prefer high specificity over broad appeal.`;
+Generate exactly 3 ideas. Ideas must be distinct niches AND vary product formats. Prefer high specificity over broad appeal, a built-in buying occasion, and personalization (name/breed/portrait) where it fits.`;
 
 export function buildNovaIdeationUserPrompt(
   runId: string,
