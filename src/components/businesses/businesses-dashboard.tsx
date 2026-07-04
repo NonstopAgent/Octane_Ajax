@@ -14,12 +14,14 @@ import type { Business } from "@/lib/businesses/types";
 
 type Props = {
   initialBusinesses: Business[];
+  activeBusinessId: string | null;
   isAuthenticated: boolean;
   configReady: boolean;
 };
 
 export function BusinessesDashboard({
   initialBusinesses,
+  activeBusinessId,
   isAuthenticated,
   configReady,
 }: Props) {
@@ -27,7 +29,34 @@ export function BusinessesDashboard({
   const [name, setName] = useState("");
   const [niche, setNiche] = useState("");
   const [creating, setCreating] = useState(false);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+
+  const activate = async (businessId: string) => {
+    setActivatingId(businessId);
+    try {
+      const res = await fetch("/api/ajax/businesses/activate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        showToast("error", data.error ?? "Could not activate business.");
+        return;
+      }
+      showToast("success", "Active business updated. New production routes here.");
+      router.refresh();
+    } catch {
+      showToast("error", "Network error while activating.");
+    } finally {
+      setActivatingId(null);
+    }
+  };
 
   const showToast = (tone: ToastTone, message: string) => {
     setToast({ tone, message });
@@ -103,25 +132,39 @@ export function BusinessesDashboard({
               <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 Business {String(i + 1).padStart(2, "0")}
               </span>
-              <StatusBadge
-                label={b.isPrimary ? "live" : b.status}
-                tone={b.isPrimary ? "blue" : "warning"}
-              />
+              {b.id === activeBusinessId ? (
+                <StatusBadge label="active" tone="blue" />
+              ) : (
+                <StatusBadge
+                  label={b.isPrimary ? "live" : b.status}
+                  tone={b.isPrimary ? "blue" : "warning"}
+                />
+              )}
             </div>
             <h3 className="mt-2 text-lg font-bold">{b.name}</h3>
             {b.niche ? (
               <p className="mt-1 text-sm text-[var(--text-muted)]">{b.niche}</p>
             ) : null}
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {b.id === activeBusinessId ? (
+                <span className="inline-flex items-center rounded-md border border-[var(--accent-blue)]/40 bg-[var(--accent-blue)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--accent-blue)]">
+                  ◉ Active · new production routes here
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void activate(b.id)}
+                  disabled={activatingId === b.id}
+                  className="inline-flex items-center rounded-md border border-[var(--border-dim)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-white/5 disabled:opacity-60"
+                >
+                  {activatingId === b.id ? "Activating…" : "Activate"}
+                </button>
+              )}
               {b.isPrimary ? (
                 <ButtonLink href="/factory" variant="secondary">
                   Open floor →
                 </ButtonLink>
-              ) : (
-                <p className="text-xs text-[var(--text-muted)]">
-                  Provisioning · pipeline wiring coming online
-                </p>
-              )}
+              ) : null}
             </div>
           </div>
         ))}
@@ -156,10 +199,10 @@ export function BusinessesDashboard({
       </div>
 
       <p className="text-xs text-[var(--text-muted)]">
-        The primary business (GotchaDayGoods) runs the full pipeline today.
-        Additional businesses are registered here; per-business pipeline
-        isolation — each with its own Nova → Forge → Pixel line — is the next
-        phase.
+        Activate a business to route new production to it — every idea, listing,
+        and review a cycle creates is tagged to the active business. The factory
+        floor currently shows a combined operations view; fully isolated
+        per-business floors are the next phase.
       </p>
     </div>
   );

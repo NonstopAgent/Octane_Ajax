@@ -286,11 +286,13 @@ async function insertEvent(
     room?: string | null;
     metadata?: Json;
   },
+  businessId?: string | null,
 ) {
   const { data, error } = await supabase
     .from(TABLES.EVENTS)
     .insert({
       user_id: userId,
+      business_id: businessId ?? null,
       event_type: payload.event_type,
       message: payload.message,
       agent_slug: payload.agent_slug ?? null,
@@ -422,11 +424,12 @@ async function recoverFromCycleFailure(
 export async function runNovaStep(
   supabase: Supabase,
   userId: string,
+  businessId?: string | null,
 ): Promise<NovaStepSummary> {
   await preflightCycle(supabase, userId);
 
   try {
-    return await executeNovaStep(supabase, userId);
+    return await executeNovaStep(supabase, userId, businessId);
   } catch (err) {
     await recoverFromCycleFailure(supabase, userId, err);
     throw err;
@@ -441,11 +444,12 @@ export async function runForgeStep(
   supabase: Supabase,
   userId: string,
   opts?: RunForgeStepOptions,
+  businessId?: string | null,
 ): Promise<AjaxCycleSummary> {
   await preflightCycle(supabase, userId);
 
   try {
-    return await executeForgeStep(supabase, userId, opts);
+    return await executeForgeStep(supabase, userId, opts, businessId);
   } catch (err) {
     await recoverFromCycleFailure(supabase, userId, err);
     throw err;
@@ -456,6 +460,7 @@ export async function runForgeStep(
 async function executeNovaStep(
   supabase: Supabase,
   userId: string,
+  businessId?: string | null,
 ): Promise<NovaStepSummary> {
   const runId = crypto.randomUUID();
   const events: FactoryEvent[] = [];
@@ -506,7 +511,7 @@ async function executeNovaStep(
     pastContext,
     marketContext: marketContext ?? undefined,
   });
-  const ideaInserts = mapNovaIdeasToDbInserts(userId, runId, novaResult);
+  const ideaInserts = mapNovaIdeasToDbInserts(userId, runId, novaResult, businessId);
 
   if (ideaInserts.length === 0) {
     throw new SimulatorError(
@@ -581,6 +586,7 @@ async function executeForgeStep(
   supabase: Supabase,
   userId: string,
   opts?: RunForgeStepOptions,
+  businessId?: string | null,
 ): Promise<AjaxCycleSummary> {
   const { runId, ideaRows } = await resolveRunIdeasForForge(
     supabase,
@@ -657,6 +663,7 @@ async function executeForgeStep(
     .from(TABLES.LISTINGS)
     .insert({
       user_id: userId,
+      business_id: businessId ?? null,
       product_idea_id: selectedRow.id,
       title: forgeResult.listingTitle,
       description: forgeResult.listingDescription,
@@ -725,6 +732,7 @@ async function executeForgeStep(
     .from(TABLES.REVIEW_QUEUE)
     .insert({
       user_id: userId,
+      business_id: businessId ?? null,
       listing_id: listingRow.id,
       status: "pending",
     })

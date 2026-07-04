@@ -6,6 +6,7 @@ import {
   runForgeStep,
   SimulatorError,
 } from "@/lib/ajax/simulator";
+import { getActiveBusinessId } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
 
 type ForgeBody = {
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
       // empty body is fine — Forge resolves the latest Nova run
     }
 
-    const summary = await runForgeStep(supabase, user.id, { runId });
+    const businessId = await getActiveBusinessId(supabase, user.id);
+    const summary = await runForgeStep(supabase, user.id, { runId }, businessId);
     return NextResponse.json(summary);
   } catch (err) {
     if (err instanceof CycleBlockedError) {

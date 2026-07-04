@@ -1,5 +1,6 @@
 import { BusinessesDashboard } from "@/components/businesses/businesses-dashboard";
 import { fetchBusinesses } from "@/lib/businesses/queries";
+import { getActiveBusinessId } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
 
 function configReady() {
@@ -13,6 +14,7 @@ export default async function BusinessesPage() {
   const ready = configReady();
   let isAuthenticated = false;
   let initialBusinesses: Awaited<ReturnType<typeof fetchBusinesses>> = [];
+  let activeBusinessId: string | null = null;
 
   if (ready) {
     try {
@@ -23,6 +25,7 @@ export default async function BusinessesPage() {
       if (user) {
         isAuthenticated = true;
         initialBusinesses = await fetchBusinesses(supabase, user.id);
+        activeBusinessId = await getActiveBusinessId(supabase, user.id);
       }
     } catch (err) {
       console.error("[businesses page] failed to load businesses", err);
@@ -32,6 +35,7 @@ export default async function BusinessesPage() {
   return (
     <BusinessesDashboard
       initialBusinesses={initialBusinesses}
+      activeBusinessId={activeBusinessId}
       isAuthenticated={isAuthenticated}
       configReady={ready}
     />

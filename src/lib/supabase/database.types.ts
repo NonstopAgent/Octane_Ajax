@@ -173,6 +173,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string;
+          business_id?: string | null;
           source?: string;
           niche?: string | null;
           title?: string | null;
@@ -318,6 +319,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string;
+          business_id?: string | null;
           product_idea_id: string;
           title?: string | null;
           description?: string | null;
@@ -376,6 +378,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string;
+          business_id?: string | null;
           listing_id: string;
           status?: string;
           reviewer_notes?: string | null;
@@ -476,6 +479,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string;
+          business_id?: string | null;
           event_type: string;
           agent_slug?: string | null;
           room?: string | null;

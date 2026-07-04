@@ -8,6 +8,7 @@ import {
   runNovaStep,
   SimulatorError,
 } from "@/lib/ajax/simulator";
+import { getActiveBusinessId } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
 
 /** POST /api/ajax/run-nova — Nova ideation step (Vercel-safe, no Forge LLM). */
@@ -37,7 +38,8 @@ export async function POST() {
       );
     }
 
-    const summary = await runNovaStep(supabase, user.id);
+    const businessId = await getActiveBusinessId(supabase, user.id);
+    const summary = await runNovaStep(supabase, user.id, businessId);
     return NextResponse.json(summary);
   } catch (err) {
     if (err instanceof CycleBlockedError) {

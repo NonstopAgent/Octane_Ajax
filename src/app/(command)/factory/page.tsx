@@ -1,6 +1,7 @@
 import { FactorySweatshop } from "@/components/factory/factory-sweatshop";
 import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
-import { fetchPrimaryBusiness } from "@/lib/businesses/queries";
+import { fetchBusinesses } from "@/lib/businesses/queries";
+import { getActiveBusiness } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
 import type { VisMetrics } from "@/components/factory/factory-vis-map";
 
@@ -34,8 +35,13 @@ export default async function FactoryPage() {
       if (user) {
         isAuthenticated = true;
         snapshot = await fetchSweatshopSnapshot(supabase, user.id);
-        const primary = await fetchPrimaryBusiness(supabase, user.id);
-        if (primary) businessLabel = `BUSINESS 01 · ${primary.name.toUpperCase()}`;
+        const businesses = await fetchBusinesses(supabase, user.id);
+        const active = await getActiveBusiness(supabase, user.id);
+        if (active) {
+          const idx = businesses.findIndex((b) => b.id === active.id);
+          const n = String((idx >= 0 ? idx : 0) + 1).padStart(2, "0");
+          businessLabel = `BUSINESS ${n} · ${active.name.toUpperCase()}`;
+        }
       }
     } catch (err) {
       console.error("[factory page] failed to load snapshot", err);

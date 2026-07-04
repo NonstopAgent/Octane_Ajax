@@ -223,6 +223,7 @@ export function mapNovaIdeasToDbInserts(
   userId: string,
   runId: string,
   result: NovaIdeationResult,
+  businessId?: string | null,
 ): TablesInsert<"product_ideas">[] {
   return result.ideas.map((idea) => {
     const evaluatedAt = new Date().toISOString();
@@ -255,6 +256,7 @@ export function mapNovaIdeasToDbInserts(
 
     return {
       user_id: userId,
+      business_id: businessId ?? null,
       source: "nova",
       niche: idea.niche,
       title: idea.productConcept,
