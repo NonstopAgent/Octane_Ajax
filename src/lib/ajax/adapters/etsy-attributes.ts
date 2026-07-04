@@ -10,6 +10,12 @@
 
 const ETSY_API_BASE = "https://openapi.etsy.com/v3/application";
 
+/** Last raw taxonomy-properties response (diagnostic; surfaced by the route). */
+let lastPropsDebug = "";
+export function getLastPropsDebug(): string {
+  return lastPropsDebug;
+}
+
 export class EtsyAttributesError extends Error {
   readonly code = "ETSY_ATTRIBUTES_ERROR" as const;
   constructor(
@@ -23,7 +29,8 @@ export class EtsyAttributesError extends Error {
 
 function apiKeyHeader(): string {
   const clientId = process.env.ETSY_CLIENT_ID?.trim();
-  if (!clientId) throw new EtsyAttributesError("ETSY_CLIENT_ID is not configured.");
+  if (!clientId)
+    throw new EtsyAttributesError("ETSY_CLIENT_ID is not configured.");
   const secret = process.env.ETSY_CLIENT_SECRET?.trim();
   return secret ? `${clientId}:${secret}` : clientId;
 }
@@ -67,13 +74,9 @@ export type EtsyTaxonomyProperty = {
 export type ListingSummary = { listingId: string; title: string; state: string };
 
 export type DesiredProperty = {
-  /** property_name candidates; first taxonomy match wins. */
   names: string[];
-  /** desired value name, or a numeric string for scaled properties. */
   value: string;
-  /** scaled numeric property (e.g. Capacity). */
   numeric?: boolean;
-  /** preferred scale names for numeric properties. */
   scaleNames?: string[];
 };
 
@@ -112,22 +115,50 @@ export function desiredAttributesFor(hints: string[]): DesiredAttributes {
       materials: ["Paper"],
     };
   }
-  if (/shirt|tee|t-shirt|sweatshirt|hoodie|apparel|tote|bag|pillow|case/.test(h)) {
+  if (
+    /shirt|tee|t-shirt|sweatshirt|hoodie|apparel|tote|bag|pillow|case/.test(h)
+  ) {
     return { properties: [{ names: ["Graphic", "Theme"], value: "Animal" }] };
   }
   return { properties: [{ names: ["Graphic", "Theme"], value: "Animal" }] };
 }
 
+/**
+ * Fetches a taxonomy node's properties. Sends x-api-key AND (when available) the
+ * Bearer token — some seller-taxonomy reads return richer data when authorized.
+ * Parses defensively (results / properties / bare array) and records the raw
+ * response for diagnosis.
+ */
 export async function getTaxonomyProperties(
   taxonomyId: number,
+  accessToken?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<EtsyTaxonomyProperty[]> {
+  const headers: Record<string, string> = {
+    "x-api-key": apiKeyHeader(),
+    Accept: "application/json",
+  };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   const res = await fetchImpl(
     `${ETSY_API_BASE}/seller-taxonomy/nodes/${taxonomyId}/properties`,
-    { headers: { "x-api-key": apiKeyHeader(), Accept: "application/json" } },
+    { headers },
   );
-  const parsed = await parseJson<{ results?: EtsyTaxonomyProperty[] }>(res);
-  return parsed.results ?? [];
+  const text = await res.text();
+  let parsed: {
+    results?: EtsyTaxonomyProperty[];
+    properties?: EtsyTaxonomyProperty[];
+  } = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = {};
+  }
+  lastPropsDebug = `http=${res.status} sample=${text.slice(0, 300)}`;
+  const arr =
+    parsed.results ??
+    parsed.properties ??
+    (Array.isArray(parsed) ? (parsed as EtsyTaxonomyProperty[]) : []);
+  return arr as EtsyTaxonomyProperty[];
 }
 
 /** Reads a listing's taxonomy_id + title (title feeds product-type inference). */
@@ -206,9 +237,12 @@ function findProperty(
   names: string[],
 ): EtsyTaxonomyProperty | undefined {
   const lc = names.map((n) => n.toLowerCase());
+  const named = props.filter(
+    (p) => typeof p.property_name === "string" && p.property_name.length > 0,
+  );
   return (
-    props.find((p) => typeof p.property_name === "string" && lc.includes(p.property_name.toLowerCase())) ??
-    props.find((p) => typeof p.property_name === "string" && lc.some((n) => p.property_name.toLowerCase().includes(n)))
+    named.find((p) => lc.includes(p.property_name.toLowerCase())) ??
+    named.find((p) => lc.some((n) => p.property_name.toLowerCase().includes(n)))
   );
 }
 
@@ -217,12 +251,12 @@ export type ApplyResult = {
   set: string[];
   skipped: string[];
   available?: string[];
+  debug?: string;
 };
 
 /**
  * Resolves the listing's taxonomy, then sets each desired attribute the category
- * actually offers. Per-attribute failures are collected, never thrown, so one
- * bad property doesn't abort the rest. Idempotent (re-setting is harmless).
+ * actually offers. Per-attribute failures are collected, never thrown. Idempotent.
  */
 export async function applyListingAttributes(
   shopId: string,
@@ -242,10 +276,15 @@ export async function applyListingAttributes(
 
   const effectiveHints = hints.length ? hints : meta.title ? [meta.title] : [];
   const desired = desiredAttributesFor(effectiveHints);
-  const props = await getTaxonomyProperties(meta.taxonomyId, fetchImpl);
+  const props = await getTaxonomyProperties(
+    meta.taxonomyId,
+    accessToken,
+    fetchImpl,
+  );
   const available = props
     .map((p) => p.property_name)
     .filter((n): n is string => typeof n === "string");
+  const debug = getLastPropsDebug();
 
   for (const d of desired.properties) {
     const prop = findProperty(props, d.names);
@@ -324,7 +363,7 @@ export async function applyListingAttributes(
     }
   }
 
-  return { taxonomyId: meta.taxonomyId, set, skipped, available };
+  return { taxonomyId: meta.taxonomyId, set, skipped, available, debug };
 }
 
 /** Lists the shop's active + draft listings (id, title, state) for reconcile. */
@@ -352,7 +391,7 @@ export async function listShopListingSummaries(
         });
       }
     } catch {
-      /* skip a state that errors (e.g. permissions) */
+      /* skip a state that errors */
     }
   }
   return out;

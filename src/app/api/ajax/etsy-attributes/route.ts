@@ -94,7 +94,7 @@ async function run(req: NextRequest) {
           creds.access_token,
           [],
         );
-        results.push({ listingId, taxonomyId: r.taxonomyId, set: r.set, skipped: r.skipped, available: r.available });
+        results.push({ listingId, taxonomyId: r.taxonomyId, set: r.set, skipped: r.skipped, available: r.available, debug: r.debug });
       } catch (err) {
         results.push({
           listingId,
