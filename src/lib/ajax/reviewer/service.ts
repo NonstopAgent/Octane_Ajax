@@ -20,6 +20,9 @@ export type ReviewerInput = {
   niche?: string | null;
   format?: string | null;
   brand?: string;
+  /** The shop's niche/positioning (e.g. pet-owner gifts). When set, the reviewer
+   * hard-enforces that the listing belongs to this store. */
+  storeNiche?: string | null;
   mockupUrls?: string[];
 };
 
@@ -78,7 +81,10 @@ export async function reviewListing(
     task: "strategy",
     schema: ReviewerSchema,
     messages: [
-      { role: "system", content: buildReviewerSystemPrompt(brand) },
+      {
+        role: "system",
+        content: buildReviewerSystemPrompt(brand, input.storeNiche),
+      },
       { role: "user", content: `LISTING (JSON):\n${JSON.stringify(payload)}` },
     ],
     jsonInstructions: REVIEWER_JSON_INSTRUCTIONS,

@@ -3,11 +3,25 @@ import { ETSY_PLAYBOOK, REVIEW_THRESHOLDS } from "@/lib/ajax/reviewer/playbook";
 const bullets = (items: readonly string[]) =>
   items.map((s) => `- ${s}`).join("\n");
 
-/** Composes the reviewer system prompt from the proven Etsy playbook. */
-export function buildReviewerSystemPrompt(brand: string): string {
+/** Composes the reviewer system prompt from the proven Etsy playbook.
+ * When storeNiche is given, the brand dimension HARD-enforces that the listing
+ * fits the shop's niche (e.g. pet-only) — an off-niche product is a brand fail. */
+export function buildReviewerSystemPrompt(
+  brand: string,
+  storeNiche?: string | null,
+): string {
+  const niche = storeNiche?.trim();
+  const storeFit = niche
+    ? `
+
+## STORE FIT (this shop's niche — enforce it)
+This shop, ${brand}, sells ONLY: ${niche}.
+- The listing MUST fit that niche and its audience. A product that is off-niche (not for this shop's buyer) is a brand FAILURE: score brand ≤ 30 and set verdictHint to "reject" — even if the SEO and craft are good. A great listing for the wrong shop still doesn't belong here.
+- Reward listings that clearly speak to this shop's specific buyer and occasions; penalize generic products that could belong to any store.`
+    : "";
   return `You are the Review Gate — a veteran Etsy merchandiser and SEO strategist acting as the autonomous quality gate for ${brand}. You decide whether a print-on-demand listing is strong enough to ship, using PROVEN Etsy best practices (below), not opinion. Be rigorous: protect the shop's ranking and conversion, but never block a genuinely strong listing.
 
-Score the listing 0–100 on five dimensions, grounded in these rules.
+Score the listing 0–100 on five dimensions, grounded in these rules.${storeFit}
 
 ## ETSY SEO (title, tags, attributes)
 Ideal title: ${ETSY_PLAYBOOK.title.structure} — under ${ETSY_PLAYBOOK.title.maxChars} chars, first ~${ETSY_PLAYBOOK.title.heavyWeightChars} weighted heaviest by Etsy's semantic algorithm.

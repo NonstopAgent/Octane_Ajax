@@ -18,6 +18,11 @@ type ListingJoin = {
   product_ideas: { niche: string | null; seo_keywords: string[] | null } | null;
 };
 
+/** Fallback niche for the primary shop (GotchaDayGoods) when its row has none set,
+ * so the reviewer still enforces pet-only brand fit on the first store. */
+const PRIMARY_STORE_NICHE =
+  "personalized gifts for pet owners — dogs, cats, and other pets — centered on adoption / gotcha-day anniversaries, pet memorials, pet birthdays ('barkday'), and pet-parent appreciation";
+
 /** POST /api/ajax/review/ai-review — grade a pending listing against the Etsy
  * playbook. In autonomous mode (AI_REVIEWER_AUTONOMOUS=true or body.autonomous)
  * it also clears the gate: approve → advances the listing, reject → sends back. */
@@ -83,6 +88,9 @@ export async function POST(req: Request) {
     }
 
     const active = await getActiveBusiness(supabase, user.id);
+    const storeNiche =
+      active?.niche?.trim() ||
+      (active?.isPrimary ?? true ? PRIMARY_STORE_NICHE : null);
     const assessment = await reviewListing({
       title: listing.title ?? "",
       description: listing.description,
@@ -91,6 +99,7 @@ export async function POST(req: Request) {
       niche: listing.product_ideas?.niche ?? null,
       mockupUrls: listing.mockup_url ? [listing.mockup_url] : [],
       brand: active?.name ?? "GotchaDayGoods",
+      storeNiche,
     });
 
     const autonomous =
