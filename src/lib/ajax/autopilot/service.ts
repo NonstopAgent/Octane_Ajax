@@ -41,6 +41,8 @@ import {
   runNovaStep,
 } from "@/lib/ajax/simulator";
 import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
+import { autoReviewPending } from "@/lib/review/auto-review";
+import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -60,6 +62,7 @@ export type AutopilotResult = {
   marketingQueued: number;
   cycleTriggered: boolean;
   cycleBlocked: boolean;
+  reviewsCleared: number;
   errors: string[];
 };
 
@@ -73,6 +76,7 @@ function emptyResult(): AutopilotResult {
     marketingQueued: 0,
     cycleTriggered: false,
     cycleBlocked: false,
+    reviewsCleared: 0,
     errors: [],
   };
 }
@@ -412,7 +416,26 @@ export async function runShopAutopilot(
     .eq("status", "pending");
 
   if ((pendingReviews ?? 0) > 0) {
-    result.cycleBlocked = true;
+    // Self-clear the gate: autonomously review the oldest pending item so the
+    // factory never freezes waiting on a human. Approve → downstream Etsy draft +
+    // video + marketing via runPostApproval; autonomous "revise" counts as reject.
+    try {
+      const cleared = await autoReviewPending(supabase, userId, {
+        reviewId: null,
+        act: true,
+      });
+      if (cleared?.acted) {
+        result.reviewsCleared += 1;
+        if (cleared.postApproval) await runPostApproval(cleared.postApproval);
+      } else if (cleared) {
+        result.cycleBlocked = true;
+      }
+    } catch (err) {
+      result.cycleBlocked = true;
+      result.errors.push(
+        `review: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
   } else if (liveListings.length < targetListings) {
     try {
       const nova = await runNovaStep(supabase, userId);
@@ -442,14 +465,15 @@ export async function runShopAutopilot(
     result.shippingFixed +
     result.recommended +
     result.marketingQueued +
+    result.reviewsCleared +
     (result.cycleTriggered ? 1 : 0);
   await logEvent(
     supabase,
     userId,
     "autopilot_summary",
     acted > 0
-      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review pending)" : ""}.`
-      : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: approve the pending review)" : ""}.`,
+      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}.`
+      : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: AI review could not clear the gate)" : ""}.`,
     { runId, ...result } as unknown as Json,
   );
 
