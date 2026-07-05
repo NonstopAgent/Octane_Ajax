@@ -233,6 +233,38 @@ export function FactorySweatshop({
     }
   }, [showToast, refresh]);
 
+  // Autopilot gate-drainer: AI-review the oldest pending listing (no reviewId →
+  // the route auto-picks it). Self-guards against overlapping runs.
+  const autoReviewingRef = useRef(false);
+  const autoReviewNext = useCallback(async () => {
+    if (autoReviewingRef.current) return;
+    autoReviewingRef.current = true;
+    try {
+      const res = await fetch("/api/ajax/review/ai-review", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autonomous: true }),
+      });
+      const ar = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        acted?: "approved" | "rejected" | null;
+        overallScore?: number;
+      };
+      if (res.ok && ar?.ok && ar.acted) {
+        showToast(
+          ar.acted === "approved" ? "success" : "info",
+          `AI ${ar.acted} a pending listing · ${ar.overallScore}/100.`,
+        );
+      }
+    } catch {
+      // best-effort; the loop will retry on the next tick
+    } finally {
+      autoReviewingRef.current = false;
+      await refresh();
+    }
+  }, [showToast, refresh]);
+
   const runPixel = useCallback(async () => {
     setRunningPixel(true);
     try {
@@ -308,14 +340,15 @@ export function FactorySweatshop({
         autopilotRef.current &&
         !g.running &&
         !g.runningPixel &&
-        !g.resetting &&
-        g.pending === 0
+        !g.resetting
       ) {
-        void runCycle(true);
+        // Drain the gate first (clear any pending review), then make more.
+        if (g.pending > 0) void autoReviewNext();
+        else void runCycle(true);
       }
     }, 18000);
     return () => window.clearInterval(id);
-  }, [autopilot, runCycle]);
+  }, [autopilot, runCycle, autoReviewNext]);
 
   if (!configReady) {
     return (

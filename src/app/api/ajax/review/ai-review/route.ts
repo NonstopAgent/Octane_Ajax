@@ -42,30 +42,29 @@ export async function POST(req: Request) {
       reviewId?: string;
       autonomous?: boolean;
     };
-    if (!body.reviewId) {
-      return NextResponse.json(
-        { ok: false, error: "reviewId required" },
-        { status: 400 },
-      );
-    }
-
-    const { data: rev, error } = await supabase
-      .from(TABLES.REVIEW_QUEUE)
-      .select(
-        `id, status, listing_id,
+    const selectCols = `id, status, listing_id,
          product_listings ( title, description, price, mockup_url,
-           product_ideas ( niche, seo_keywords ) )`,
-      )
-      .eq("id", body.reviewId)
-      .eq("user_id", user.id)
-      .single();
+           product_ideas ( niche, seo_keywords ) )`;
+    const q = supabase
+      .from(TABLES.REVIEW_QUEUE)
+      .select(selectCols)
+      .eq("user_id", user.id);
+    // No reviewId → auto-pick the oldest pending item so autopilot drains the gate.
+    const { data: rev, error } = body.reviewId
+      ? await q.eq("id", body.reviewId).single()
+      : await q
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
     if (error || !rev) {
       return NextResponse.json(
-        { ok: false, error: "Review item not found." },
+        { ok: false, error: "No pending review found." },
         { status: 404 },
       );
     }
+    const reviewId = rev.id as string;
 
     const listing = rev.product_listings as ListingJoin | null;
     if (!listing) {
@@ -97,13 +96,13 @@ export async function POST(req: Request) {
     if (autonomous && rev.status === "pending") {
       try {
         if (assessment.verdict === "approve") {
-          await approveReview(supabase, user.id, body.reviewId);
+          await approveReview(supabase, user.id, reviewId);
           acted = "approved";
         } else if (assessment.verdict === "reject") {
           await rejectReview(
             supabase,
             user.id,
-            body.reviewId,
+            reviewId,
             assessment.reasons.join(" ") ||
               "AI reviewer: listing is below the quality bar.",
           );
