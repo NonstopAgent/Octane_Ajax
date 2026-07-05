@@ -12,6 +12,7 @@ import {
   REVIEWER_JSON_INSTRUCTIONS,
 } from "@/lib/ajax/reviewer/prompts";
 import { heuristicReview } from "@/lib/ajax/reviewer/heuristic";
+import { isVisionReviewAvailable, visionReview } from "@/lib/ajax/reviewer/vision";
 
 export type ReviewerInput = {
   title: string;
@@ -25,6 +26,12 @@ export type ReviewerInput = {
    * hard-enforces that the listing belongs to this store. */
   storeNiche?: string | null;
   mockupUrls?: string[];
+  /** Real market signal for this niche (searches/mo vs competing listings). */
+  market?: {
+    searchesPerMonth: number | null;
+    competingListings: number | null;
+    matchedTerm: string | null;
+  } | null;
 };
 
 export type ReviewVerdict = "approve" | "revise" | "reject";
@@ -85,11 +92,35 @@ function finalize(
   };
 }
 
+/** A short human-readable market note (real demand vs. supply) for the prompts. */
+function formatMarketNote(market: ReviewerInput["market"]): string | null {
+  if (!market) return null;
+  const d =
+    market.searchesPerMonth != null
+      ? `~${market.searchesPerMonth}/mo searches`
+      : "demand unknown";
+  const c =
+    market.competingListings != null
+      ? `${market.competingListings} competing listings`
+      : "supply unknown";
+  let tail = "";
+  if (market.searchesPerMonth != null && market.competingListings != null) {
+    const ratio = market.searchesPerMonth / Math.max(1, market.competingListings);
+    tail =
+      market.competingListings > 100000 || ratio < 0.05
+        ? " — SATURATED red ocean, very hard to rank; be strict"
+        : ratio >= 0.3
+          ? " — open opportunity"
+          : " — moderately competitive";
+  }
+  return `${market.matchedTerm ? `"${market.matchedTerm}": ` : ""}${d} vs ${c}${tail}`;
+}
+
 /**
- * Grades a listing against the proven Etsy playbook. Tries the LLM first (fast,
- * no retry) and ALWAYS falls back to the deterministic heuristic — so the gate
- * returns a verdict even with no LLM key or a slow/timed-out model, and autopilot
- * never gets stuck waiting on it.
+ * Grades a listing against the proven Etsy playbook. Tries VISION first (actually
+ * looks at the mockup via OpenAI), then a text LLM, and ALWAYS falls back to the
+ * deterministic heuristic — so the gate returns a verdict even with no key or a
+ * slow model, and autopilot never gets stuck. Market-aware throughout.
  */
 export async function reviewListing(
   input: ReviewerInput,
@@ -98,19 +129,33 @@ export async function reviewListing(
   const mockups = (input.mockupUrls ?? []).filter(
     (u) => typeof u === "string" && u.startsWith("https://"),
   );
+  const marketNote = formatMarketNote(input.market);
+  const payload = {
+    title: input.title,
+    description: (input.description ?? "").slice(0, 1200),
+    price: input.price ?? null,
+    tags: input.tags ?? [],
+    niche: input.niche ?? null,
+    format: input.format ?? null,
+    mockupCount: mockups.length,
+    mockupUrls: mockups.slice(0, 8),
+  };
 
+  // 1) Vision — actually see the mockup. Best signal; returns null on any failure.
+  if (isVisionReviewAvailable() && mockups.length > 0) {
+    const v = await visionReview({
+      brand,
+      storeNiche: input.storeNiche,
+      payload,
+      imageUrl: mockups[0],
+      marketNote,
+    });
+    if (v) return finalize(v.subscores, v.hardBlock, v.reasons, v.fixes, v.model);
+  }
+
+  // 2) Text LLM (router — Claude/OpenAI), fast single attempt.
   if (isReviewerConfigured()) {
     try {
-      const payload = {
-        title: input.title,
-        description: (input.description ?? "").slice(0, 1200),
-        price: input.price ?? null,
-        tags: input.tags ?? [],
-        niche: input.niche ?? null,
-        format: input.format ?? null,
-        mockupCount: mockups.length,
-        mockupUrls: mockups.slice(0, 8),
-      };
       const result = await completeJson({
         task: "strategy",
         schema: ReviewerSchema,
@@ -121,13 +166,13 @@ export async function reviewListing(
           },
           {
             role: "user",
-            content: `LISTING (JSON):\n${JSON.stringify(payload)}`,
+            content: `LISTING (JSON):\n${JSON.stringify(payload)}${
+              marketNote ? `\n\nMARKET: ${marketNote}` : ""
+            }`,
           },
         ],
         jsonInstructions: REVIEWER_JSON_INSTRUCTIONS,
         options: { temperature: 0.2, maxTokens: 1200 },
-        // Fail fast (single attempt) so the route never hits its own ceiling —
-        // the heuristic below covers a timeout instantly.
         timeout: 22_000,
         maxRetries: 0,
       });
@@ -147,10 +192,11 @@ export async function reviewListing(
         result.model,
       );
     } catch {
-      // LLM slow/unavailable → deterministic fallback below.
+      // fall through to the deterministic heuristic
     }
   }
 
+  // 3) Deterministic heuristic (market-aware).
   const h = heuristicReview({
     title: input.title,
     description: input.description,
@@ -159,6 +205,7 @@ export async function reviewListing(
     mockupUrls: mockups,
     niche: input.niche,
     storeNiche: input.storeNiche,
+    market: input.market,
   });
   return finalize(h.subscores, h.hardBlock, h.reasons, h.fixes, "heuristic");
 }

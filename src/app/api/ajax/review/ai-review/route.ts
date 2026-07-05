@@ -3,6 +3,7 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { getActiveBusiness } from "@/lib/businesses/active";
 import { reviewListing } from "@/lib/ajax/reviewer/service";
+import { matchMarketSignals } from "@/lib/ajax/product-brain/market-signals";
 import { approveReview, rejectReview } from "@/lib/review/service";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
@@ -78,6 +79,28 @@ export async function POST(req: Request) {
     const storeNiche =
       active?.niche?.trim() ||
       (active?.isPrimary ?? true ? PRIMARY_STORE_NICHE : null);
+
+    // Real market signal for this niche (so the reviewer can reject saturated ones).
+    const { data: kwRows } = await supabase
+      .from(TABLES.MARKET_KEYWORDS)
+      .select("term, searches_per_month, competing_listings")
+      .eq("user_id", user.id)
+      .eq("active", true)
+      .limit(200);
+    const market = matchMarketSignals(
+      {
+        title: listing.title ?? "",
+        niche: listing.product_ideas?.niche ?? "",
+        targetBuyer: "",
+        keywords: listing.product_ideas?.seo_keywords ?? [],
+      },
+      (kwRows ?? []).map((r) => ({
+        term: r.term ?? "",
+        searchesPerMonth: r.searches_per_month ?? null,
+        competingListings: r.competing_listings ?? null,
+      })),
+    );
+
     const assessment = await reviewListing({
       title: listing.title ?? "",
       description: listing.description,
@@ -87,6 +110,7 @@ export async function POST(req: Request) {
       mockupUrls: listing.mockup_url ? [listing.mockup_url] : [],
       brand: active?.name ?? "GotchaDayGoods",
       storeNiche,
+      market,
     });
 
     const autonomous =
@@ -98,14 +122,15 @@ export async function POST(req: Request) {
         if (assessment.verdict === "approve") {
           await approveReview(supabase, user.id, reviewId);
           acted = "approved";
-        } else if (assessment.verdict === "reject") {
-          await rejectReview(
-            supabase,
-            user.id,
-            reviewId,
-            assessment.reasons.join(" ") ||
-              "AI reviewer: listing is below the quality bar.",
-          );
+        } else {
+          // reject OR revise → send back, so autopilot never jams on a
+          // borderline listing. Nova just makes a fresh one next cycle.
+          const reason =
+            assessment.fixes.length > 0
+              ? `AI reviewer: ${assessment.fixes.slice(0, 3).join(" ")}`
+              : assessment.reasons.join(" ") ||
+                "AI reviewer: below the quality bar.";
+          await rejectReview(supabase, user.id, reviewId, reason);
           acted = "rejected";
         }
       } catch (actErr) {

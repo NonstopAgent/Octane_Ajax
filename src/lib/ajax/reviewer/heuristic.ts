@@ -21,6 +21,11 @@ export type HeuristicReviewInput = {
   mockupUrls?: string[];
   niche?: string | null;
   storeNiche?: string | null;
+  market?: {
+    searchesPerMonth: number | null;
+    competingListings: number | null;
+    matchedTerm: string | null;
+  } | null;
 };
 
 export type HeuristicReview = {
@@ -32,7 +37,6 @@ export type HeuristicReview = {
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 const PERSONALIZATION = /\b(personaliz|personalis|custom|name|monogram|portrait)\b/i;
-const GIFT = /\b(gift|present|for (her|him|mom|dad|owner|lover))\b/i;
 
 function tokens(v: string): string[] {
   return v.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t.length > 2);
@@ -81,6 +85,22 @@ export function heuristicReview(input: HeuristicReviewInput): HeuristicReview {
   if (hasOccasion) reasons.push("Names a built-in buying occasion.");
   if (!hasPersonalization && !hasOccasion)
     fixes.push("Add a personalization angle or name the buying occasion — the proven levers.");
+
+  // Market saturation penalty — real demand vs. supply.
+  const m = input.market;
+  if (m && m.competingListings != null) {
+    const ratio =
+      m.searchesPerMonth != null
+        ? m.searchesPerMonth / Math.max(1, m.competingListings)
+        : null;
+    if (m.competingListings > 100000 || (ratio != null && ratio < 0.05)) {
+      sellability = clamp(sellability - 20);
+      reasons.push(
+        `Niche looks saturated (~${m.competingListings} competing listings).`,
+      );
+      fixes.push("Saturated niche — differentiate hard or pick a more open niche.");
+    }
+  }
 
   // Brand fit (to store niche, when known)
   let brand = 65;

@@ -50,4 +50,25 @@ describe("heuristicReview", () => {
     });
     assert.ok(offNiche.subscores.brand < onNiche.subscores.brand);
   });
+
+  it("penalizes sellability for a saturated niche", () => {
+    const base = {
+      title: "Personalized Dog Mom Gotcha Day Mug",
+      mockupUrls: [] as string[],
+    };
+    const open = heuristicReview({
+      ...base,
+      market: { searchesPerMonth: 1200, competingListings: 800, matchedTerm: "x" },
+    });
+    const saturated = heuristicReview({
+      ...base,
+      market: {
+        searchesPerMonth: 300,
+        competingListings: 250000,
+        matchedTerm: "x",
+      },
+    });
+    assert.ok(saturated.subscores.sellability < open.subscores.sellability);
+    assert.ok(saturated.fixes.some((f) => /saturat/i.test(f)));
+  });
 });
