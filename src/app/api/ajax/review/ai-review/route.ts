@@ -2,10 +2,7 @@ export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { getActiveBusiness } from "@/lib/businesses/active";
-import {
-  isReviewerConfigured,
-  reviewListing,
-} from "@/lib/ajax/reviewer/service";
+import { reviewListing } from "@/lib/ajax/reviewer/service";
 import { approveReview, rejectReview } from "@/lib/review/service";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
@@ -39,17 +36,8 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!isReviewerConfigured()) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "AI reviewer needs an LLM provider — add ANTHROPIC_API_KEY or OPENAI_API_KEY.",
-        },
-        { status: 400 },
-      );
-    }
-
+    // No hard gate on an LLM key: reviewListing falls back to a deterministic
+    // grader, so the AI review always returns a verdict and clears the gate.
     const body = (await req.json().catch(() => ({}))) as {
       reviewId?: string;
       autonomous?: boolean;

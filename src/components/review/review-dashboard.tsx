@@ -129,12 +129,16 @@ export function ReviewDashboard({
 
   const runAiReview = async (reviewId: string) => {
     setAiBusy(reviewId);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 58000);
     try {
       const res = await fetch("/api/ajax/review/ai-review", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId }),
+        // autonomous: this button should clear the gate, not just show an opinion.
+        body: JSON.stringify({ reviewId, autonomous: true }),
+        signal: controller.signal,
       });
       const data = (await res.json().catch(() => ({}))) as
         | (AiReviewResult & { ok: true })
@@ -174,9 +178,15 @@ export function ReviewDashboard({
           `AI verdict: ${result.verdict} · ${result.overallScore}/100.`,
         );
       }
-    } catch {
-      showToast("error", "Network error during AI review.");
+    } catch (err) {
+      showToast(
+        "error",
+        err instanceof Error && err.name === "AbortError"
+          ? "AI review timed out — please try again."
+          : "Network error during AI review.",
+      );
     } finally {
+      window.clearTimeout(timer);
       setAiBusy(null);
     }
   };
