@@ -7,8 +7,35 @@ import {
   formatCatalogForPrompt,
   PRINTIFY_CATALOG_KEYS,
 } from "@/lib/ajax/pod/printify-catalog";
+import { ETSY_PLAYBOOK, REVIEW_THRESHOLDS } from "@/lib/ajax/reviewer/playbook";
 
 export { FORGE_PROMPT_VERSION };
+
+const bullets = (items: readonly string[]) =>
+  items.map((s) => `- ${s}`).join("\n");
+
+/**
+ * The exact rubric the AI Review Gate grades against, injected into Forge so it
+ * writes to CLEAR the bar on the first pass (only ${REVIEW_THRESHOLDS.autoApprove}+/100 auto-publishes).
+ * Single source of truth: reuses ETSY_PLAYBOOK, so Forge and the reviewer never drift.
+ */
+const WINNING_RUBRIC = `## HOW THIS LISTING IS GRADED — write to WIN (auto-review publishes only ${REVIEW_THRESHOLDS.autoApprove}+/100; anything weaker is sent back)
+Every listing is scored 0–100: Etsy SEO 30%, sellability 25%, brand-fit 15%, quality 15%, compliance 15%. A generic, vague, or off-niche listing is rejected. Nail ALL of this on the first pass:
+
+TITLE — follow "${ETSY_PLAYBOOK.title.structure}":
+${bullets(ETSY_PLAYBOOK.title.rules)}
+- Open with the exact phrase a buyer would type (e.g. "Personalized Rescue Dog Mom Mug"), NOT a vague slogan or the design's inside joke.
+
+TAGS — all ${ETSY_PLAYBOOK.tags.count}, each a MULTI-WORD long-tail phrase:
+${bullets(ETSY_PLAYBOOK.tags.rules)}
+
+SELLABILITY — make it feel made for ONE person and gift-ready:
+${bullets(ETSY_PLAYBOOK.sellSide)}
+- Offer personalization (add the pet's name / adoption date) and state it in BOTH the title and description — it justifies the price and is the #1 conversion driver.
+- Name the exact occasion this shop sells into (adoption / "gotcha" day, pet memorial, birthday / "barkday", pet-parent appreciation) — never a generic "for dog lovers".
+
+QUALITY & PROFESSIONALISM:
+${bullets(ETSY_PLAYBOOK.professionalism)}`;
 
 const BLOCKED_GUIDANCE = `
 NEVER include content that involves:
@@ -35,6 +62,8 @@ Use ONLY these IP-safe aesthetic styles (no copyrighted character or brand style
 
 Artwork emotional tone: designs are GIFTS — they must read warm, celebratory, proud, or funny at a glance. Never melancholy, empty, or ambiguous (e.g. a retirement design should feel like a party, not a farewell). At most ONE short text element (5 words max) in the artwork; no secondary labels, signs, or fine print.
 
+${WINNING_RUBRIC}
+
 ${BLOCKED_GUIDANCE}
 
 Every listing must be honest about AI assistance. Include this exact sentence in listingDescription and aiDisclosure:
@@ -42,9 +71,9 @@ Every listing must be honest about AI assistance. Include this exact sentence in
 
 export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
-  "listingTitle": "string — Etsy listing title (specific, no copyrighted brands)",
-  "listingDescription": "string — a complete, persuasive Etsy description (120-220 words): an attention-grabbing first line, 3-5 benefit/feature bullets (each starting with • ), who it's for + gift occasions, a product-quality + made-to-order shipping note, and a short call to action. MUST end with the AI disclosure sentence verbatim",
-  "seoTags": ["string", ...] (exactly 13 Etsy tags, no duplicates, niche-specific),
+  "listingTitle": "string — Etsy title in the form [Primary buyer keyword] | [Secondary keyword + modifier] | [Occasion or Recipient]. Front-load the exact phrase a buyer would type in the first ~40 chars, name the specific occasion/recipient, ≤140 chars, no vague slogans, no keyword-stuffing, no copyrighted brands",
+  "listingDescription": "string — a complete, persuasive Etsy description (120-220 words): an attention-grabbing first line, 3-5 benefit/feature bullets (each starting with • ), who it's for + the specific gift occasion(s), an explicit personalization offer (e.g. add the pet's name or adoption date), a made-to-order quality + free-shipping note, and a short call to action. MUST end with the AI disclosure sentence verbatim",
+  "seoTags": ["string", ...] (exactly 13 Etsy tags, each a MULTI-WORD long-tail phrase — mix broad, specific, and occasion/recipient phrases like "rescue dog mom mug" or "gotcha day gift for her"; prefer the proven search terms provided; no single words, no near-duplicates),
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),
   "podDetails": {
     "catalogKey": "one of: ${PRINTIFY_CATALOG_KEYS.join(", ")} — pick the pre-approved product that best fits the concept",

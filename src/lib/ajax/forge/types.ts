@@ -6,7 +6,7 @@ import {
 } from "@/lib/ajax/pod/printify-catalog";
 import type { PodDetails } from "@/lib/product/domain";
 
-export const FORGE_PROMPT_VERSION = "forge-pod-catalog-v2";
+export const FORGE_PROMPT_VERSION = "forge-pod-catalog-v3";
 
 export const AI_DISCLOSURE_TEXT =
   "AI tools assisted in drafting and structuring this product. The seller reviewed and customized the final listing.";

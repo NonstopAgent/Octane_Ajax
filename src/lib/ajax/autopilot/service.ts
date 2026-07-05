@@ -47,8 +47,10 @@ import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
 
-/** Stop auto-producing once the shop has this many active listings. */
-const DEFAULT_TARGET_LISTINGS = 15;
+/** Stop auto-producing once the shop has this many active listings (override via
+ * AUTOPILOT_TARGET_LISTINGS). Set for a fuller starter storefront; the 85+ review
+ * bar + hourly cadence keep quality high and spend paced. */
+const DEFAULT_TARGET_LISTINGS = 30;
 /** Cap Etsy detail lookups per pass (rate-limit hygiene). */
 const MAX_LISTINGS_PER_PASS = 25;
 

@@ -60,7 +60,7 @@ export const ETSY_PLAYBOOK = {
   professionalism: [
     "Title is clean, correctly capitalized, no keyword-stuffing or ALL CAPS spam.",
     "Description opens with the hook + who it's for, then details, then care/shipping.",
-    "At least a few varied, real (https) mockups — front, angle, and a lifestyle/context shot.",
+    "Judge the provided design/mockup on its own quality — clean, legible, well-composed, good contrast, safe margins, print-ready. Front/angle/lifestyle mockups are auto-generated at publish, so do NOT penalize mockup count here; grade the design itself.",
     "No medical/legal/financial claims, no copyrighted IP, no guaranteed-results language.",
   ],
 } as const;
@@ -76,8 +76,13 @@ export const REVIEW_DIMENSIONS = [
 
 export type ReviewDimensionKey = (typeof REVIEW_DIMENSIONS)[number]["key"];
 
-/** Auto-approve at/above this weighted score; below AUTO_REJECT send back for revision. */
+/**
+ * Auto-approve at/above this weighted score; below AUTO_REJECT send back for revision.
+ * autoApprove is intentionally HIGH (85) — the operator only wants standout, 85+/100
+ * listings to auto-publish and fill the store. Anything 60–84 is sent back to Forge to
+ * improve (not published); below 60 is rejected outright. Override per-env if needed.
+ */
 export const REVIEW_THRESHOLDS = {
-  autoApprove: 78,
-  autoReject: 55,
+  autoApprove: Number(process.env.AI_REVIEWER_APPROVE_THRESHOLD ?? 85),
+  autoReject: Number(process.env.AI_REVIEWER_REJECT_THRESHOLD ?? 60),
 } as const;
