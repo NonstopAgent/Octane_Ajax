@@ -96,6 +96,10 @@ export interface PrintifyAdapter {
   publishProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyPublishedProduct>>;
+  /** Remove a product from the connected Etsy shop (reversible — republish restores it). */
+  unpublishProduct(
+    productId: string,
+  ): Promise<AdapterResult<{ productId: string; status: string }>>;
   submitOrder(
     input: PrintifyOrderInput,
   ): Promise<AdapterResult<PrintifyOrder>>;
@@ -220,6 +224,13 @@ export function createDemoPrintifyAdapter(
         externalId: `ext-${productId}`,
         status: "published",
         storefrontUrl: `https://demo.printify.com/products/${productId}`,
+      });
+    },
+
+    async unpublishProduct(productId) {
+      return demoResult("Printify product unpublish simulated.", {
+        productId,
+        status: "unpublished",
       });
     },
 
@@ -379,6 +390,23 @@ export function createLivePrintifyAdapter(
         externalId: productId,
         status: "published",
         storefrontUrl: `https://printify.com/app/products/${productId}`,
+      });
+    },
+
+    async unpublishProduct(productId) {
+      const res = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/unpublish.json`,
+        { method: "POST", headers, body: JSON.stringify({}) },
+      );
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(
+          `Printify unpublish failed (${res.status}): ${errBody}`,
+        );
+      }
+      return liveResult("Printify product unpublished.", {
+        productId,
+        status: "unpublished",
       });
     },
 

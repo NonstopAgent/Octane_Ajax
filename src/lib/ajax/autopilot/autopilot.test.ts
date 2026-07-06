@@ -6,6 +6,10 @@ import {
   ETSY_MAX_TAGS,
   type ListingAuditInput,
 } from "@/lib/ajax/autopilot/decisions";
+import {
+  selectTakedownCandidate,
+  type TakedownCandidate,
+} from "@/lib/ajax/autopilot/takedown";
 
 function healthyListing(): ListingAuditInput {
   return {
@@ -112,5 +116,56 @@ describe("buildTagFill", () => {
   it("drops tags over Etsy's 20-char limit", () => {
     const tags = buildTagFill([], ["this tag is definitely way too long", "ok tag"]);
     assert.deepEqual(tags, ["ok tag"]);
+  });
+});
+
+function candidate(over: Partial<TakedownCandidate> = {}): TakedownCandidate {
+  return {
+    listingId: "l1",
+    title: "Dead Weight Mug",
+    printifyProductId: "pfy-1",
+    ageDays: 40,
+    views: 3,
+    orders: 0,
+    revenueCents: 0,
+    ...over,
+  };
+}
+
+describe("selectTakedownCandidate", () => {
+  it("never retires a listing that has sold, even at capacity", () => {
+    const seller = candidate({ orders: 2, views: 1, ageDays: 90 });
+    assert.equal(selectTakedownCandidate([seller], { atCapacity: true }), null);
+    const earner = candidate({ revenueCents: 2499, views: 1, ageDays: 90 });
+    assert.equal(selectTakedownCandidate([earner], { atCapacity: true }), null);
+  });
+
+  it("never retires a listing younger than the min age", () => {
+    const young = candidate({ ageDays: 10, views: 0 });
+    assert.equal(selectTakedownCandidate([young], { atCapacity: true }), null);
+  });
+
+  it("at capacity, prunes the weakest non-seller (fewest views)", () => {
+    const a = candidate({ listingId: "a", views: 18, ageDays: 35 });
+    const b = candidate({ listingId: "b", views: 2, ageDays: 35 });
+    const picked = selectTakedownCandidate([a, b], { atCapacity: true });
+    assert.equal(picked?.listingId, "b");
+  });
+
+  it("under capacity, only retires egregiously dead listings", () => {
+    // 33 days, 12 views: dead-ish but not egregious → keep when under capacity.
+    const mild = candidate({ ageDays: 33, views: 12 });
+    assert.equal(selectTakedownCandidate([mild], { atCapacity: false }), null);
+    // 60 days, 1 view → egregious → retire.
+    const dead = candidate({ ageDays: 60, views: 1 });
+    assert.equal(
+      selectTakedownCandidate([dead], { atCapacity: false })?.listingId,
+      "l1",
+    );
+  });
+
+  it("holds at capacity when every listing is performing", () => {
+    const strong = candidate({ views: 200, ageDays: 40 });
+    assert.equal(selectTakedownCandidate([strong], { atCapacity: true }), null);
   });
 });

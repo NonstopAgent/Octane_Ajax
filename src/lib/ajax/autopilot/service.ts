@@ -41,6 +41,11 @@ import {
   runNovaStep,
 } from "@/lib/ajax/simulator";
 import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
+import {
+  gatherTakedownCandidates,
+  selectTakedownCandidate,
+  takeDownListing,
+} from "@/lib/ajax/autopilot/takedown";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
@@ -65,6 +70,7 @@ export type AutopilotResult = {
   cycleTriggered: boolean;
   cycleBlocked: boolean;
   reviewsCleared: number;
+  takenDown: number;
   errors: string[];
 };
 
@@ -79,6 +85,7 @@ function emptyResult(): AutopilotResult {
     cycleTriggered: false,
     cycleBlocked: false,
     reviewsCleared: 0,
+    takenDown: 0,
     errors: [],
   };
 }
@@ -411,6 +418,42 @@ export async function runShopAutopilot(
   const targetListings = Number(
     process.env.AUTOPILOT_TARGET_LISTINGS ?? DEFAULT_TARGET_LISTINGS,
   );
+
+  // ---- Portfolio: enforce the shop capacity + retire dead weight ------------
+  // Hard cap on how many listings are live at once. At capacity, make room by
+  // retiring the single weakest non-selling listing; under capacity, prune only
+  // egregiously dead listings. Reversible (archive + Printify unpublish), and a
+  // listing with ANY sale is never touched. One takedown per pass stays reviewable.
+  let publishedCount = 0;
+  try {
+    const candidates = await gatherTakedownCandidates(supabase, userId);
+    publishedCount = candidates.length;
+    const atCapacity = publishedCount >= targetListings;
+    const cut = selectTakedownCandidate(candidates, { atCapacity });
+    if (cut) {
+      const age = Math.round(cut.ageDays ?? 0);
+      const reason = atCapacity
+        ? `shop at capacity (${publishedCount}/${targetListings}); retired the weakest non-seller (${cut.views} views in ${age}d) to make room for a fresher product`
+        : `dead weight — ${cut.views} views in ${age}d with no sales`;
+      const done = await takeDownListing(supabase, userId, {
+        listingId: cut.listingId,
+        title: cut.title,
+        printifyProductId: cut.printifyProductId,
+        reason,
+      });
+      if (done.ok) {
+        result.takenDown += 1;
+        publishedCount -= 1;
+      } else {
+        result.errors.push(`takedown: ${done.reason}`);
+      }
+    }
+  } catch (err) {
+    result.errors.push(
+      `takedown: ${err instanceof Error ? err.message : "failed"}`,
+    );
+  }
+
   const { count: pendingReviews } = await supabase
     .from(TABLES.REVIEW_QUEUE)
     .select("id", { count: "exact", head: true })
@@ -438,7 +481,7 @@ export async function runShopAutopilot(
         `review: ${err instanceof Error ? err.message : "failed"}`,
       );
     }
-  } else if (liveListings.length < targetListings) {
+  } else if (result.takenDown === 0 && publishedCount < targetListings) {
     try {
       const nova = await runNovaStep(supabase, userId);
       const forge = await runForgeStep(supabase, userId, { runId: nova.runId });
@@ -468,13 +511,14 @@ export async function runShopAutopilot(
     result.recommended +
     result.marketingQueued +
     result.reviewsCleared +
+    result.takenDown +
     (result.cycleTriggered ? 1 : 0);
   await logEvent(
     supabase,
     userId,
     "autopilot_summary",
     acted > 0
-      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}.`
+      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.takenDown ? `, retired ${result.takenDown} underperforming listing(s)` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}.`
       : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: AI review could not clear the gate)" : ""}.`,
     { runId, ...result } as unknown as Json,
   );
