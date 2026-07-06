@@ -61,11 +61,30 @@ export function FactorySweatshop({
   const [cyclePhase, setCyclePhase] = useState<"nova" | "forge" | null>(null);
   const [runningPixel, setRunningPixel] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [autopilot, setAutopilot] = useState(false);
+  // Persisted so the floor "AUTOPILOT" toggle survives navigating away and back
+  // (it used to reset to off on every remount). This drives the live floor
+  // accelerator; the server cron runs the real autopilot 24/7 regardless.
+  const [autopilot, setAutopilot] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("ajax_autopilot") === "on";
+    } catch {
+      return false;
+    }
+  });
   const [toast, setToast] = useState<ToastState>(null);
   const [lastEventMsg, setLastEventMsg] = useState<string | undefined>(
     initialEvents[0] ? String(initialEvents[0].message ?? "") : undefined,
   );
+
+  // Remember the floor autopilot toggle across navigation / reloads.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("ajax_autopilot", autopilot ? "on" : "off");
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [autopilot]);
 
   const showToast = useCallback((tone: ToastTone, message: string) => {
     setToast({ tone, message });

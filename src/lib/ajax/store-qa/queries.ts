@@ -12,7 +12,12 @@ type Row = {
   product_ideas: { seo_keywords: string[] | null } | null;
 };
 
-/** Load the shop's listings (+ their idea tags) for a whole-store QA sweep. */
+/**
+ * Load the shop's LIVE listings (+ their idea tags) for a whole-store QA sweep.
+ * Only `published` listings count — those are what's actually in the store. Rejected
+ * or draft/test records (e.g. old off-niche experiments) are NOT part of the store,
+ * so auditing them would just be noise.
+ */
 export async function fetchStoreListingsForQa(
   supabase: Supabase,
   userId: string,
@@ -23,6 +28,7 @@ export async function fetchStoreListingsForQa(
       "id, title, description, price, mockup_url, status, product_ideas ( seo_keywords )",
     )
     .eq("user_id", userId)
+    .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error || !data) return [];
