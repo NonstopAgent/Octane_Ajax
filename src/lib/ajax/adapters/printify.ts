@@ -95,6 +95,14 @@ export type PrintifyOrder = {
   status: string;
 };
 
+export type PrintifyProductContentUpdate = {
+  /** New product title (synced to the sales channel on next publish). */
+  title?: string;
+  /** Replace every print-area image with this uploaded artwork id
+   * (positions/scale preserved; Printify regenerates mockups async). */
+  artworkUploadId?: string;
+};
+
 export interface PrintifyAdapter {
   uploadArtwork(
     input: PrintifyArtworkInput,
@@ -102,6 +110,11 @@ export interface PrintifyAdapter {
   createProduct(
     input: PrintifyProductInput,
   ): Promise<AdapterResult<PrintifyProduct>>;
+  /** Update title and/or swap the print-area artwork on an existing product. */
+  updateProductContent(
+    productId: string,
+    update: PrintifyProductContentUpdate,
+  ): Promise<AdapterResult<{ productId: string; updated: string[] }>>;
   publishProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyPublishedProduct>>;
@@ -326,6 +339,17 @@ export function createDemoPrintifyAdapter(
       });
     },
 
+    async updateProductContent(productId, update) {
+      const updated = [
+        ...(update.title?.trim() ? ["title"] : []),
+        ...(update.artworkUploadId?.trim() ? ["artwork"] : []),
+      ];
+      return demoResult("Printify product update simulated.", {
+        productId,
+        updated,
+      });
+    },
+
     async publishProduct(productId) {
       return demoResult("Printify product publish simulated.", {
         productId,
@@ -463,6 +487,67 @@ export function createLivePrintifyAdapter(
         title: payload.title ?? input.title,
         status: "unpublished",
       });
+    },
+
+    async updateProductContent(productId, update) {
+      const productUrl = `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`;
+      const updated: string[] = [];
+      const body: Record<string, unknown> = {};
+
+      if (update.title?.trim()) {
+        body.title = update.title.trim();
+        updated.push("title");
+      }
+
+      if (update.artworkUploadId?.trim()) {
+        const uploadId = update.artworkUploadId.trim();
+        const res = await fetchImpl(productUrl, { headers });
+        if (!res.ok) {
+          throw new Error(
+            `Printify product fetch failed (${res.status}) for artwork swap.`,
+          );
+        }
+        type PrintAreaImage = Record<string, unknown> & { id?: string };
+        type Placeholder = Record<string, unknown> & { images?: PrintAreaImage[] };
+        type PrintArea = Record<string, unknown> & { placeholders?: Placeholder[] };
+        const product = (await res.json()) as { print_areas?: PrintArea[] };
+        const printAreas = Array.isArray(product.print_areas)
+          ? product.print_areas
+          : [];
+        if (printAreas.length === 0) {
+          throw new Error("Product has no print areas to update.");
+        }
+        // Swap only the image id — position/scale/angle stay as designed.
+        body.print_areas = printAreas.map((area) => ({
+          ...area,
+          placeholders: (area.placeholders ?? []).map((ph) => ({
+            ...ph,
+            images: (ph.images ?? []).map((img) => ({ ...img, id: uploadId })),
+          })),
+        }));
+        updated.push("artwork");
+      }
+
+      if (updated.length === 0) {
+        return liveResult("Nothing to update on the Printify product.", {
+          productId,
+          updated,
+        });
+      }
+
+      const putRes = await fetchImpl(productUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!putRes.ok) {
+        const errBody = await putRes.text();
+        throw new Error(
+          `Printify product update failed (${putRes.status}): ${errBody}`,
+        );
+      }
+
+      return liveResult("Printify product updated.", { productId, updated });
     },
 
     async publishProduct(productId) {

@@ -174,6 +174,99 @@ describe("printify adapter — mockup selection", () => {
   });
 });
 
+describe("printify adapter — updateProductContent", () => {
+  it("PUTs a title-only update without fetching the product", async () => {
+    const calls: { url: string; method: string; body?: string }[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body as string,
+      });
+      return jsonResponse({ ok: true });
+    }) as typeof fetch;
+
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.updateProductContent("prod-9", {
+      title: "Custom Pet Portrait T-Shirt | Multi-Pet Family Illustration",
+    });
+
+    assert.deepEqual(result.data.updated, ["title"]);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.method, "PUT");
+    const body = JSON.parse(calls[0]!.body!) as { title: string };
+    assert.match(body.title, /T-Shirt/);
+  });
+
+  it("swaps every print-area image id when artworkUploadId is given", async () => {
+    const calls: { url: string; method: string; body?: string }[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ url: String(url), method, body: init?.body as string });
+      if (method === "GET") {
+        return jsonResponse({
+          id: "prod-9",
+          print_areas: [
+            {
+              variant_ids: [18052, 18053],
+              placeholders: [
+                {
+                  position: "front",
+                  images: [
+                    { id: "old-upload", x: 0.5, y: 0.5, scale: 1, angle: 0 },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true });
+    }) as typeof fetch;
+
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.updateProductContent("prod-9", {
+      artworkUploadId: "new-upload",
+    });
+
+    assert.deepEqual(result.data.updated, ["artwork"]);
+    const put = calls.find((c) => c.method === "PUT");
+    assert.ok(put);
+    const body = JSON.parse(put!.body!) as {
+      print_areas: {
+        variant_ids: number[];
+        placeholders: { position: string; images: { id: string; x: number }[] }[];
+      }[];
+    };
+    const image = body.print_areas[0]!.placeholders[0]!.images[0]!;
+    assert.equal(image.id, "new-upload");
+    assert.equal(image.x, 0.5); // placement preserved
+    assert.deepEqual(body.print_areas[0]!.variant_ids, [18052, 18053]);
+  });
+
+  it("no-ops cleanly when there is nothing to update", async () => {
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl: (async () => {
+        throw new Error("should not be called");
+      }) as unknown as typeof fetch,
+    });
+    const result = await adapter.updateProductContent("prod-9", {});
+    assert.deepEqual(result.data.updated, []);
+  });
+});
+
 describe("printify adapter — publishProduct mockup gallery", () => {
   const productImages = [
     mockupImage("front", { is_default: true, is_selected_for_publishing: true }),

@@ -9,11 +9,18 @@
  * repair listings that went live with a single photo, and to push corrected
  * titles from Printify (source of truth) to Etsy.
  *
+ * Optional JSON body:
+ *   { "printifyTitle": "..." }     → fix the Printify product title first
+ *   { "artworkUploadId": "..." }   → swap the print-area artwork first; the
+ *     route then STOPS (published:false) because Printify regenerates mockups
+ *     asynchronously (~60s) — call republish again afterwards to publish.
+ *
  * Auth: operator session (same pattern as the fulfill route).
  */
 export const maxDuration = 120;
 
 import { NextResponse } from "next/server";
+import { createPrintifyAdapter } from "@/lib/ajax/adapters/printify";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import { publishListingViaPrintify } from "@/lib/review/printify-publish-on-approve";
 import { mapGenerationFromDb } from "@/lib/product/mappers";
@@ -24,7 +31,7 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   try {
     const { id: listingId } = await context.params;
     if (!listingId) {
@@ -33,6 +40,20 @@ export async function POST(_request: Request, context: RouteContext) {
         { status: 400 },
       );
     }
+
+    const rawBody = (await request.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const printifyTitle =
+      typeof rawBody.printifyTitle === "string" && rawBody.printifyTitle.trim()
+        ? rawBody.printifyTitle.trim()
+        : undefined;
+    const artworkUploadId =
+      typeof rawBody.artworkUploadId === "string" &&
+      rawBody.artworkUploadId.trim()
+        ? rawBody.artworkUploadId.trim()
+        : undefined;
 
     const supabase = await createClient();
     const {
@@ -77,12 +98,59 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
+    const generation = generationRow
+      ? mapGenerationFromDb(generationRow)
+      : null;
+
+    // Optional content fixes on the Printify product (source of truth)
+    // BEFORE syncing to Etsy.
+    if (printifyTitle || artworkUploadId) {
+      const printifyProductId =
+        generation?.fulfillment?.printifyProductId?.trim();
+      if (!printifyProductId) {
+        return NextResponse.json(
+          { ok: false, error: "Listing has no Printify product to update." },
+          { status: 409 },
+        );
+      }
+
+      const adapter = createPrintifyAdapter();
+      const updateResult = await adapter.updateProductContent(
+        printifyProductId,
+        { title: printifyTitle, artworkUploadId },
+      );
+
+      if (printifyTitle) {
+        // Keep our DB in step with the corrected title.
+        await supabase
+          .from(TABLES.LISTINGS)
+          .update({ title: printifyTitle })
+          .eq("id", listingId)
+          .eq("user_id", user.id);
+      }
+
+      if (artworkUploadId) {
+        // Printify regenerates mockups asynchronously after an artwork swap.
+        // Publishing now would sync stale/missing mockups — stop here and let
+        // the operator call republish again once the render finishes (~60s).
+        return NextResponse.json({
+          ok: true,
+          published: false,
+          updated: updateResult.data.updated,
+          note: "Artwork replaced — mockups regenerating. Call republish again (no body) in ~90s to publish.",
+        });
+      }
+    }
+
     const result = await publishListingViaPrintify({
       supabase,
       userId: user.id,
       listingId,
-      listing: mapListingFromDb(listingRow),
-      generation: generationRow ? mapGenerationFromDb(generationRow) : null,
+      listing: mapListingFromDb({
+        ...listingRow,
+        ...(printifyTitle ? { title: printifyTitle } : {}),
+      }),
+      generation,
     });
 
     if (!result) {
