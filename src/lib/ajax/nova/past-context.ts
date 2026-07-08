@@ -111,20 +111,22 @@ export async function fetchNovaPastContext(
       .eq("user_id", userId)
       .eq("status", "rejected")
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(15),
     supabase
       .from(TABLES.LISTINGS)
       .select(LISTING_IDEA_SELECT)
       .eq("user_id", userId)
       .in("status", ["approved", "published"])
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(15),
     supabase
       .from(TABLES.IDEAS)
       .select("title")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(20),
+      // Deep enough that a bad day of repeats can't scroll the memory window
+      // past itself (the repetition guard compares against these titles).
+      .limit(40),
   ]);
 
   if (rejectedResult.error) {

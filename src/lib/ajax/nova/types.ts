@@ -12,7 +12,7 @@ import type {
 } from "@/lib/ajax/product-brain/types";
 import type { MarketOpportunity } from "@/lib/ajax/product-brain/market-signals";
 
-export const NOVA_PROMPT_VERSION = "nova-ideation-pet-v4";
+export const NOVA_PROMPT_VERSION = "nova-ideation-pet-v5";
 
 export type NovaIdeationMode = "llm" | "fallback";
 

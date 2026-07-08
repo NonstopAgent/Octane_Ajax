@@ -3,6 +3,7 @@ import {
   AI_DISCLOSURE_TEXT,
   ensureAiDisclosureInCopy,
   mapForgePodDetailsToDomain,
+  reconcileListingCopyWithProduct,
   type ForgeGenerationResult,
 } from "@/lib/ajax/forge/types";
 import {
@@ -40,24 +41,32 @@ function padSeoTags(keywords: string[], concept: string): string[] {
 export function buildForgeFallbackResult(
   idea: NovaEvaluatedIdea,
 ): ForgeGenerationResult {
-  const listingTitle = `${idea.productConcept} — Print-on-Demand Gift`;
-  const listingDescription = ensureAiDisclosureInCopy(
-    [
-      idea.problemSolved,
-      "",
-      `Designed for: ${idea.targetBuyer}`,
-      "",
-      "What's included:",
-      "- Professionally printed physical product (made to order)",
-      "- Original artwork tailored to this niche",
-      "- Ships via Printify fulfillment network",
-      "",
-      idea.reasoning,
-    ].join("\n"),
-  );
-
   const catalogKey = catalogKeyForFormat(idea.format);
   const catalogEntry = getPrintifyCatalogEntry(catalogKey);
+
+  // The idea's concept may name a format the catalog maps elsewhere (e.g. a
+  // "tote bag" concept fulfilled as a mug) — reconcile so the listing never
+  // promises a product we aren't making.
+  const reconciled = reconcileListingCopyWithProduct(
+    {
+      title: `${idea.productConcept} — Print-on-Demand Gift`,
+      description: [
+        idea.problemSolved,
+        "",
+        `Designed for: ${idea.targetBuyer}`,
+        "",
+        "What's included:",
+        "- Professionally printed physical product (made to order)",
+        "- Original artwork tailored to this niche",
+        "- Ships via Printify fulfillment network",
+        "",
+        idea.reasoning,
+      ].join("\n"),
+    },
+    catalogKey,
+  );
+  const listingTitle = reconciled.title;
+  const listingDescription = ensureAiDisclosureInCopy(reconciled.description);
 
   const artworkPrompt = `Original ${FALLBACK_AESTHETIC} artwork for ${idea.niche}: ${idea.productConcept}. ${idea.problemSolved}. No copyrighted characters, brands, or logos.`;
 

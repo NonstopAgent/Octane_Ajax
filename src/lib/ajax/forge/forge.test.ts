@@ -15,6 +15,7 @@ import {
   ForgeLlmResponseSchema,
   ForgePodDetailsSchema,
   ensureAiDisclosureInCopy,
+  reconcileListingCopyWithProduct,
 } from "@/lib/ajax/forge/types";
 import { PRINTIFY_CATALOG } from "@/lib/ajax/pod/printify-catalog";
 import { mapGenerationToDbInsert } from "@/lib/product/mappers";
@@ -294,6 +295,84 @@ describe("AI disclosure helper", () => {
   it("appends disclosure when missing from copy", () => {
     const withDisclosure = ensureAiDisclosureInCopy("Short listing body.");
     assert.ok(withDisclosure.includes(AI_DISCLOSURE_TEXT));
+  });
+});
+
+describe("reconcileListingCopyWithProduct (product-type guard)", () => {
+  it("rewrites a tote-bag title when the product is a t-shirt", () => {
+    const result = reconcileListingCopyWithProduct(
+      {
+        title: "Custom Pet Portrait Tote Bag | Dog Mom Gift",
+        description: "A beautiful tote bag featuring your pet's portrait.",
+      },
+      "TEE_UNISEX",
+    );
+    assert.equal(result.changed, true);
+    assert.doesNotMatch(result.title, /tote/i);
+    assert.match(result.title, /T-Shirt/);
+    assert.doesNotMatch(result.description, /tote/i);
+    assert.match(result.description, /T-Shirt/);
+  });
+
+  it("rewrites cross-type words (mug title on a poster product)", () => {
+    const result = reconcileListingCopyWithProduct(
+      {
+        title: "Gotcha Day Mug for Rescue Dog Families",
+        description: "This mug celebrates adoption day.",
+      },
+      "POSTER_MATTE_VERTICAL",
+    );
+    assert.doesNotMatch(result.title, /\bmug\b/i);
+    assert.match(result.title, /Poster/);
+  });
+
+  it("appends the product name when the title never names a product", () => {
+    const result = reconcileListingCopyWithProduct(
+      {
+        title: "Adopted and Loved | Gotcha Day Keepsake",
+        description: "Celebrates the day your rescue came home.",
+      },
+      "MUG_11OZ",
+    );
+    assert.match(result.title, /Mug$/);
+    assert.ok(result.title.length <= 140);
+  });
+
+  it("leaves correct copy untouched (idempotent)", () => {
+    const copy = {
+      title: "Senior Rescue Dog Mom Coffee Mug | Gotcha Day Gift",
+      description: "An 11oz ceramic mug for senior dog adopters.",
+    };
+    const first = reconcileListingCopyWithProduct(copy, "MUG_11OZ");
+    assert.equal(first.changed, false);
+    assert.equal(first.title, copy.title);
+    const second = reconcileListingCopyWithProduct(
+      { title: first.title, description: first.description },
+      "MUG_11OZ",
+    );
+    assert.equal(second.changed, false);
+  });
+
+  it("never lets a hoodie word survive on the crewneck sweatshirt", () => {
+    const result = reconcileListingCopyWithProduct(
+      {
+        title: "Cozy Dog Dad Hoodie for Winter Walks",
+        description: "A warm hoodie for dog dads.",
+      },
+      "SWEATSHIRT_CREWNECK",
+    );
+    assert.doesNotMatch(result.title, /hoodie/i);
+    assert.match(result.title, /Sweatshirt/);
+  });
+
+  it("caps appended titles at Etsy's 140-char limit", () => {
+    const longTitle = "Rescue Dog Adoption Celebration Keepsake ".repeat(4).trim();
+    const result = reconcileListingCopyWithProduct(
+      { title: longTitle, description: "desc" },
+      "TEE_UNISEX",
+    );
+    assert.ok(result.title.length <= 140);
+    assert.match(result.title, /T-Shirt$/);
   });
 });
 

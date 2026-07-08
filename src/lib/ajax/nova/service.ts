@@ -12,6 +12,7 @@ import {
   type MarketKeywordRow,
   type MarketOpportunity,
 } from "@/lib/ajax/product-brain/market-signals";
+import { filterRepetitiveIdeas } from "@/lib/ajax/nova/dedupe";
 import { mapFakeDraftsToNovaRaw } from "@/lib/ajax/nova/fallback";
 import type { NovaPastContext } from "@/lib/ajax/nova/past-context";
 import {
@@ -190,7 +191,20 @@ export async function runNovaIdeation(
   if (useLlm) {
     try {
       const { raw, model } = await fetchLlmRawIdeas(runId, options);
-      let ideas = evaluateRawIdeas(raw, model, keywordRows);
+
+      // HARD variety guard: the prompt asks the model not to repeat itself,
+      // but only this filter guarantees it. Repeats of rejected/approved
+      // niches, recent titles, or same-batch near-duplicates are dropped.
+      const { kept, dropped } = filterRepetitiveIdeas(raw, options?.pastContext);
+      if (dropped.length > 0) {
+        console.warn(
+          `[nova] repetition guard dropped ${dropped.length} idea(s): ${dropped
+            .map((d) => `"${d.idea.productConcept}" — ${d.reason}`)
+            .join("; ")}`,
+        );
+      }
+
+      let ideas = evaluateRawIdeas(kept, model, keywordRows);
 
       if (ideas.length === 0) {
         ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId), undefined, keywordRows);

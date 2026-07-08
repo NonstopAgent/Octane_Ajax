@@ -45,6 +45,15 @@ export type PrintifyProduct = {
   status: "unpublished";
 };
 
+/** Mockup image on a Printify product (GET /products/{id}.json → images[]). */
+export type PrintifyProductImage = {
+  src: string;
+  variant_ids?: number[];
+  position?: string;
+  is_default?: boolean;
+  is_selected_for_publishing?: boolean;
+};
+
 export type PrintifyPublishedProduct = {
   productId: string;
   externalId: string;
@@ -148,6 +157,105 @@ function sanitizeEtsyTags(tags?: string[]): string[] {
     if (out.length >= 13) break;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Mockup gallery selection — Etsy listings need 5+ photos to rank; Printify's
+// default publish syncs only the single default mockup, which is why every
+// autopilot listing went live with ONE photo. Before publishing we select a
+// varied set of the auto-generated mockups (front + angles + lifestyle) so the
+// Etsy listing gets a full gallery. Best-effort by design: any failure here
+// falls through to the normal publish.
+// ---------------------------------------------------------------------------
+
+/** Max mockups to sync to the sales channel (Etsy allows 10 photos). */
+export const MAX_PUBLISH_MOCKUPS = 8;
+
+/** Preferred camera angles, best first (labels observed on Printify mockups). */
+const CAMERA_PRIORITY = [
+  "front",
+  "context-1",
+  "context-2",
+  "context-3",
+  "left",
+  "right",
+  "back",
+  "flat-lay",
+  "hanging",
+  "lifestyle",
+];
+
+/** Printify encodes the mockup camera angle in the image URL query string. */
+export function cameraLabelFromSrc(src: string): string | null {
+  const match = /[?&]camera_label=([^&]+)/.exec(src);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]).toLowerCase();
+  } catch {
+    return match[1].toLowerCase();
+  }
+}
+
+/**
+ * Pick up to `max` varied mockups (one per camera angle, best angles first)
+ * and return the FULL images array with `is_selected_for_publishing` /
+ * `is_default` flags set — ready for a product PUT. Returns null when there
+ * is nothing to change (0–1 images, or the selection already matches).
+ */
+export function selectMockupsForPublishing(
+  images: PrintifyProductImage[],
+  max: number = MAX_PUBLISH_MOCKUPS,
+): PrintifyProductImage[] | null {
+  if (!Array.isArray(images) || images.length <= 1) return null;
+
+  type Candidate = {
+    image: PrintifyProductImage;
+    priority: number;
+    index: number;
+  };
+  const byAngle = new Map<string, Candidate>();
+  images.forEach((image, index) => {
+    if (!image?.src) return;
+    const angle =
+      cameraLabelFromSrc(image.src) ??
+      image.position?.toLowerCase() ??
+      `img-${index}`;
+    const priorityIndex = CAMERA_PRIORITY.indexOf(angle);
+    const priority =
+      priorityIndex === -1 ? CAMERA_PRIORITY.length + index : priorityIndex;
+    const existing = byAngle.get(angle);
+    // One image per angle; within an angle prefer the current default.
+    if (!existing || (image.is_default && !existing.image.is_default)) {
+      byAngle.set(angle, { image, priority, index });
+    }
+  });
+
+  const picks = [...byAngle.values()]
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .slice(0, max);
+  if (picks.length <= 1) return null;
+
+  // Index-based selection: srcs are not guaranteed unique across mockups.
+  const selectedIndexes = new Set(picks.map((p) => p.index));
+  const currentDefaultIndex = images.findIndex(
+    (img, i) => img.is_default && selectedIndexes.has(i),
+  );
+  const defaultIndex =
+    currentDefaultIndex !== -1 ? currentDefaultIndex : picks[0]!.index;
+
+  const next = images.map((image, i) => ({
+    ...image,
+    is_default: i === defaultIndex,
+    is_selected_for_publishing: selectedIndexes.has(i),
+  }));
+
+  const unchanged = images.every(
+    (image, i) =>
+      Boolean(image.is_selected_for_publishing) ===
+        next[i]!.is_selected_for_publishing &&
+      Boolean(image.is_default) === next[i]!.is_default,
+  );
+  return unchanged ? null : next;
 }
 
 type PrintifyUploadResponse = {
@@ -358,6 +466,38 @@ export function createLivePrintifyAdapter(
     },
 
     async publishProduct(productId) {
+      // Best-effort: select a varied mockup gallery (front + angles +
+      // lifestyle) so the Etsy listing publishes with 5+ photos instead of 1.
+      // Never blocks or fails the publish — worst case Printify's default
+      // single mockup syncs exactly as before.
+      try {
+        const productUrl = `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`;
+        const productResponse = await fetchImpl(productUrl, { headers });
+        if (productResponse.ok) {
+          const product = (await productResponse.json()) as {
+            images?: PrintifyProductImage[];
+          };
+          const selection = selectMockupsForPublishing(product.images ?? []);
+          if (selection) {
+            const putResponse = await fetchImpl(productUrl, {
+              method: "PUT",
+              headers,
+              body: JSON.stringify({ images: selection }),
+            });
+            if (!putResponse.ok) {
+              console.warn(
+                `[printify] mockup selection PUT failed (${putResponse.status}) for ${productId} — publishing with default mockups.`,
+              );
+            }
+          }
+        }
+      } catch (mockupErr) {
+        console.warn(
+          `[printify] mockup selection skipped for ${productId}:`,
+          mockupErr instanceof Error ? mockupErr.message : mockupErr,
+        );
+      }
+
       const publishResponse = await fetchImpl(
         `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publish.json`,
         {

@@ -12,6 +12,7 @@ import {
   ensureAiDisclosureInCopy,
   ForgeLlmResponseSchema,
   mapForgePodDetailsToDomain,
+  reconcileListingCopyWithProduct,
   type ForgeGenerationInput,
   type ForgeGenerationResult,
   AI_DISCLOSURE_TEXT,
@@ -55,17 +56,31 @@ function mapLlmResponseToResult(
     .map((n) => n.trim())
     .filter(Boolean);
 
+  // Guard: the title/description must name the product the catalog actually
+  // makes (no more "Tote Bag" titles on a t-shirt).
+  const reconciled = reconcileListingCopyWithProduct(
+    { title: data.listingTitle.trim(), description: data.listingDescription },
+    data.podDetails.catalogKey,
+  );
+
+  const revisionNotes = data.revisionNotes.map((n) => n.trim()).filter(Boolean);
+  if (reconciled.changed) {
+    revisionNotes.push(
+      "Product-type guard: listing copy rewritten to match the fulfilled product.",
+    );
+  }
+
   return {
     mode: "llm",
-    listingTitle: data.listingTitle.trim(),
-    listingDescription: ensureAiDisclosureInCopy(data.listingDescription),
+    listingTitle: reconciled.title,
+    listingDescription: ensureAiDisclosureInCopy(reconciled.description),
     seoTags: data.seoTags.map((t) => t.trim()),
     suggestedPrice: guardrailedPrice(data.suggestedPrice),
     podDetails,
     complianceNotes,
     aiDisclosure,
     coverImagePrompt: data.coverImagePrompt.trim(),
-    revisionNotes: data.revisionNotes.map((n) => n.trim()).filter(Boolean),
+    revisionNotes,
     llmProvider: FORGE_LLM_PROVIDER,
     llmModel: model,
     promptVersion: FORGE_PROMPT_VERSION,

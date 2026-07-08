@@ -16,31 +16,36 @@ type FallbackIdeaSpec = FakeIdeaDraft & {
   suggestedPrice: number;
 };
 
-/** Deterministic fallback specs — niche print-on-demand gift products. */
+/**
+ * Deterministic fallback specs — PET-PARENT gift products only.
+ * GotchaDayGoods is a pet shop: even emergency placeholder ideas must stay
+ * on-niche (rescue/adoption, senior pets, gotcha day) so an LLM outage can
+ * never flood the store with off-brand products again.
+ */
 function buildFallbackSpecs(runId: string): FallbackIdeaSpec[] {
   const suffix = runId.slice(0, 8);
   return [
     {
-      niche: "backyard chicken keeper humor gifts",
-      title: `Chicken Math Club Member Coffee Mug for Backyard Flock Keepers — ${suffix}`,
+      niche: "senior rescue dog adoption gifts",
+      title: `Senior Rescue Dog Mom Coffee Mug Celebrating Gray Muzzle Love — ${suffix}`,
       description:
-        "An original illustrated coffee mug celebrating chicken math — the inside joke every backyard flock keeper lives by. Hand-drawn hens, coop-to-cup humor, and hobby farm pride on dishwasher-safe drinkware.",
+        "An original illustrated coffee mug for the dog mom who chose the gray-muzzled senior at the shelter. Warm line-art of an old soul dog, a short tribute lockup, and adoption pride on dishwasher-safe drinkware.",
       problemSolved:
-        "Backyard flock keepers struggle to find birthday gifts that get the chicken math inside joke instead of generic farm clichés",
+        "People who adopt senior dogs rarely find gifts that honor choosing the old dog everyone else overlooked",
       targetBuyer:
-        "Backyard chicken keepers and gift-givers shopping for hobby farm friends who joke about chicken math",
+        "Senior dog adopters and friends buying an adoption congratulations gift for a rescue dog mom",
       seo_keywords: [
-        "chicken math mug",
-        "backyard chicken gift",
-        "hobby farm mug",
-        "chicken keeper gift",
-        "funny farmer mug",
-        "crazy chicken lady",
+        "senior dog mom mug",
+        "rescue dog adoption gift",
+        "old dog lover mug",
+        "senior dog gift",
+        "dog adoption mug",
+        "gray muzzle dog",
       ],
-      trend_score: 86,
+      trend_score: 84,
       format: "mug",
-      category: "hobby_leisure",
-      suggestedPrice: 16.99,
+      category: "pet_lovers",
+      suggestedPrice: 24.99,
     },
     {
       niche: "reactive rescue dog mom apparel",
@@ -62,29 +67,29 @@ function buildFallbackSpecs(runId: string): FallbackIdeaSpec[] {
       trend_score: 83,
       format: "tshirt",
       category: "pet_lovers",
-      suggestedPrice: 26.99,
+      suggestedPrice: 29.99,
     },
     {
-      niche: "night shift nurse appreciation gifts",
-      title: `Night Shift Nurse Sweatshirt Powered by Caffeine and Chaos — ${suffix}`,
+      niche: "gotcha day celebration keepsakes",
+      title: `Personalized Gotcha Day Poster for Rescue Dog Families — ${suffix}`,
       description:
-        "A cozy crewneck sweatshirt made for nurses surviving the night shift on coffee, dark humor, and teamwork. An original typographic design for nurses week, graduation, and unit gift exchanges.",
+        "A full-bleed illustrated poster that marks the day a rescue dog came home. Celebratory typographic design with room for the pet's name and gotcha date — wall decor for adoption anniversaries.",
       problemSolved:
-        "Night shift nurses face burnout and chaos yet most appreciation gifts ignore the night crew entirely",
+        "Rescue families want to commemorate their dog's adoption day but generic pet wall art never marks the gotcha day milestone",
       targetBuyer:
-        "Night shift nurses and coworkers buying unit gifts for nurses week and graduation",
+        "Rescue dog parents celebrating a gotcha day or buying an adoption anniversary gift for a fellow dog parent",
       seo_keywords: [
-        "night shift nurse gift",
-        "nurse sweatshirt",
-        "nurse week gift",
-        "funny nurse crewneck",
-        "nurse graduation gift",
-        "er nurse apparel",
+        "gotcha day gift",
+        "dog adoption poster",
+        "rescue dog wall art",
+        "adoption anniversary",
+        "personalized dog print",
+        "gotcha day keepsake",
       ],
-      trend_score: 81,
-      format: "sweatshirt",
-      category: "occupation_gifts",
-      suggestedPrice: 29.99,
+      trend_score: 82,
+      format: "poster",
+      category: "pet_lovers",
+      suggestedPrice: 27.99,
     },
   ];
 }
@@ -114,7 +119,7 @@ export function mapFakeDraftsToNovaRaw(runId: string): NovaRawIdea[] {
         suggestedPrice: spec.suggestedPrice,
         keywords: spec.seo_keywords,
         reasoning:
-          "Fallback idea from deterministic catalog. OpenAI key not configured — set OPENAI_API_KEY to enable live LLM ideation.",
+          "Fallback idea from the deterministic pet-niche catalog — used only when every configured LLM provider is unavailable.",
       },
       "fallback",
     ),
