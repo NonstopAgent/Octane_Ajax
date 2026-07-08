@@ -53,23 +53,60 @@ async function ensureEtsyMockupGallery(
   printifyProductId: string,
   adapter: PrintifyAdapter,
 ): Promise<void> {
+  const skip = async (reason: string, extra: Record<string, unknown> = {}) => {
+    await insertGumroadEvent(
+      supabase,
+      userId,
+      "etsy_gallery_skipped",
+      `Mockup gallery top-up skipped: ${reason}`,
+      { listingId, printifyProductId, ...extra },
+    );
+  };
+
   try {
     const product = await adapter.getProduct(printifyProductId);
-    const etsyListingId = product.data.externalId;
-    if (!etsyListingId) return;
 
     const picks = pickMockupImages(product.data.images, MAX_PUBLISH_MOCKUPS);
-    if (picks.length <= 1) return;
+    if (picks.length <= 1) {
+      return skip(`only ${picks.length} usable mockup(s) on the product`);
+    }
 
     const credentials = await refreshEtsyToken(userId, { supabase });
-    if (!credentials) return;
+    if (!credentials) {
+      return skip("Etsy shop not connected");
+    }
 
     const etsy = createEtsyAdapter();
+
+    // Prefer Printify's channel binding; fall back to an exact-title match
+    // against the shop's active listings.
+    let etsyListingId = product.data.externalId;
+    if (!etsyListingId) {
+      const shopListings = await etsy.getShopListings(
+        credentials.shop_id,
+        credentials.access_token,
+      );
+      const wanted = product.data.title.trim().toLowerCase();
+      etsyListingId =
+        shopListings.find((l) => l.title.trim().toLowerCase() === wanted)
+          ?.listingId ?? null;
+    }
+    if (!etsyListingId) {
+      return skip("could not resolve the Etsy listing id", {
+        productTitle: product.data.title,
+      });
+    }
+
     const existing = await etsy.getListingImages(
       etsyListingId,
       credentials.access_token,
     );
-    if (existing.length >= picks.length) return;
+    if (existing.length >= picks.length) {
+      return skip(
+        `listing already has ${existing.length} photo(s) (target ${picks.length})`,
+        { etsyListingId },
+      );
+    }
 
     let added = 0;
     for (let i = existing.length; i < picks.length; i += 1) {

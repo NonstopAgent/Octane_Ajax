@@ -535,19 +535,23 @@ export function createLivePrintifyAdapter(
       if (!response.ok) {
         throw new Error(`Printify product fetch failed (${response.status}).`);
       }
+      type ExternalBinding = { id?: string | number; handle?: string };
       const product = (await response.json()) as {
         id?: string;
         title?: string;
         images?: PrintifyProductImage[];
-        external?: { id?: string | number; handle?: string };
+        /** Object on most shops, array on some channel integrations. */
+        external?: ExternalBinding | ExternalBinding[];
       };
+      const external = Array.isArray(product.external)
+        ? (product.external[0] ?? null)
+        : (product.external ?? null);
       return liveResult("Printify product fetched.", {
         productId: product.id ?? productId,
         title: product.title ?? "",
         images: Array.isArray(product.images) ? product.images : [],
-        externalId:
-          product.external?.id != null ? String(product.external.id) : null,
-        externalHandle: product.external?.handle ?? null,
+        externalId: external?.id != null ? String(external.id) : null,
+        externalHandle: external?.handle ?? null,
       });
     },
 
