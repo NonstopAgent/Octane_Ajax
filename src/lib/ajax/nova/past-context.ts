@@ -104,30 +104,40 @@ export async function fetchNovaPastContext(
   supabase: Supabase,
   userId: string,
 ): Promise<NovaPastContext | undefined> {
-  const [rejectedResult, approvedResult, titlesResult] = await Promise.all([
-    supabase
-      .from(TABLES.LISTINGS)
-      .select(LISTING_IDEA_SELECT)
-      .eq("user_id", userId)
-      .eq("status", "rejected")
-      .order("created_at", { ascending: false })
-      .limit(15),
-    supabase
-      .from(TABLES.LISTINGS)
-      .select(LISTING_IDEA_SELECT)
-      .eq("user_id", userId)
-      .in("status", ["approved", "published"])
-      .order("created_at", { ascending: false })
-      .limit(15),
-    supabase
-      .from(TABLES.IDEAS)
-      .select("title")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      // Deep enough that a bad day of repeats can't scroll the memory window
-      // past itself (the repetition guard compares against these titles).
-      .limit(40),
-  ]);
+  const [rejectedResult, approvedResult, titlesResult, listingTitlesResult] =
+    await Promise.all([
+      supabase
+        .from(TABLES.LISTINGS)
+        .select(LISTING_IDEA_SELECT)
+        .eq("user_id", userId)
+        .eq("status", "rejected")
+        .order("created_at", { ascending: false })
+        .limit(15),
+      supabase
+        .from(TABLES.LISTINGS)
+        .select(LISTING_IDEA_SELECT)
+        .eq("user_id", userId)
+        .in("status", ["approved", "published"])
+        .order("created_at", { ascending: false })
+        .limit(15),
+      supabase
+        .from(TABLES.IDEAS)
+        .select("title")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        // Deep enough that a bad day of repeats can't scroll the memory window
+        // past itself (the repetition guard compares against these titles).
+        .limit(40),
+      // EVERY listing the store has ever made (any status, including ones
+      // deactivated on Etsy) — the AI must know the full catalog so it never
+      // proposes something the shop already sells.
+      supabase
+        .from(TABLES.LISTINGS)
+        .select("title")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(25),
+    ]);
 
   if (rejectedResult.error) {
     throw new Error(
@@ -144,10 +154,16 @@ export async function fetchNovaPastContext(
       `Failed to load recent product ideas for Nova memory: ${titlesResult.error.message}`,
     );
   }
+  if (listingTitlesResult.error) {
+    throw new Error(
+      `Failed to load listing titles for Nova memory: ${listingTitlesResult.error.message}`,
+    );
+  }
 
   return buildNovaPastContext(
     (rejectedResult.data ?? []) as ListingWithIdea[],
     (approvedResult.data ?? []) as ListingWithIdea[],
-    titlesResult.data ?? [],
+    // Listing titles first (the real store catalog), then raw idea titles.
+    [...(listingTitlesResult.data ?? []), ...(titlesResult.data ?? [])],
   );
 }

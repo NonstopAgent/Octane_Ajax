@@ -1,7 +1,7 @@
 /**
  * Product artwork / mockup generation adapter.
  *
- * Server-side only. Uses OpenAI gpt-image-1 when OPENAI_API_KEY is set;
+ * Server-side only. Uses OpenAI image generation when OPENAI_API_KEY is set;
  * otherwise returns deterministic demo assets.
  */
 
@@ -13,7 +13,12 @@ import {
   liveResult,
 } from "@/lib/ajax/adapters/types";
 
-const DEFAULT_IMAGE_MODEL = "gpt-image-1";
+/**
+ * OpenAI's current flagship image model (released 2026-04-21) — sharper
+ * detail and far better text rendering than gpt-image-1, which matters for
+ * typographic gift designs. Override via IMAGE_GENERATOR_MODEL if needed.
+ */
+const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 
 /**
  * Hard ceiling for a single OpenAI image call. Kept below the serverless
@@ -95,7 +100,7 @@ export type ImageGeneratorAdapterOptions = AdapterConfig & {
 };
 
 function aspectToSize(aspectRatio?: ProductArtworkInput["aspectRatio"]): string {
-  // gpt-image-1 only supports 1024x1024, 1024x1536, 1536x1024.
+  // Sizes supported across gpt-image-1/-2: 1024x1024, 1024x1536, 1536x1024.
   switch (aspectRatio) {
     case "4:5":
       return "1024x1536";
