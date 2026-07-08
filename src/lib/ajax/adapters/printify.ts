@@ -507,9 +507,21 @@ export function createLivePrintifyAdapter(
             `Printify product fetch failed (${res.status}) for artwork swap.`,
           );
         }
-        type PrintAreaImage = Record<string, unknown> & { id?: string };
-        type Placeholder = Record<string, unknown> & { images?: PrintAreaImage[] };
-        type PrintArea = Record<string, unknown> & { placeholders?: Placeholder[] };
+        type PrintAreaImage = Record<string, unknown> & {
+          id?: string;
+          x?: number;
+          y?: number;
+          scale?: number;
+          angle?: number;
+        };
+        type Placeholder = Record<string, unknown> & {
+          position?: string;
+          images?: PrintAreaImage[];
+        };
+        type PrintArea = Record<string, unknown> & {
+          variant_ids?: number[];
+          placeholders?: Placeholder[];
+        };
         const product = (await res.json()) as { print_areas?: PrintArea[] };
         const printAreas = Array.isArray(product.print_areas)
           ? product.print_areas
@@ -517,12 +529,21 @@ export function createLivePrintifyAdapter(
         if (printAreas.length === 0) {
           throw new Error("Product has no print areas to update.");
         }
-        // Swap only the image id — position/scale/angle stay as designed.
+        // Swap the image id, keep placement — and send ONLY the writable
+        // print-area shape (variant_ids + placeholders.position/images with
+        // id/x/y/scale/angle). GET returns extra read-only fields (src, name,
+        // dimensions) that the PUT endpoint rejects.
         body.print_areas = printAreas.map((area) => ({
-          ...area,
+          variant_ids: area.variant_ids ?? [],
           placeholders: (area.placeholders ?? []).map((ph) => ({
-            ...ph,
-            images: (ph.images ?? []).map((img) => ({ ...img, id: uploadId })),
+            position: ph.position ?? "front",
+            images: (ph.images ?? []).map((img) => ({
+              id: uploadId,
+              x: typeof img.x === "number" ? img.x : 0.5,
+              y: typeof img.y === "number" ? img.y : 0.5,
+              scale: typeof img.scale === "number" ? img.scale : 1,
+              angle: typeof img.angle === "number" ? img.angle : 0,
+            })),
           })),
         }));
         updated.push("artwork");

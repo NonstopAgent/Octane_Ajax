@@ -167,9 +167,8 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ ok: true, url: result.url });
   } catch (err) {
     console.error("[listings/republish] unexpected error", err);
-    return NextResponse.json(
-      { ok: false, error: "Republish failed." },
-      { status: 500 },
-    );
+    // Operator-only maintenance route — surface the real reason.
+    const message = err instanceof Error ? err.message : "Republish failed.";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
