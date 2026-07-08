@@ -54,6 +54,16 @@ export type PrintifyProductImage = {
   is_selected_for_publishing?: boolean;
 };
 
+/** Product snapshot used for maintenance (mockup gallery, channel binding). */
+export type PrintifyProductDetails = {
+  productId: string;
+  title: string;
+  images: PrintifyProductImage[];
+  /** Sales-channel listing id (the Etsy listing id when Etsy-connected). */
+  externalId: string | null;
+  externalHandle: string | null;
+};
+
 export type PrintifyPublishedProduct = {
   productId: string;
   externalId: string;
@@ -110,6 +120,10 @@ export interface PrintifyAdapter {
   createProduct(
     input: PrintifyProductInput,
   ): Promise<AdapterResult<PrintifyProduct>>;
+  /** Read a product's mockups + sales-channel binding. */
+  getProduct(
+    productId: string,
+  ): Promise<AdapterResult<PrintifyProductDetails>>;
   /** Update title and/or swap the print-area artwork on an existing product. */
   updateProductContent(
     productId: string,
@@ -209,24 +223,23 @@ export function cameraLabelFromSrc(src: string): string | null {
   }
 }
 
+type MockupCandidate = {
+  image: PrintifyProductImage;
+  priority: number;
+  index: number;
+};
+
 /**
- * Pick up to `max` varied mockups (one per camera angle, best angles first)
- * and return the FULL images array with `is_selected_for_publishing` /
- * `is_default` flags set — ready for a product PUT. Returns null when there
- * is nothing to change (0–1 images, or the selection already matches).
+ * Ordered pick of up to `max` varied mockups — one per camera angle, best
+ * angles first. This is the single source of truth for which product photos
+ * a listing should carry.
  */
-export function selectMockupsForPublishing(
+export function pickMockupImages(
   images: PrintifyProductImage[],
   max: number = MAX_PUBLISH_MOCKUPS,
-): PrintifyProductImage[] | null {
-  if (!Array.isArray(images) || images.length <= 1) return null;
-
-  type Candidate = {
-    image: PrintifyProductImage;
-    priority: number;
-    index: number;
-  };
-  const byAngle = new Map<string, Candidate>();
+): MockupCandidate[] {
+  if (!Array.isArray(images)) return [];
+  const byAngle = new Map<string, MockupCandidate>();
   images.forEach((image, index) => {
     if (!image?.src) return;
     const angle =
@@ -243,9 +256,24 @@ export function selectMockupsForPublishing(
     }
   });
 
-  const picks = [...byAngle.values()]
+  return [...byAngle.values()]
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .slice(0, max);
+}
+
+/**
+ * Pick up to `max` varied mockups (one per camera angle, best angles first)
+ * and return the FULL images array with `is_selected_for_publishing` /
+ * `is_default` flags set — ready for a product PUT. Returns null when there
+ * is nothing to change (0–1 images, or the selection already matches).
+ */
+export function selectMockupsForPublishing(
+  images: PrintifyProductImage[],
+  max: number = MAX_PUBLISH_MOCKUPS,
+): PrintifyProductImage[] | null {
+  if (!Array.isArray(images) || images.length <= 1) return null;
+
+  const picks = pickMockupImages(images, max);
   if (picks.length <= 1) return null;
 
   // Index-based selection: srcs are not guaranteed unique across mockups.
@@ -336,6 +364,16 @@ export function createDemoPrintifyAdapter(
         productId,
         title: input.title,
         status: "unpublished",
+      });
+    },
+
+    async getProduct(productId) {
+      return demoResult("Printify product fetch simulated.", {
+        productId,
+        title: "Demo product",
+        images: [],
+        externalId: null,
+        externalHandle: null,
       });
     },
 
@@ -489,6 +527,30 @@ export function createLivePrintifyAdapter(
       });
     },
 
+    async getProduct(productId) {
+      const response = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        { headers },
+      );
+      if (!response.ok) {
+        throw new Error(`Printify product fetch failed (${response.status}).`);
+      }
+      const product = (await response.json()) as {
+        id?: string;
+        title?: string;
+        images?: PrintifyProductImage[];
+        external?: { id?: string | number; handle?: string };
+      };
+      return liveResult("Printify product fetched.", {
+        productId: product.id ?? productId,
+        title: product.title ?? "",
+        images: Array.isArray(product.images) ? product.images : [],
+        externalId:
+          product.external?.id != null ? String(product.external.id) : null,
+        externalHandle: product.external?.handle ?? null,
+      });
+    },
+
     async updateProductContent(productId, update) {
       const productUrl = `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`;
       const updated: string[] = [];
@@ -532,20 +594,29 @@ export function createLivePrintifyAdapter(
         // Swap the image id, keep placement — and send ONLY the writable
         // print-area shape (variant_ids + placeholders.position/images with
         // id/x/y/scale/angle). GET returns extra read-only fields (src, name,
-        // dimensions) that the PUT endpoint rejects.
-        body.print_areas = printAreas.map((area) => ({
-          variant_ids: area.variant_ids ?? [],
-          placeholders: (area.placeholders ?? []).map((ph) => ({
-            position: ph.position ?? "front",
-            images: (ph.images ?? []).map((img) => ({
-              id: uploadId,
-              x: typeof img.x === "number" ? img.x : 0.5,
-              y: typeof img.y === "number" ? img.y : 0.5,
-              scale: typeof img.scale === "number" ? img.scale : 1,
-              angle: typeof img.angle === "number" ? img.angle : 0,
-            })),
-          })),
-        }));
+        // dimensions) that the PUT endpoint rejects, and EMPTY placeholders
+        // (unused positions like "back") that it also rejects — drop those.
+        const withArt = printAreas
+          .map((area) => ({
+            variant_ids: area.variant_ids ?? [],
+            placeholders: (area.placeholders ?? [])
+              .filter((ph) => (ph.images ?? []).length > 0)
+              .map((ph) => ({
+                position: ph.position ?? "front",
+                images: (ph.images ?? []).map((img) => ({
+                  id: uploadId,
+                  x: typeof img.x === "number" ? img.x : 0.5,
+                  y: typeof img.y === "number" ? img.y : 0.5,
+                  scale: typeof img.scale === "number" ? img.scale : 1,
+                  angle: typeof img.angle === "number" ? img.angle : 0,
+                })),
+              })),
+          }))
+          .filter((area) => area.placeholders.length > 0);
+        if (withArt.length === 0) {
+          throw new Error("Product has no printed placeholders to update.");
+        }
+        body.print_areas = withArt;
         updated.push("artwork");
       }
 

@@ -13,7 +13,12 @@
 import {
   createPrintifyAdapter,
   isPrintifyConfigured,
+  pickMockupImages,
+  MAX_PUBLISH_MOCKUPS,
+  type PrintifyAdapter,
 } from "@/lib/ajax/adapters/printify";
+import { createEtsyAdapter } from "@/lib/ajax/adapters/etsy";
+import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import type { ProductListing } from "@/lib/ajax/types";
 import type { ProductGeneration } from "@/lib/product/domain";
@@ -33,6 +38,75 @@ export type PrintifyPublishResult = {
   listing: ProductListing;
   url: string;
 } | null;
+
+/**
+ * Make sure the Etsy listing carries the full mockup gallery, not just the
+ * single default photo Printify syncs on publish. Uploads the missing varied
+ * mockups (front + angles + lifestyle) straight to the Etsy listing via the
+ * Etsy API. Idempotent (checks the current image count) and best-effort —
+ * a failure never breaks the publish.
+ */
+async function ensureEtsyMockupGallery(
+  supabase: Supabase,
+  userId: string,
+  listingId: string,
+  printifyProductId: string,
+  adapter: PrintifyAdapter,
+): Promise<void> {
+  try {
+    const product = await adapter.getProduct(printifyProductId);
+    const etsyListingId = product.data.externalId;
+    if (!etsyListingId) return;
+
+    const picks = pickMockupImages(product.data.images, MAX_PUBLISH_MOCKUPS);
+    if (picks.length <= 1) return;
+
+    const credentials = await refreshEtsyToken(userId, { supabase });
+    if (!credentials) return;
+
+    const etsy = createEtsyAdapter();
+    const existing = await etsy.getListingImages(
+      etsyListingId,
+      credentials.access_token,
+    );
+    if (existing.length >= picks.length) return;
+
+    let added = 0;
+    for (let i = existing.length; i < picks.length; i += 1) {
+      const src = picks[i]!.image.src;
+      const res = await fetch(src);
+      if (!res.ok) continue;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      await etsy.uploadListingImage(
+        etsyListingId,
+        buffer,
+        `mockup-${i + 1}.jpg`,
+        credentials.shop_id,
+        credentials.access_token,
+        i + 1,
+      );
+      added += 1;
+    }
+
+    if (added > 0) {
+      await insertGumroadEvent(
+        supabase,
+        userId,
+        "etsy_gallery_filled",
+        `Added ${added} mockup photo(s) to the Etsy listing (now ${existing.length + added} total).`,
+        { listingId, printifyProductId, etsyListingId, added },
+      );
+    }
+  } catch (err) {
+    await insertGumroadEvent(
+      supabase,
+      userId,
+      "etsy_gallery_failed",
+      `Mockup gallery top-up failed: ${err instanceof Error ? err.message : "unknown"}`,
+      { listingId, printifyProductId },
+    );
+  }
+}
 
 export async function publishListingViaPrintify(
   ctx: PrintifyPublishContext,
@@ -97,6 +171,16 @@ export async function publishListingViaPrintify(
       "etsy_published",
       `Published to Etsy via Printify (review and publish it live from Printify or Etsy): ${url}`,
       { listingId, printifyProductId, url, provider: "printify" },
+    );
+
+    // Etsy ranks listings with 5+ photos higher; Printify's own sync sends
+    // only the default mockup, so top the gallery up via the Etsy API.
+    await ensureEtsyMockupGallery(
+      supabase,
+      userId,
+      listingId,
+      printifyProductId,
+      adapter,
     );
 
     return { listing: mapListingFromDb(updated), url };

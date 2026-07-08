@@ -369,6 +369,25 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       return { listing_image_id: imageId };
     },
 
+    /** Ids of the images currently on a listing (gallery idempotency check). */
+    async getListingImages(
+      listingId: string,
+      accessToken: string,
+    ): Promise<string[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/listings/${listingId}/images`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: { listing_image_id?: number }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .map((r) =>
+          r.listing_image_id != null ? String(r.listing_image_id) : "",
+        )
+        .filter(Boolean);
+    },
+
     /**
      * Attach a product video to a listing (Etsy allows one; audio is stripped;
      * 5–15s, ≤100MB, mp4/h264, 1:1 recommended). Mirrors uploadListingImage.
