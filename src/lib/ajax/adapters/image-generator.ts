@@ -16,9 +16,18 @@ import {
 /**
  * OpenAI's current flagship image model (released 2026-04-21) — sharper
  * detail and far better text rendering than gpt-image-1, which matters for
- * typographic gift designs. Override via IMAGE_GENERATOR_MODEL if needed.
+ * typographic gift designs. Used for OPAQUE full-bleed art (posters).
+ * Override via IMAGE_GENERATOR_MODEL if needed.
  */
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+
+/**
+ * gpt-image-2 does NOT support transparent backgrounds (the API rejects
+ * background:"transparent" — scene-completion architecture). Isolated
+ * apparel/mug designs therefore use gpt-image-1.5, the newest OpenAI image
+ * model WITH alpha support. Override via IMAGE_GENERATOR_TRANSPARENT_MODEL.
+ */
+const DEFAULT_TRANSPARENT_IMAGE_MODEL = "gpt-image-1.5";
 
 /**
  * Hard ceiling for a single OpenAI image call. Kept below the serverless
@@ -142,6 +151,17 @@ function resolveModel(options?: ImageGeneratorAdapterOptions): string {
   );
 }
 
+/** Model for isolated transparent-background art (apparel, mugs). */
+function resolveTransparentModel(
+  options?: ImageGeneratorAdapterOptions,
+): string {
+  return (
+    options?.model ??
+    process.env.IMAGE_GENERATOR_TRANSPARENT_MODEL?.trim() ??
+    DEFAULT_TRANSPARENT_IMAGE_MODEL
+  );
+}
+
 async function fetchImageBuffer(
   url: string,
   fetchImpl: typeof fetch,
@@ -210,6 +230,11 @@ export function createLiveImageGeneratorAdapter(
   return {
     async generateProductArtwork(input) {
       const transparent = input.background === "transparent";
+      // Per-call model: transparent designs need alpha support, which the
+      // flagship model lacks — see DEFAULT_TRANSPARENT_IMAGE_MODEL.
+      const artworkModel = transparent
+        ? resolveTransparentModel(options)
+        : model;
       const prompt = [
         transparent
           ? "FLAT 2D GRAPHIC DESIGN to be printed directly onto a product — render ONLY the isolated design elements."
@@ -227,7 +252,7 @@ export function createLiveImageGeneratorAdapter(
       const size = aspectToSize(input.aspectRatio);
 
       const response = await client.images.generate({
-        model,
+        model: artworkModel,
         prompt,
         size: size as "1024x1024" | "1024x1536" | "1536x1024",
         n: 1,
@@ -251,7 +276,7 @@ export function createLiveImageGeneratorAdapter(
         width: 1024,
         height: 1024,
         provider: "openai",
-        model,
+        model: artworkModel,
       });
     },
 
