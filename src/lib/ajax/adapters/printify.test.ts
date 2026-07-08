@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildSiblingMockupUrls,
   cameraLabelFromSrc,
   createDemoPrintifyAdapter,
   createLivePrintifyAdapter,
@@ -171,6 +172,48 @@ describe("printify adapter — mockup selection", () => {
       mockupImage("left", { is_selected_for_publishing: true }),
     ];
     assert.equal(selectMockupsForPublishing(images), null);
+  });
+});
+
+describe("buildSiblingMockupUrls", () => {
+  const donorId = "donor123abc";
+  const targetId = "target456def";
+  const donorImage = (label: string, selected: boolean): PrintifyProductImage => ({
+    src: `https://images.printify.com/mockup/${donorId}/67624/9901/mug.jpg?camera_label=${label}`,
+    is_selected_for_publishing: selected,
+    is_default: label === "front",
+    position: "other",
+  });
+
+  it("rewrites the donor's selected gallery onto the target product id", () => {
+    const donorImages = [
+      donorImage("front", true),
+      donorImage("left", true),
+      donorImage("context-1", true),
+      donorImage("back", false), // unselected — excluded when donor has a hand-picked set
+    ];
+    const urls = buildSiblingMockupUrls(donorImages, donorId, targetId);
+    assert.equal(urls.length, 3);
+    for (const url of urls) {
+      assert.ok(url.includes(targetId));
+      assert.ok(!url.includes(donorId));
+    }
+  });
+
+  it("returns [] for same product or missing ids", () => {
+    assert.deepEqual(buildSiblingMockupUrls([], donorId, targetId), []);
+    assert.deepEqual(
+      buildSiblingMockupUrls([donorImage("front", true)], donorId, donorId),
+      [],
+    );
+  });
+
+  it("skips srcs that do not embed the donor product id", () => {
+    const foreign: PrintifyProductImage = {
+      src: "https://images.printify.com/mockup/OTHER/1/2/x.jpg?camera_label=front",
+      is_selected_for_publishing: true,
+    };
+    assert.deepEqual(buildSiblingMockupUrls([foreign], donorId, targetId), []);
   });
 });
 

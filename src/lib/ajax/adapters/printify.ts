@@ -58,11 +58,58 @@ export type PrintifyProductImage = {
 export type PrintifyProductDetails = {
   productId: string;
   title: string;
+  blueprintId: number | null;
+  printProviderId: number | null;
   images: PrintifyProductImage[];
   /** Sales-channel listing id (the Etsy listing id when Etsy-connected). */
   externalId: string | null;
   externalHandle: string | null;
 };
+
+/** Slim row from the shop's product list (donor discovery). */
+export type PrintifyProductSummary = {
+  productId: string;
+  title: string;
+  blueprintId: number | null;
+  printProviderId: number | null;
+  images: PrintifyProductImage[];
+};
+
+/**
+ * Printify renders the FULL mockup set for every product, but the v1 API only
+ * lists a product's SELECTED mockups. New API-created products have exactly
+ * one selected — which is how listings ended up with one photo. This helper
+ * builds gallery URLs for a target product by borrowing the camera angles of
+ * a "donor" product of the same blueprint (whose gallery was hand-picked
+ * once): mockup CDN paths embed the product id, so swapping the donor's id
+ * for the target's yields the target's own renders of those same angles.
+ * Callers must verify each URL resolves before using it.
+ */
+export function buildSiblingMockupUrls(
+  donorImages: PrintifyProductImage[],
+  donorProductId: string,
+  targetProductId: string,
+  max: number = MAX_PUBLISH_MOCKUPS,
+): string[] {
+  if (!donorProductId || !targetProductId || donorProductId === targetProductId) {
+    return [];
+  }
+  const selected = donorImages.filter((img) => img.is_selected_for_publishing);
+  const pool = selected.length > 1 ? selected : donorImages;
+  const picks = pickMockupImages(pool, max);
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const pick of picks) {
+    const src = pick.image.src;
+    if (!src.includes(donorProductId)) continue;
+    const rewritten = src.split(donorProductId).join(targetProductId);
+    if (!seen.has(rewritten)) {
+      seen.add(rewritten);
+      urls.push(rewritten);
+    }
+  }
+  return urls;
+}
 
 export type PrintifyPublishedProduct = {
   productId: string;
@@ -124,6 +171,10 @@ export interface PrintifyAdapter {
   getProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyProductDetails>>;
+  /** List shop products (donor discovery for mockup galleries). */
+  listProducts(
+    limit?: number,
+  ): Promise<AdapterResult<PrintifyProductSummary[]>>;
   /** Update title and/or swap the print-area artwork on an existing product. */
   updateProductContent(
     productId: string,
@@ -371,10 +422,16 @@ export function createDemoPrintifyAdapter(
       return demoResult("Printify product fetch simulated.", {
         productId,
         title: "Demo product",
+        blueprintId: null,
+        printProviderId: null,
         images: [],
         externalId: null,
         externalHandle: null,
       });
+    },
+
+    async listProducts() {
+      return demoResult("Printify product list simulated.", []);
     },
 
     async updateProductContent(productId, update) {
@@ -539,6 +596,8 @@ export function createLivePrintifyAdapter(
       const product = (await response.json()) as {
         id?: string;
         title?: string;
+        blueprint_id?: number;
+        print_provider_id?: number;
         images?: PrintifyProductImage[];
         /** Object on most shops, array on some channel integrations. */
         external?: ExternalBinding | ExternalBinding[];
@@ -549,10 +608,42 @@ export function createLivePrintifyAdapter(
       return liveResult("Printify product fetched.", {
         productId: product.id ?? productId,
         title: product.title ?? "",
+        blueprintId: product.blueprint_id ?? null,
+        printProviderId: product.print_provider_id ?? null,
         images: Array.isArray(product.images) ? product.images : [],
         externalId: external?.id != null ? String(external.id) : null,
         externalHandle: external?.handle ?? null,
       });
+    },
+
+    async listProducts(limit = 50) {
+      const response = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products.json?limit=${limit}`,
+        { headers },
+      );
+      if (!response.ok) {
+        throw new Error(`Printify product list failed (${response.status}).`);
+      }
+      const payload = (await response.json()) as {
+        data?: {
+          id?: string;
+          title?: string;
+          blueprint_id?: number;
+          print_provider_id?: number;
+          images?: PrintifyProductImage[];
+        }[];
+      };
+      const rows = (payload.data ?? []).map((row) => ({
+        productId: row.id ?? "",
+        title: row.title ?? "",
+        blueprintId: row.blueprint_id ?? null,
+        printProviderId: row.print_provider_id ?? null,
+        images: Array.isArray(row.images) ? row.images : [],
+      }));
+      return liveResult(
+        "Printify products listed.",
+        rows.filter((r) => r.productId),
+      );
     },
 
     async updateProductContent(productId, update) {

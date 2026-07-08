@@ -11,12 +11,14 @@
  * Never throws — failures are logged as factory events so approval continues.
  */
 import {
+  buildSiblingMockupUrls,
   createPrintifyAdapter,
   isPrintifyConfigured,
   pickMockupImages,
   MAX_PUBLISH_MOCKUPS,
   type PrintifyAdapter,
 } from "@/lib/ajax/adapters/printify";
+import { enqueueApprovalVideos } from "@/lib/ajax/video/jobs";
 import { createEtsyAdapter } from "@/lib/ajax/adapters/etsy";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
@@ -40,13 +42,22 @@ export type PrintifyPublishResult = {
 } | null;
 
 /**
- * Make sure the Etsy listing carries the full mockup gallery, not just the
- * single default photo Printify syncs on publish. Uploads the missing varied
- * mockups (front + angles + lifestyle) straight to the Etsy listing via the
- * Etsy API. Idempotent (checks the current image count) and best-effort —
- * a failure never breaks the publish.
+ * Post-publish enrichment: make sure the Etsy listing carries a full mockup
+ * gallery (5+ photos) and has a product video render queued.
+ *
+ * Photos: the v1 API lists only a product's SELECTED mockups, and API-created
+ * products start with one. When the product's own list is thin, gallery URLs
+ * are borrowed from a "donor" product of the same blueprint whose gallery was
+ * hand-picked once (mockup CDN paths embed the product id — swapping ids
+ * yields the target's own renders). Every URL is verified before upload.
+ *
+ * Video: one 1:1 listing clip per Etsy listing, enqueued at most once
+ * (checked against video_jobs) — the poll endpoint + cron attach it when the
+ * render finishes.
+ *
+ * Idempotent and best-effort — a failure never breaks the publish.
  */
-async function ensureEtsyMockupGallery(
+async function enrichEtsyListingAfterPublish(
   supabase: Supabase,
   userId: string,
   listingId: string,
@@ -58,7 +69,7 @@ async function ensureEtsyMockupGallery(
       supabase,
       userId,
       "etsy_gallery_skipped",
-      `Mockup gallery top-up skipped: ${reason}`,
+      `Listing enrichment skipped: ${reason}`,
       { listingId, printifyProductId, ...extra },
     );
   };
@@ -66,9 +77,35 @@ async function ensureEtsyMockupGallery(
   try {
     const product = await adapter.getProduct(printifyProductId);
 
-    const picks = pickMockupImages(product.data.images, MAX_PUBLISH_MOCKUPS);
-    if (picks.length <= 1) {
-      return skip(`only ${picks.length} usable mockup(s) on the product`);
+    // --- Gallery source: own selected mockups, else sibling harvest --------
+    const ownPicks = pickMockupImages(product.data.images, MAX_PUBLISH_MOCKUPS);
+    let galleryUrls = ownPicks.map((p) => p.image.src);
+    let gallerySource = "own mockups";
+
+    if (galleryUrls.length <= 1 && product.data.blueprintId != null) {
+      try {
+        const shopProducts = await adapter.listProducts(50);
+        const donor = shopProducts.data.find(
+          (p) =>
+            p.productId !== product.data.productId &&
+            p.blueprintId === product.data.blueprintId &&
+            p.images.filter((i) => i.is_selected_for_publishing).length > 1,
+        );
+        if (donor) {
+          const siblingUrls = buildSiblingMockupUrls(
+            donor.images,
+            donor.productId,
+            product.data.productId,
+            MAX_PUBLISH_MOCKUPS,
+          );
+          if (siblingUrls.length > 1) {
+            galleryUrls = siblingUrls;
+            gallerySource = `donor ${donor.productId}`;
+          }
+        }
+      } catch {
+        // Donor discovery is optional — continue with whatever we have.
+      }
     }
 
     const credentials = await refreshEtsyToken(userId, { supabase });
@@ -97,49 +134,90 @@ async function ensureEtsyMockupGallery(
       });
     }
 
+    // --- Photos -------------------------------------------------------------
+    let firstImageBuffer: Buffer | null = null;
     const existing = await etsy.getListingImages(
       etsyListingId,
       credentials.access_token,
     );
-    if (existing.length >= picks.length) {
-      return skip(
-        `listing already has ${existing.length} photo(s) (target ${picks.length})`,
-        { etsyListingId },
-      );
-    }
 
     let added = 0;
-    for (let i = existing.length; i < picks.length; i += 1) {
-      const src = picks[i]!.image.src;
-      const res = await fetch(src);
-      if (!res.ok) continue;
-      const buffer = Buffer.from(await res.arrayBuffer());
-      await etsy.uploadListingImage(
-        etsyListingId,
-        buffer,
-        `mockup-${i + 1}.jpg`,
-        credentials.shop_id,
-        credentials.access_token,
-        i + 1,
-      );
-      added += 1;
+    if (existing.length < galleryUrls.length) {
+      for (let i = existing.length; i < galleryUrls.length; i += 1) {
+        const res = await fetch(galleryUrls[i]!);
+        if (!res.ok) continue; // unverified sibling render — skip quietly
+        const contentType = res.headers.get("content-type") ?? "";
+        if (!contentType.startsWith("image")) continue;
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (!firstImageBuffer) firstImageBuffer = buffer;
+        await etsy.uploadListingImage(
+          etsyListingId,
+          buffer,
+          `mockup-${i + 1}.jpg`,
+          credentials.shop_id,
+          credentials.access_token,
+          i + 1,
+        );
+        added += 1;
+      }
+      if (added > 0) {
+        await insertGumroadEvent(
+          supabase,
+          userId,
+          "etsy_gallery_filled",
+          `Added ${added} mockup photo(s) to the Etsy listing (now ${existing.length + added} total; source: ${gallerySource}).`,
+          { listingId, printifyProductId, etsyListingId, added, gallerySource },
+        );
+      }
     }
 
-    if (added > 0) {
-      await insertGumroadEvent(
-        supabase,
-        userId,
-        "etsy_gallery_filled",
-        `Added ${added} mockup photo(s) to the Etsy listing (now ${existing.length + added} total).`,
-        { listingId, printifyProductId, etsyListingId, added },
-      );
+    // --- Video (one per listing, ever) --------------------------------------
+    try {
+      const { data: existingJob } = await supabase
+        .from(TABLES.VIDEO_JOBS)
+        .select("id")
+        .eq("user_id", userId)
+        .eq("etsy_listing_id", etsyListingId)
+        .eq("kind", "etsy_listing")
+        .in("status", ["pending", "done"])
+        .limit(1)
+        .maybeSingle();
+
+      if (!existingJob) {
+        if (!firstImageBuffer && galleryUrls.length > 0) {
+          const res = await fetch(galleryUrls[0]!);
+          if (res.ok) {
+            firstImageBuffer = Buffer.from(await res.arrayBuffer());
+          }
+        }
+        if (firstImageBuffer) {
+          const queued = await enqueueApprovalVideos(supabase, {
+            userId,
+            mockupBuffer: firstImageBuffer,
+            title: product.data.title,
+            etsyListingId,
+            listingUrl: `https://www.etsy.com/listing/${etsyListingId}`,
+          });
+          if (queued.etsy) {
+            await insertGumroadEvent(
+              supabase,
+              userId,
+              "video_render_queued",
+              "Queued a product video render; it attaches to the Etsy listing when the render finishes.",
+              { listingId, etsyListingId, provider: "printify" },
+            );
+          }
+        }
+      }
+    } catch {
+      // Video is a bonus — never let it break enrichment.
     }
   } catch (err) {
     await insertGumroadEvent(
       supabase,
       userId,
       "etsy_gallery_failed",
-      `Mockup gallery top-up failed: ${err instanceof Error ? err.message : "unknown"}`,
+      `Listing enrichment failed: ${err instanceof Error ? err.message : "unknown"}`,
       { listingId, printifyProductId },
     );
   }
@@ -210,9 +288,10 @@ export async function publishListingViaPrintify(
       { listingId, printifyProductId, url, provider: "printify" },
     );
 
-    // Etsy ranks listings with 5+ photos higher; Printify's own sync sends
-    // only the default mockup, so top the gallery up via the Etsy API.
-    await ensureEtsyMockupGallery(
+    // Etsy ranks listings with 5+ photos higher and videos boost conversion;
+    // Printify's own sync sends only the default mockup, so enrich via the
+    // Etsy API (photos now, video render queued for the cron to attach).
+    await enrichEtsyListingAfterPublish(
       supabase,
       userId,
       listingId,
