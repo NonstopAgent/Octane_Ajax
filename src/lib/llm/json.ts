@@ -3,6 +3,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { createOpenAiClient } from "@/lib/llm/openai";
 import {
   completeJsonViaProvider,
+  isProviderConfigured,
   resolveTaskModel,
 } from "@/lib/llm/providers";
 import { estimateCompletionCost, logCostEstimate } from "@/lib/llm/cost";
@@ -179,6 +180,51 @@ export async function completeJson<T>(
         break;
       }
       await sleep(backoffMs(attempt));
+    }
+  }
+
+  // Cross-provider failover: OpenAI is down (quota/billing/outage) — recover on
+  // any OTHER configured provider (Claude, then Gemini) so the pipeline keeps
+  // producing REAL output instead of dropping to deterministic placeholder junk.
+  // (Skipped when a client is injected, e.g. in tests.)
+  if (!request.client) {
+    const fallbacks: { provider: "anthropic" | "google"; model: string }[] = [
+      {
+        provider: "anthropic",
+        model:
+          process.env.LLM_FALLBACK_ANTHROPIC_MODEL?.trim() ||
+          "claude-sonnet-4-6",
+      },
+      {
+        provider: "google",
+        model:
+          process.env.LLM_FALLBACK_GOOGLE_MODEL?.trim() || "gemini-2.0-flash",
+      },
+    ];
+    for (const alt of fallbacks) {
+      if (!isProviderConfigured(alt.provider)) continue;
+      try {
+        const altResult = await completeJsonViaProvider(
+          alt.provider,
+          alt.model,
+          request,
+        );
+        void logLlmUsage({
+          task: request.task ?? "default",
+          provider: alt.provider,
+          model: altResult.model,
+          usage: altResult.usage,
+        });
+        console.warn(
+          `[llm] OpenAI failed for task "${request.task ?? "default"}"; recovered via ${alt.provider}.`,
+        );
+        return altResult;
+      } catch (altError) {
+        console.warn(
+          `[llm] failover ${alt.provider} also failed:`,
+          altError instanceof Error ? altError.message : altError,
+        );
+      }
     }
   }
 
