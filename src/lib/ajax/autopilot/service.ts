@@ -44,7 +44,6 @@ import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
 import {
   gatherTakedownCandidates,
   selectTakedownCandidate,
-  takeDownListing,
 } from "@/lib/ajax/autopilot/takedown";
 import {
   createPrintifyAdapter,
@@ -52,6 +51,8 @@ import {
 } from "@/lib/ajax/adapters/printify";
 import { isVideoRenderConfigured } from "@/lib/ajax/video/fal-render";
 import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
+import { generateListingFix } from "@/lib/ajax/autopilot/listing-medic";
+import { findBlockedContentViolations } from "@/lib/ajax/product-brain/rules";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
@@ -260,6 +261,13 @@ export async function runShopAutopilot(
   // ---- Audit + act ---------------------------------------------------------
   const runId = crypto.randomUUID();
   const marketingListingIds: string[] = [];
+  const medicCandidates: {
+    live: { listingId: string; title: string; views: number };
+    details: EtsyListingDetails;
+    internalId: string | null;
+    issues: string[];
+    critical: boolean;
+  }[] = [];
 
   for (const live of liveListings.slice(0, MAX_LISTINGS_PER_PASS)) {
     if (!credentials) break;
@@ -307,6 +315,35 @@ export async function runShopAutopilot(
     };
 
     result.audited += 1;
+
+    // Collect Store-QA-grade problems the MEDIC can actually fix (incomplete
+    // tags, blocked/risky copy) — repaired after the loop, worst first.
+    {
+      const violations = findBlockedContentViolations(
+        `${details.title} ${details.description}`,
+      );
+      const issues: string[] = [];
+      if (details.tags.length !== 13) {
+        issues.push(
+          `Uses ${details.tags.length} of 13 tags — fill all 13 with multi-word long-tail phrases.`,
+        );
+      }
+      if (violations.length > 0) {
+        issues.push(
+          `Copy contains blocked/risky content (${violations.join(", ")}) — remove it.`,
+        );
+      }
+      if (issues.length > 0) {
+        medicCandidates.push({
+          live,
+          details,
+          internalId: internal?.id ?? null,
+          issues,
+          critical: violations.length > 0,
+        });
+      }
+    }
+
     const actions: AutopilotAction[] = auditListing(auditInput);
 
     for (const action of actions) {
@@ -389,6 +426,69 @@ export async function runShopAutopilot(
     }
   }
 
+  // ---- Medic: FIX the QA findings, don't just report them --------------------
+  // Up to 2 listings per pass (criticals first) get an LLM-corrected title /
+  // description / full 13-tag set, validated hard and applied via the Etsy
+  // API — the shop's QA score climbs without the operator lifting a finger.
+  if (credentials) {
+    const prioritized = [...medicCandidates].sort(
+      (a, b) => Number(b.critical) - Number(a.critical),
+    );
+    for (const cand of prioritized.slice(0, 2)) {
+      try {
+        const fix = await generateListingFix({
+          title: cand.details.title,
+          description: cand.details.description,
+          tags: cand.details.tags,
+          issues: cand.issues,
+          marketKeywords,
+        });
+        if (!fix) continue;
+        await adapter.updateListing(
+          credentials.shop_id,
+          cand.live.listingId,
+          credentials.access_token,
+          {
+            tags: fix.tags,
+            ...(fix.changed.includes("title") ? { title: fix.title } : {}),
+            ...(fix.changed.includes("description")
+              ? { description: fix.description }
+              : {}),
+          },
+        );
+        if (cand.internalId) {
+          await supabase
+            .from(TABLES.LISTINGS)
+            .update({
+              ...(fix.changed.includes("title") ? { title: fix.title } : {}),
+              ...(fix.changed.includes("description")
+                ? { description: fix.description }
+                : {}),
+            })
+            .eq("id", cand.internalId)
+            .eq("user_id", userId);
+        }
+        result.tagsFixed += 1;
+        await logEvent(
+          supabase,
+          userId,
+          "autopilot_medic_fixed",
+          `Medic repaired "${cand.details.title.slice(0, 60)}" — updated ${fix.changed.join(" + ")} (${cand.issues.length} QA issue(s) cleared).`,
+          {
+            etsyListingId: cand.live.listingId,
+            runId,
+            changed: fix.changed,
+            issues: cand.issues,
+          },
+        );
+      } catch (err) {
+        result.errors.push(
+          `medic ${cand.live.listingId}: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+  }
+
   // ---- React: regenerate marketing for stalled listings ---------------------
   for (const listingId of marketingListingIds) {
     const { error } = await supabase.from(TABLES.CONTENT_JOBS).insert({
@@ -425,11 +525,11 @@ export async function runShopAutopilot(
     process.env.AUTOPILOT_TARGET_LISTINGS ?? DEFAULT_TARGET_LISTINGS,
   );
 
-  // ---- Portfolio: enforce the shop capacity + retire dead weight ------------
-  // Hard cap on how many listings are live at once. At capacity, make room by
-  // retiring the single weakest non-selling listing; under capacity, prune only
-  // egregiously dead listings. Reversible (archive + Printify unpublish), and a
-  // listing with ANY sale is never touched. One takedown per pass stays reviewable.
+  // ---- Portfolio: capacity awareness — RECOMMEND retirement, never execute ---
+  // Operator rule: Ajax does not retire listings on its own. When a listing
+  // looks like dead weight (old enough, real traffic window, zero sales), it
+  // becomes a War-Room-style recommendation for the operator to accept or
+  // ignore. `takeDownListing` stays available for explicit operator actions.
   let publishedCount = 0;
   try {
     const candidates = await gatherTakedownCandidates(supabase, userId);
@@ -438,20 +538,21 @@ export async function runShopAutopilot(
     const cut = selectTakedownCandidate(candidates, { atCapacity });
     if (cut) {
       const age = Math.round(cut.ageDays ?? 0);
-      const reason = atCapacity
-        ? `shop at capacity (${publishedCount}/${targetListings}); retired the weakest non-seller (${cut.views} views in ${age}d) to make room for a fresher product`
-        : `dead weight — ${cut.views} views in ${age}d with no sales`;
-      const done = await takeDownListing(supabase, userId, {
-        listingId: cut.listingId,
-        title: cut.title,
-        printifyProductId: cut.printifyProductId,
-        reason,
-      });
-      if (done.ok) {
-        result.takenDown += 1;
-        publishedCount -= 1;
-      } else {
-        result.errors.push(`takedown: ${done.reason}`);
+      const recTitle = `Consider retiring "${cut.title.slice(0, 60)}"`;
+      if (!openRecTitles.has(recTitle)) {
+        openRecTitles.add(recTitle);
+        await insertRecommendation(supabase, userId, runId, {
+          category: "cut",
+          title: recTitle,
+          rationale: atCapacity
+            ? `Shop is at capacity (${publishedCount}/${targetListings}) and this is the weakest non-seller: ${cut.views} views in ${age} days, no sales.`
+            : `${cut.views} views in ${age} days with no sales. Retiring is optional — a tag/photo/price fix may be the better move first.`,
+          recommendedAction:
+            "If you agree, deactivate it on Etsy (Listings → select → Deactivate). Ajax will not retire listings automatically.",
+          priority: 2,
+          etsyListingId: cut.listingId,
+        });
+        result.recommended += 1;
       }
     }
   } catch (err) {

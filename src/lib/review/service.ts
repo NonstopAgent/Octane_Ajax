@@ -198,7 +198,9 @@ export async function approveReview(
   supabase: Supabase,
   userId: string,
   reviewId: string,
+  opts: { actor?: "human" | "ai" } = {},
 ): Promise<ApproveReviewResult> {
+  const actor = opts.actor ?? "human";
   const pending = await loadPendingReview(supabase, userId, reviewId);
   const brainVerdict = pending.product_listings?.product_ideas?.brain_verdict;
   if (brainVerdict === "blocked") {
@@ -277,8 +279,11 @@ export async function approveReview(
     event_type: "review_approved",
     agent_slug: AGENT_SLUGS.FORGE,
     room: ROOM_SLUGS.REVIEW_GATE,
-    message: "Human approved Forge's listing.",
-    metadata: { reviewId, listingId },
+    message:
+      actor === "ai"
+        ? "AI reviewer approved Forge's listing (auto-gate: scored above the publish bar)."
+        : "Human approved Forge's listing.",
+    metadata: { reviewId, listingId, actor },
   });
 
   const { data: jobRow, error: jobError } = await supabase
@@ -381,7 +386,9 @@ export async function rejectReview(
   userId: string,
   reviewId: string,
   reason: string,
+  opts: { actor?: "human" | "ai" } = {},
 ): Promise<RejectReviewResult> {
+  const actor = opts.actor ?? "human";
   const trimmed = reason.trim();
   if (!trimmed) {
     throw new ReviewError("Rejection reason is required.", 400);
@@ -435,8 +442,11 @@ export async function rejectReview(
     event_type: "review_rejected",
     agent_slug: AGENT_SLUGS.FORGE,
     room: ROOM_SLUGS.REVIEW_GATE,
-    message: `Human rejected Forge's listing: ${trimmed}`,
-    metadata: { reviewId, listingId, reason: trimmed },
+    message:
+      actor === "ai"
+        ? `AI reviewer sent Forge's listing back for revision: ${trimmed}`
+        : `Human rejected Forge's listing: ${trimmed}`,
+    metadata: { reviewId, listingId, reason: trimmed, actor },
   });
 
   await setAgentState(

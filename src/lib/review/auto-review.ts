@@ -104,7 +104,9 @@ export async function autoReviewPending(
   if (opts.act && rev.status === "pending") {
     try {
       if (assessment.verdict === "approve") {
-        const r = await approveReview(supabase, userId, rev.id);
+        const r = await approveReview(supabase, userId, rev.id, {
+          actor: "ai",
+        });
         postApproval = r.postApproval;
         acted = "approved";
       } else {
@@ -114,7 +116,7 @@ export async function autoReviewPending(
             ? `AI reviewer: ${assessment.fixes.slice(0, 3).join(" ")}`
             : assessment.reasons.join(" ") ||
               "AI reviewer: below the quality bar.";
-        await rejectReview(supabase, userId, rev.id, reason);
+        await rejectReview(supabase, userId, rev.id, reason, { actor: "ai" });
         acted = "rejected";
       }
     } catch (err) {

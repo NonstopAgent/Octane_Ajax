@@ -74,6 +74,7 @@ export type EtsyListingDetails = {
   listingId: string;
   state: string;
   title: string;
+  description: string;
   tags: string[];
   shippingProfileId: number | null;
   returnPolicyId: number | null;
@@ -91,6 +92,8 @@ export type EtsyShippingProfileSummary = {
 /** Fields the autopilot may patch on a live listing. */
 export type EtsyListingPatch = {
   tags?: string[];
+  title?: string;
+  description?: string;
   shipping_profile_id?: number;
   return_policy_id?: number;
 };
@@ -476,6 +479,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         listing_id?: number;
         state?: string;
         title?: string;
+        description?: string;
         tags?: string[];
         shipping_profile_id?: number | null;
         return_policy_id?: number | null;
@@ -487,6 +491,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         listingId: r.listing_id != null ? String(r.listing_id) : listingId,
         state: (r.state ?? "").trim(),
         title: (r.title ?? "").trim(),
+        description: (r.description ?? "").trim(),
         tags: (r.tags ?? []).map((t) => String(t)),
         shippingProfileId: r.shipping_profile_id ?? null,
         returnPolicyId: r.return_policy_id ?? null,
@@ -540,6 +545,8 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     ): Promise<void> {
       const body = new URLSearchParams();
       if (patch.tags) body.set("tags", patch.tags.join(","));
+      if (patch.title) body.set("title", patch.title);
+      if (patch.description) body.set("description", patch.description);
       if (patch.shipping_profile_id != null) {
         body.set("shipping_profile_id", String(patch.shipping_profile_id));
       }
