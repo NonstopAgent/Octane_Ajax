@@ -43,6 +43,8 @@ Only suggest physical print-on-demand products. Each idea must name a specific p
 
 Prioritize niches with a built-in PURCHASE OCCASION or urgency — a moment when someone must buy a pet gift (gotcha day / adoption anniversary, a new rescue or homecoming, pet memorial or loss, "happy barkday", pet-parent appreciation). Aesthetic interest alone, with no buying occasion, scores poorly with the operator.
 
+PERSONALIZATION IS THE SHOP'S MOAT — the factory fulfills buyer personalization AUTOMATICALLY (a pet's name/date typed at checkout is integrated into the design per-order; photo-portrait items accept a buyer photo). Because of this, STRONGLY prefer ideas designed to be personalized: the concept should say what gets personalized (name, gotcha date, breed, portrait) and why that makes it a better gift. A design that only works generic is a weaker idea than the same design built around the pet's name.
+
 ${buildIdeaPlaybookPrompt()}
 
 Etsy POD pricing guidance (prices INCLUDE free US shipping — the shop bakes shipping into the price because Etsy ranks free-shipping listings higher): mugs $22.99–$29.99, posters and art prints $27.99–$44.99, apparel $29.99–$44.99; new shops should price toward the lower end of each band.

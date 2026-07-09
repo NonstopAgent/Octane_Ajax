@@ -53,6 +53,7 @@ import { isVideoRenderConfigured } from "@/lib/ajax/video/fal-render";
 import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
 import { generateListingFix } from "@/lib/ajax/autopilot/listing-medic";
 import { findBlockedContentViolations } from "@/lib/ajax/product-brain/rules";
+import { pollPersonalizedOrders } from "@/lib/ajax/pod/order-intake";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
@@ -608,6 +609,37 @@ export async function runShopAutopilot(
           `cycle: ${err instanceof Error ? err.message : "failed"}`,
         );
       }
+    }
+  }
+
+  // ---- Room 2 intake: personalized orders (Etsy has no order webhooks) ------
+  // Scans recent receipts for buyer personalization (pet name / photo link)
+  // and feeds the Personalization Bay queue. Fixed orders are ignored —
+  // Printify fulfills those natively.
+  if (credentials && isPrintifyConfigured()) {
+    try {
+      const intake = await pollPersonalizedOrders(supabase, userId, {
+        etsy: adapter,
+        printify: createPrintifyAdapter(),
+        shopId: credentials.shop_id,
+        accessToken: credentials.access_token,
+      });
+      if (intake.queued > 0) {
+        await logEvent(
+          supabase,
+          userId,
+          "autopilot_order_intake",
+          `Personalization intake: queued ${intake.queued} personalized order(s) from ${intake.scanned} recent receipt(s).`,
+          { runId, ...intake } as unknown as Json,
+        );
+      }
+      if (intake.errors.length > 0) {
+        result.errors.push(...intake.errors.map((e) => `intake: ${e}`));
+      }
+    } catch (err) {
+      result.errors.push(
+        `intake: ${err instanceof Error ? err.message : "failed"}`,
+      );
     }
   }
 

@@ -171,6 +171,25 @@ export async function enrichEtsyListingAfterPublish(
 
     // --- Photos -------------------------------------------------------------
     let firstImageBuffer: Buffer | null = null;
+    // The moat: every listing accepts buyer personalization (pet name/date,
+    // or a photo link on portrait items). Idempotent PATCH; the intake poller
+    // + Personalization Bay fulfill these orders automatically.
+    try {
+      await etsy.updateListing(
+        credentials.shop_id,
+        etsyListingId,
+        credentials.access_token,
+        {
+          personalization_is_required: false,
+          personalization_char_count_max: 256,
+          personalization_instructions:
+            "Optional personalization: your pet's name (and year) exactly as you'd like it on the design. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
+        },
+      );
+    } catch {
+      // Optional enhancement — never blocks enrichment.
+    }
+
     const existing = await etsy.getListingImages(
       etsyListingId,
       credentials.access_token,

@@ -96,6 +96,31 @@ export type EtsyListingPatch = {
   description?: string;
   shipping_profile_id?: number;
   return_policy_id?: number;
+  /** Buyer personalization (the moat: name/date/photo-link customization). */
+  personalization_is_required?: boolean;
+  personalization_char_count_max?: number;
+  personalization_instructions?: string;
+};
+
+/** Raw receipt slice for the personalization order intake poller. */
+export type EtsyReceiptRaw = {
+  receiptId: string;
+  createdTimestamp: number | null;
+  buyerName: string | null;
+  shipping: {
+    name?: string;
+    first_line?: string;
+    second_line?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country_iso?: string;
+  };
+  transactions: {
+    listingId: string | null;
+    quantity: number;
+    variations: { formatted_name?: string; formatted_value?: string }[];
+  }[];
 };
 
 /** A node in Etsy's seller taxonomy tree. */
@@ -547,6 +572,24 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       if (patch.tags) body.set("tags", patch.tags.join(","));
       if (patch.title) body.set("title", patch.title);
       if (patch.description) body.set("description", patch.description);
+      if (patch.personalization_is_required != null) {
+        body.set(
+          "personalization_is_required",
+          String(patch.personalization_is_required),
+        );
+      }
+      if (patch.personalization_char_count_max != null) {
+        body.set(
+          "personalization_char_count_max",
+          String(patch.personalization_char_count_max),
+        );
+      }
+      if (patch.personalization_instructions) {
+        body.set(
+          "personalization_instructions",
+          patch.personalization_instructions,
+        );
+      }
       if (patch.shipping_profile_id != null) {
         body.set("shipping_profile_id", String(patch.shipping_profile_id));
       }
@@ -607,6 +650,69 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         }
       }
       return byListing;
+    },
+
+    /**
+     * Raw receipts with per-transaction variations — the intake poller scans
+     * these for buyer personalization (Etsy has no order webhooks, so Room 2's
+     * entry point is this hourly poll).
+     */
+    async getShopReceiptsRaw(
+      shopId: string,
+      accessToken: string,
+      minCreated?: number,
+    ): Promise<EtsyReceiptRaw[]> {
+      const params = new URLSearchParams({ limit: "100" });
+      if (minCreated && minCreated > 0) {
+        params.set("min_created", String(Math.floor(minCreated)));
+      }
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/receipts?${params.toString()}`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: {
+          receipt_id?: number;
+          created_timestamp?: number;
+          name?: string;
+          first_line?: string;
+          second_line?: string;
+          city?: string;
+          state?: string;
+          zip?: string;
+          country_iso?: string;
+          transactions?: {
+            listing_id?: number;
+            quantity?: number;
+            variations?: {
+              formatted_name?: string;
+              formatted_value?: string;
+            }[];
+          }[];
+        }[];
+      }>(response);
+
+      return (parsed.results ?? [])
+        .filter((r) => r.receipt_id != null)
+        .map((r) => ({
+          receiptId: String(r.receipt_id),
+          createdTimestamp: r.created_timestamp ?? null,
+          buyerName: r.name ?? null,
+          shipping: {
+            name: r.name,
+            first_line: r.first_line,
+            second_line: r.second_line,
+            city: r.city,
+            state: r.state,
+            zip: r.zip,
+            country_iso: r.country_iso,
+          },
+          transactions: (r.transactions ?? []).map((t) => ({
+            listingId: t.listing_id != null ? String(t.listing_id) : null,
+            quantity: Number(t.quantity ?? 1) || 1,
+            variations: t.variations ?? [],
+          })),
+        }));
     },
 
     /**

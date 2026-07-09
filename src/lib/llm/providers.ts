@@ -31,7 +31,9 @@ const DEFAULT_TASK_ROUTES: Record<
   strategy: { provider: "anthropic", model: "claude-sonnet-4-6" },
   marketing: { provider: "google", model: "gemini-2.0-flash" },
   scoring: { provider: "google", model: "gemini-2.0-flash" },
-  listing: { provider: "openai", model: "gpt-4o-mini" },
+  // Customer-facing copy (Forge listings + the QA medic) earns a stronger
+  // model — a few cents/hour for meaningfully better titles and tags.
+  listing: { provider: "anthropic", model: "claude-sonnet-4-6" },
   default: { provider: "openai", model: "gpt-4o-mini" },
 };
 
