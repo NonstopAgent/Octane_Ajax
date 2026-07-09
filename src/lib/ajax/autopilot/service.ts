@@ -46,6 +46,12 @@ import {
   selectTakedownCandidate,
   takeDownListing,
 } from "@/lib/ajax/autopilot/takedown";
+import {
+  createPrintifyAdapter,
+  isPrintifyConfigured,
+} from "@/lib/ajax/adapters/printify";
+import { isVideoRenderConfigured } from "@/lib/ajax/video/fal-render";
+import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
@@ -501,6 +507,66 @@ export async function runShopAutopilot(
           `cycle: ${err instanceof Error ? err.message : "failed"}`,
         );
       }
+    }
+  }
+
+  // ---- Self-heal: galleries + videos on recent listings ----------------------
+  // The publish-time enrichment can lose the race with Printify's async Etsy
+  // binding. Re-running it here is idempotent (photos top up only when
+  // missing, video renders enqueue at most once per listing, and it NEVER
+  // changes a listing's active/inactive state) — so anything missed at
+  // publish time heals within an hour.
+  if (isPrintifyConfigured()) {
+    if (isVideoRenderConfigured()) {
+      try {
+        const { drainVideoJobs } = await import("@/lib/ajax/video/jobs");
+        await drainVideoJobs(supabase, userId);
+      } catch (err) {
+        result.errors.push(
+          `video-drain: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+    try {
+      const weekAgo = new Date(
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const { data: recentRows } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("id, created_at, product_generations ( structure )")
+        .eq("user_id", userId)
+        .eq("status", "published")
+        .gte("created_at", weekAgo)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      const printifyAdapterForHeal = createPrintifyAdapter();
+      for (const row of (recentRows ?? []) as unknown as InternalListingRow[]) {
+        const generations =
+          row.product_generations == null
+            ? []
+            : Array.isArray(row.product_generations)
+              ? row.product_generations
+              : [row.product_generations];
+        const fulfillment = (
+          generations[0]?.structure as {
+            metadata?: { fulfillment?: { printifyProductId?: string } };
+          } | null
+        )?.metadata?.fulfillment;
+        const printifyProductId = fulfillment?.printifyProductId?.trim();
+        if (!printifyProductId) continue;
+        await enrichEtsyListingAfterPublish(
+          supabase,
+          userId,
+          row.id,
+          printifyProductId,
+          printifyAdapterForHeal,
+          { bindingAttempts: 1 },
+        );
+      }
+    } catch (err) {
+      result.errors.push(
+        `enrich-heal: ${err instanceof Error ? err.message : "failed"}`,
+      );
     }
   }
 

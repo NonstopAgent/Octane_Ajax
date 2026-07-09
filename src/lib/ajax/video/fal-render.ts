@@ -44,6 +44,18 @@ function videoModel(): string {
   return process.env.FAL_VIDEO_MODEL?.trim() || DEFAULT_MODEL;
 }
 
+/**
+ * fal's queue REQUEST endpoints (status/result) live under the BASE app id —
+ * the first two path segments (e.g. "fal-ai/kling-video") — NOT the full
+ * model subpath used for submission. Polling the subpath 404s, which made
+ * every render look pending forever (jobs died at max attempts with the MP4
+ * sitting finished on fal's side).
+ */
+export function falRequestBase(model: string): string {
+  const segments = model.split("/").filter(Boolean);
+  return segments.slice(0, 2).join("/");
+}
+
 function authHeaders(): Record<string, string> {
   return {
     Authorization: `Key ${process.env.FAL_KEY?.trim() ?? ""}`,
@@ -143,27 +155,36 @@ export async function pollVideoRender(
     return { ok: false, status: "failed", model, error: "FAL_KEY not set." };
   }
   const doFetch = opts.fetchImpl ?? fetch;
+  const requestBase = falRequestBase(model);
   try {
     const statusRes = await doFetch(
-      `${FAL_QUEUE_BASE}/${model}/requests/${requestId}/status`,
+      `${FAL_QUEUE_BASE}/${requestBase}/requests/${requestId}/status`,
       { headers: authHeaders(), signal: AbortSignal.timeout(15000) },
     );
     const statusJson = (await statusRes.json().catch(() => ({}))) as {
       status?: string;
+      detail?: string;
     };
     const s = (statusJson.status ?? "").toUpperCase();
     if (s !== "COMPLETED") {
-      const failed = s === "FAILED" || s === "ERROR";
+      // Only the two documented in-flight states count as pending. Anything
+      // else (FAILED, a 4xx, an unknown shape) is terminal — never let a bad
+      // response masquerade as "still rendering" again.
+      const stillRunning =
+        statusRes.ok && (s === "IN_QUEUE" || s === "IN_PROGRESS");
       return {
-        ok: !failed,
-        status: failed ? "failed" : "pending",
+        ok: stillRunning,
+        status: stillRunning ? "pending" : "failed",
         requestId,
         model,
-        error: failed ? "fal render failed." : undefined,
+        error: stillRunning
+          ? undefined
+          : statusJson.detail ||
+            `fal status ${statusRes.status}${s ? ` (${s})` : ""}`,
       };
     }
     const resultRes = await doFetch(
-      `${FAL_QUEUE_BASE}/${model}/requests/${requestId}`,
+      `${FAL_QUEUE_BASE}/${requestBase}/requests/${requestId}`,
       { headers: authHeaders(), signal: AbortSignal.timeout(15000) },
     );
     const resultJson = (await resultRes.json().catch(() => ({}))) as {

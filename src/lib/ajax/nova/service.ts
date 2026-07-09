@@ -174,6 +174,34 @@ async function fetchLlmRawIdeas(
 }
 
 /**
+ * Fallback pool, made safe for repeated autonomous use:
+ * - rotated by runId so the same spec isn't always first (and therefore
+ *   always picked by trend score ordering);
+ * - HARD-deduped against operator history — a fallback idea that matches a
+ *   recent title/niche is dropped. Publishing nothing this cycle is correct;
+ *   publishing a clone (the "same mug four times" incident) never is.
+ */
+function freshFallbackIdeas(
+  runId: string,
+  pastContext?: NovaPastContext,
+): NovaRawIdea[] {
+  const pool = mapFakeDraftsToNovaRaw(runId);
+  const start =
+    Math.abs(Number.parseInt(runId.replace(/[^0-9a-f]/gi, "").slice(0, 6) || "0", 16)) %
+    Math.max(pool.length, 1);
+  const rotated = [...pool.slice(start), ...pool.slice(0, start)];
+  const { kept, dropped } = filterRepetitiveIdeas(rotated, pastContext);
+  if (dropped.length > 0) {
+    console.warn(
+      `[nova] fallback repetition guard dropped ${dropped.length} spec(s): ${dropped
+        .map((d) => `"${d.idea.productConcept}" — ${d.reason}`)
+        .join("; ")}`,
+    );
+  }
+  return kept;
+}
+
+/**
  * Nova ideation: LLM when configured, otherwise deterministic fallback.
  * Product Brain filters blocked ideas; if LLM yields none eligible, falls back to demo catalog.
  */
@@ -207,7 +235,16 @@ export async function runNovaIdeation(
       let ideas = evaluateRawIdeas(kept, model, keywordRows);
 
       if (ideas.length === 0) {
-        ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId), undefined, keywordRows);
+        ideas = evaluateRawIdeas(
+          freshFallbackIdeas(runId, options?.pastContext),
+          undefined,
+          keywordRows,
+        );
+        if (ideas.length === 0) {
+          throw new Error(
+            "Nova produced no fresh ideas this cycle (all candidates repeat existing listings) — skipping production rather than publishing a duplicate.",
+          );
+        }
         return {
           mode: "fallback",
           ideas,
@@ -221,15 +258,27 @@ export async function runNovaIdeation(
         llmModel: model,
         promptVersion: NOVA_PROMPT_VERSION,
       };
-    } catch {
-      // LLM failure → deterministic fallback (demo continuity)
+    } catch (err) {
+      // A "no fresh ideas" outcome must surface as a blocked cycle, not fall
+      // through to yet another duplicate-prone fallback attempt.
+      if (
+        err instanceof Error &&
+        err.message.includes("no fresh ideas this cycle")
+      ) {
+        throw err;
+      }
+      // Other LLM failures → deterministic fallback (demo continuity)
     }
   }
 
-  const ideas = evaluateRawIdeas(mapFakeDraftsToNovaRaw(runId), undefined, keywordRows);
+  const ideas = evaluateRawIdeas(
+    freshFallbackIdeas(runId, options?.pastContext),
+    undefined,
+    keywordRows,
+  );
   if (ideas.length === 0) {
     throw new Error(
-      "Nova ideation produced no ideas that passed Product Brain. Check demo fallback catalog.",
+      "Nova ideation produced no ideas that passed Product Brain and the repetition guard. Skipping this cycle.",
     );
   }
 

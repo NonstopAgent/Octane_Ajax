@@ -56,14 +56,25 @@ export type PrintifyPublishResult = {
  * render finishes.
  *
  * Idempotent and best-effort — a failure never breaks the publish.
+ *
+ * Exported so the hourly autopilot can re-run it as a self-heal for any
+ * listing the publish-time pass missed (it only ADDS photos / queues a
+ * video — it never publishes or changes a listing's active/inactive state).
  */
-async function enrichEtsyListingAfterPublish(
+export async function enrichEtsyListingAfterPublish(
   supabase: Supabase,
   userId: string,
   listingId: string,
   printifyProductId: string,
   adapter: PrintifyAdapter,
+  options: {
+    /** Binding-wait attempts (12s apart). Publish-time uses the default;
+     * the hourly self-heal passes 1 — by then the binding either exists
+     * or this listing needs the next pass anyway. */
+    bindingAttempts?: number;
+  } = {},
 ): Promise<void> {
+  const bindingAttempts = options.bindingAttempts ?? 5;
   const skip = async (reason: string, extra: Record<string, unknown> = {}) => {
     await insertGumroadEvent(
       supabase,
@@ -115,23 +126,47 @@ async function enrichEtsyListingAfterPublish(
 
     const etsy = createEtsyAdapter();
 
-    // Prefer Printify's channel binding; fall back to an exact-title match
-    // against the shop's active listings.
+    // Printify binds the Etsy listing ASYNCHRONOUSLY after publish — the
+    // external id can take a minute to appear (this raced and lost on 4 of 5
+    // overnight publishes). Retry the binding, then fall back to an
+    // exact-title match against the shop's active listings.
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let etsyListingId = product.data.externalId;
-    if (!etsyListingId) {
-      const shopListings = await etsy.getShopListings(
-        credentials.shop_id,
-        credentials.access_token,
-      );
-      const wanted = product.data.title.trim().toLowerCase();
-      etsyListingId =
-        shopListings.find((l) => l.title.trim().toLowerCase() === wanted)
-          ?.listingId ?? null;
+    for (
+      let attempt = 0;
+      !etsyListingId && attempt < bindingAttempts;
+      attempt += 1
+    ) {
+      if (attempt > 0) {
+        await sleep(12_000);
+        try {
+          const fresh = await adapter.getProduct(printifyProductId);
+          etsyListingId = fresh.data.externalId;
+          if (etsyListingId) break;
+        } catch {
+          // transient — keep retrying
+        }
+      }
+      if (!etsyListingId) {
+        try {
+          const shopListings = await etsy.getShopListings(
+            credentials.shop_id,
+            credentials.access_token,
+          );
+          const wanted = product.data.title.trim().toLowerCase();
+          etsyListingId =
+            shopListings.find((l) => l.title.trim().toLowerCase() === wanted)
+              ?.listingId ?? null;
+        } catch {
+          // transient — keep retrying
+        }
+      }
     }
     if (!etsyListingId) {
-      return skip("could not resolve the Etsy listing id", {
-        productTitle: product.data.title,
-      });
+      return skip(
+        "could not resolve the Etsy listing id (will self-heal on the next autopilot pass)",
+        { productTitle: product.data.title },
+      );
     }
 
     // --- Photos -------------------------------------------------------------

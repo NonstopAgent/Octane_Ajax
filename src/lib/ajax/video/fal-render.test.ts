@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   buildFalInput,
+  falRequestBase,
   isVideoRenderConfigured,
   pollVideoRender,
   submitVideoRender,
@@ -85,6 +86,38 @@ describe("fal-render (configured)", () => {
     assert.equal(done.ok, true);
     assert.equal(done.status, "completed");
     assert.equal(done.videoUrl, "https://fal.media/out.mp4");
+  });
+
+  it("polls the BASE app id, not the full model subpath", async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      seen.push(url);
+      return res({ status: "IN_QUEUE" });
+    }) as unknown as typeof fetch;
+    await pollVideoRender("req-9", { fetchImpl });
+    assert.match(
+      seen[0]!,
+      /^https:\/\/queue\.fal\.run\/fal-ai\/kling-video\/requests\/req-9\/status$/,
+    );
+  });
+
+  it("treats a 404/unknown status as terminal failure, never pending", async () => {
+    const fetchImpl = (async () =>
+      res({ detail: "Not found" }, false, 404)) as unknown as typeof fetch;
+    const out = await pollVideoRender("req-lost", { fetchImpl });
+    assert.equal(out.ok, false);
+    assert.equal(out.status, "failed");
+    assert.match(out.error ?? "", /404|Not found/);
+  });
+});
+
+describe("falRequestBase", () => {
+  it("returns the first two path segments", () => {
+    assert.equal(
+      falRequestBase("fal-ai/kling-video/v1/standard/image-to-video"),
+      "fal-ai/kling-video",
+    );
+    assert.equal(falRequestBase("fal-ai/simple-model"), "fal-ai/simple-model");
   });
 });
 

@@ -68,8 +68,13 @@ export type RepetitionFilterResult<T extends IdeaLikeForDedupe> = {
   dropped: { idea: T; reason: string }[];
 };
 
-/** Concept vs recent-title similarity that counts as a repeat. */
-export const CONCEPT_REPEAT_THRESHOLD = 0.75;
+/**
+ * Concept vs recent-title similarity that counts as a repeat.
+ * Tuned to 0.85: at 0.75 the guard starved whole cycles into the fallback
+ * pool (most pet-gift concepts share dog/rescue/mug-type tokens), which then
+ * published literal clones — worse than an adjacent-but-distinct LLM idea.
+ */
+export const CONCEPT_REPEAT_THRESHOLD = 0.85;
 /** Niche vs rejected-niche similarity that counts as a repeat. */
 export const REJECTED_NICHE_THRESHOLD = 0.8;
 /** Niche vs approved-niche similarity that counts as a duplicate (adjacent is fine, identical is not). */
