@@ -6,6 +6,10 @@ import {
   generateListingFix,
   sanitizeMedicTags,
 } from "@/lib/ajax/autopilot/listing-medic";
+import {
+  repeatedTitleWords,
+  titleStyleIssues,
+} from "@/lib/ajax/product-brain/rules";
 import { AI_DISCLOSURE_TEXT } from "@/lib/ajax/forge/types";
 
 const thirteenTags = [
@@ -67,6 +71,49 @@ describe("buildMedicUserPrompt", () => {
   });
 });
 
+describe("titleStyleIssues (Etsy title checker rules)", () => {
+  it("flags titles over 14 words", () => {
+    const stuffed =
+      "Adopted and Loved Rescue Dog Poster | Dog Adoption Gift | Gotcha Day Gift | Dog Mom Wall Art | Animal Rescue Print | Pet Lover Decor";
+    const issues = titleStyleIssues(stuffed);
+    assert.ok(issues.some((i) => i.includes("words")));
+  });
+
+  it("flags heavy repetition (word 3x, or two words doubled)", () => {
+    // "dog" x3, "gift" x3 in the classic stuffed title above.
+    const repeats = repeatedTitleWords(
+      "Rescue Dog Poster | Dog Adoption Gift | Dog Mom Wall Art Gift | Rescue Gift",
+    );
+    assert.ok(repeats.some(([w, n]) => w === "dog" && n >= 3));
+    assert.ok(
+      titleStyleIssues(
+        "Rescue Dog Poster | Dog Adoption Gift | Dog Mom Wall Art Gift | Rescue Gift",
+      ).length > 0,
+    );
+    // Two different words each doubled is also flagged.
+    assert.ok(
+      titleStyleIssues(
+        "Rescue Dog Mug | Rescue Gift for Dog Moms Everywhere Today",
+      ).length > 0,
+    );
+  });
+
+  it("tolerates one doubled word (Etsy's own suggestions do this)", () => {
+    assert.equal(
+      titleStyleIssues(
+        "Custom Cat Adoption Portrait Mug | Personalized Cat Lover Gift",
+      ).length,
+      0,
+    );
+    assert.equal(
+      titleStyleIssues(
+        "Adopted and Loved Rescue Dog Poster | Gotcha Day Wall Art Print",
+      ).length,
+      0,
+    );
+  });
+});
+
 describe("generateListingFix", () => {
   it("returns a validated fix and preserves the AI disclosure", async () => {
     const client = mockClient(
@@ -81,6 +128,23 @@ describe("generateListingFix", () => {
     assert.ok(fix);
     assert.equal(fix!.tags.length, 13);
     assert.ok(fix!.description.includes(AI_DISCLOSURE_TEXT));
+    assert.ok(fix!.changed.includes("tags"));
+  });
+
+  it("keeps the original title when the model's rewrite violates Etsy title style", async () => {
+    const client = mockClient(
+      JSON.stringify({
+        title:
+          "Cat Mug Cat Gift | Cat Present for Cat Lovers | Cat Mom Cat Mug Cat Cup Idea",
+        description:
+          "A lovely ceramic mug for cat parents celebrating adoption day — made to order, dishwasher safe, and a warm gift for the cat mom in your life.",
+        tags: thirteenTags,
+      }),
+    );
+    const fix = await generateListingFix(baseInput, { client });
+    assert.ok(fix);
+    assert.equal(fix!.title, baseInput.title);
+    assert.ok(!fix!.changed.includes("title"));
     assert.ok(fix!.changed.includes("tags"));
   });
 

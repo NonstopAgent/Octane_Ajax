@@ -73,7 +73,7 @@ Every listing must be honest about AI assistance. Include this exact sentence in
 
 export const FORGE_GENERATION_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
-  "listingTitle": "string — Etsy title in the form [Primary buyer keyword] | [Secondary keyword + modifier] | [Occasion or Recipient]. Front-load the exact phrase a buyer would type in the first ~40 chars, name the specific occasion/recipient, ≤140 chars, no vague slogans, no keyword-stuffing, no copyrighted brands",
+  "listingTitle": "string — Etsy title in the form [Primary buyer keyword] | [Secondary keyword + modifier] | [Occasion or Recipient]. Front-load the exact phrase a buyer would type in the first ~40 chars, name the specific occasion/recipient, ≤140 chars AND ≤14 words, never repeat a significant word (say 'dog' or 'rescue' ONCE — tags carry variations), no vague slogans, no keyword-stuffing, no copyrighted brands",
   "listingDescription": "string — a complete, persuasive Etsy description (120-220 words): an attention-grabbing first line, 3-5 benefit/feature bullets (each starting with • ), who it's for + the specific gift occasion(s), an explicit personalization offer (e.g. add the pet's name or adoption date), a made-to-order quality + free-shipping note, and a short call to action. MUST end with the AI disclosure sentence verbatim",
   "seoTags": ["string", ...] (exactly 13 Etsy tags, each a MULTI-WORD long-tail phrase — mix broad, specific, and occasion/recipient phrases like "rescue dog mom mug" or "gotcha day gift for her"; prefer the proven search terms provided; no single words, no near-duplicates),
   "suggestedPrice": number (USD retail price for physical POD product, typically 14.99–49.99),

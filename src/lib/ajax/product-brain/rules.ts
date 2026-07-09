@@ -236,6 +236,62 @@ export function countWords(value: string): number {
     .filter((word) => word.length > 0).length;
 }
 
+/** Connector words that may legitimately appear more than once in a title. */
+const TITLE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "for",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+  "your",
+]);
+
+/**
+ * Significant words that appear MORE THAN ONCE in a title, with their counts —
+ * the signal behind Etsy's "Try to avoid repetition: 'rescue', 'dog'" tip.
+ * Returns [word, count] pairs (lowercased), empty when the title is clean.
+ */
+export function repeatedTitleWords(title: string): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const raw of title.toLowerCase().split(/[^a-z0-9']+/)) {
+    const word = raw.trim();
+    if (word.length < 3 || TITLE_STOPWORDS.has(word)) continue;
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n > 1);
+}
+
+/**
+ * Etsy title-style problems (the rules Etsy's "Update titles" widget
+ * enforces): over 14 words, or heavy keyword repetition. Etsy's own accepted
+ * suggestions tolerate ONE word appearing twice, so only flag a word used 3+
+ * times or two+ different words each doubled — that's the stuffed-title
+ * pattern its search-visibility banner keeps re-flagging. Empty = clean.
+ */
+export function titleStyleIssues(title: string): string[] {
+  const issues: string[] = [];
+  const words = countWords(title.replace(/\|/g, " "));
+  if (words > 14) {
+    issues.push(
+      `Title is ${words} words — Etsy flags titles over 14 words as stuffed. Tighten to ≤14 words.`,
+    );
+  }
+  const repeats = repeatedTitleWords(title);
+  const heavy = repeats.some(([, n]) => n >= 3) || repeats.length >= 2;
+  if (heavy) {
+    issues.push(
+      `Title repeats ${repeats.map(([w, n]) => `"${w}" ×${n}`).join(", ")} — say each significant word once; tags carry variations.`,
+    );
+  }
+  return issues;
+}
+
 export function hasUrgencySignals(text: string): boolean {
   const normalized = text.toLowerCase();
   return URGENCY_SIGNAL_WORDS.some((word) => normalized.includes(word));

@@ -23,13 +23,16 @@ export const ETSY_PLAYBOOK = {
   title: {
     maxChars: 140,
     heavyWeightChars: 40,
+    /** Etsy's own title checker flags titles over 14 words as stuffed. */
+    maxWords: 14,
     structure:
       "[Primary keyword] | [Secondary keyword + modifier] | [Occasion or Recipient]",
     rules: [
       "Front-load the strongest buyer search phrase in the first ~40 characters.",
       "Read as a natural phrase a human would type, not a pile of keywords.",
       "Name the recipient/occasion so it reads as a giftable item.",
-      "Stay at or under 140 characters; avoid repetition and filler.",
+      "Stay at or under 140 characters AND 14 words — Etsy flags longer titles as stuffed.",
+      "Never repeat the same significant word (e.g. 'dog' or 'rescue' twice) — say it once; tags carry the variations.",
     ],
   },
   tags: {

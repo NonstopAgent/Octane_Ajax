@@ -12,7 +12,10 @@ import { z } from "zod";
 import type OpenAI from "openai";
 import { completeJson } from "@/lib/llm/json";
 import { ETSY_PLAYBOOK } from "@/lib/ajax/reviewer/playbook";
-import { findBlockedContentViolations } from "@/lib/ajax/product-brain/rules";
+import {
+  findBlockedContentViolations,
+  titleStyleIssues,
+} from "@/lib/ajax/product-brain/rules";
 import { AI_DISCLOSURE_TEXT } from "@/lib/ajax/forge/types";
 
 export const MEDIC_PROMPT_VERSION = "listing-medic-v1";
@@ -87,7 +90,7 @@ Return the corrected listing. Change as little as possible beyond the flagged pr
 
 const MEDIC_JSON_INSTRUCTIONS = `Return JSON with this exact shape:
 {
-  "title": "string — corrected Etsy title, ≤140 chars, front-loaded buyer phrase, keeps the product word",
+  "title": "string — corrected Etsy title, ≤140 chars AND ≤14 words, no significant word repeated, front-loaded buyer phrase, keeps the product word",
   "description": "string — corrected description (keep the AI-assistance disclosure sentence verbatim if it was present)",
   "tags": ["string", ...] (EXACTLY 13 multi-word long-tail phrases, each ≤20 characters, unique, no brand names)
 }`;
@@ -138,7 +141,13 @@ export async function generateListingFix(
 
   if (!result) return null;
 
-  const title = result.data.title.trim();
+  // Never REPLACE a title with one Etsy's style checker would re-flag
+  // (over 14 words / heavy repetition) — keep the original instead, so the
+  // medic can't thrash titles it fails to improve. Other fixes still apply.
+  let title = result.data.title.trim();
+  if (title !== input.title.trim() && titleStyleIssues(title).length > 0) {
+    title = input.title.trim();
+  }
   let description = result.data.description.trim();
 
   // The disclosure sentence must survive verbatim when it was present.

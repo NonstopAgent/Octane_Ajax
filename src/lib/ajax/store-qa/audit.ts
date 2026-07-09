@@ -11,6 +11,7 @@ import {
   hasLongTailNicheLanguage,
   hasUrgencySignals,
   countWords,
+  titleStyleIssues,
 } from "@/lib/ajax/product-brain/rules";
 
 export type QaSeverity = "critical" | "warning" | "info";
@@ -100,6 +101,15 @@ export function auditListing(input: QaListingInput): ListingAudit {
         code: "title_all_caps",
         message: "Title is ALL CAPS (reads spammy).",
         fix: "Use natural capitalization.",
+      });
+    // Etsy's own title checker rules (search-visibility banner): >14 words
+    // or heavy keyword repetition gets the listing re-flagged until fixed.
+    for (const style of titleStyleIssues(title))
+      issues.push({
+        severity: "warning",
+        code: "title_style",
+        message: style,
+        fix: "Rewrite ≤14 words with each significant word said once; move variations into tags.",
       });
   }
 

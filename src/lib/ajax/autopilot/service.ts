@@ -52,7 +52,10 @@ import {
 import { isVideoRenderConfigured } from "@/lib/ajax/video/fal-render";
 import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
 import { generateListingFix } from "@/lib/ajax/autopilot/listing-medic";
-import { findBlockedContentViolations } from "@/lib/ajax/product-brain/rules";
+import {
+  findBlockedContentViolations,
+  titleStyleIssues,
+} from "@/lib/ajax/product-brain/rules";
 import { pollPersonalizedOrders } from "@/lib/ajax/pod/order-intake";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
@@ -318,7 +321,8 @@ export async function runShopAutopilot(
     result.audited += 1;
 
     // Collect Store-QA-grade problems the MEDIC can actually fix (incomplete
-    // tags, blocked/risky copy) — repaired after the loop, worst first.
+    // tags, blocked/risky copy, stuffed titles) — repaired after the loop,
+    // worst first.
     {
       const violations = findBlockedContentViolations(
         `${details.title} ${details.description}`,
@@ -334,6 +338,9 @@ export async function runShopAutopilot(
           `Copy contains blocked/risky content (${violations.join(", ")}) — remove it.`,
         );
       }
+      // Etsy's search-visibility banner re-flags stuffed titles until fixed —
+      // repair them proactively so the operator never sees the banner again.
+      issues.push(...titleStyleIssues(details.title));
       if (issues.length > 0) {
         medicCandidates.push({
           live,
