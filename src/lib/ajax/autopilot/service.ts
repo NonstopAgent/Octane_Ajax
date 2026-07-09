@@ -612,6 +612,23 @@ export async function runShopAutopilot(
     }
   }
 
+  // ---- Traffic: post a staged Pixel promo to social (Ayrshare) ---------------
+  // Dormant until AYRSHARE_API_KEY exists; capped at 2 posts/day.
+  try {
+    const { runSocialAutoPoster } = await import("@/lib/social/auto-poster");
+    const social = await runSocialAutoPoster(supabase, userId);
+    if (social.posted > 0) {
+      result.marketingQueued += social.posted;
+    }
+    if (social.errors.length > 0) {
+      result.errors.push(...social.errors.map((e) => `social: ${e}`));
+    }
+  } catch (err) {
+    result.errors.push(
+      `social: ${err instanceof Error ? err.message : "failed"}`,
+    );
+  }
+
   // ---- Room 2 intake: personalized orders (Etsy has no order webhooks) ------
   // Scans recent receipts for buyer personalization (pet name / photo link)
   // and feeds the Personalization Bay queue. Fixed orders are ignored —
