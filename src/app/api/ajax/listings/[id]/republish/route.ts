@@ -14,6 +14,8 @@
  *   { "artworkUploadId": "..." }   → swap the print-area artwork first; the
  *     route then STOPS (published:false) because Printify regenerates mockups
  *     asynchronously (~60s) — call republish again afterwards to publish.
+ *   { "retire": true }             → the reverse: unpublish from Etsy via
+ *     Printify and archive the listing (reversible — republish restores it).
  *
  * Auth: operator session (same pattern as the fulfill route).
  */
@@ -101,6 +103,26 @@ export async function POST(request: Request, context: RouteContext) {
     const generation = generationRow
       ? mapGenerationFromDb(generationRow)
       : null;
+
+    // Retire: unpublish from Etsy (via Printify) + archive. Reversible.
+    if (rawBody.retire === true) {
+      const printifyProductId =
+        generation?.fulfillment?.printifyProductId?.trim();
+      if (!printifyProductId) {
+        return NextResponse.json(
+          { ok: false, error: "Listing has no Printify product to retire." },
+          { status: 409 },
+        );
+      }
+      const adapter = createPrintifyAdapter();
+      await adapter.unpublishProduct(printifyProductId);
+      await supabase
+        .from(TABLES.LISTINGS)
+        .update({ status: "archived" })
+        .eq("id", listingId)
+        .eq("user_id", user.id);
+      return NextResponse.json({ ok: true, retired: true });
+    }
 
     // Optional content fixes on the Printify product (source of truth)
     // BEFORE syncing to Etsy.
