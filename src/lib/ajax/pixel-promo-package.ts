@@ -57,6 +57,8 @@ export type PixelPromoInput = {
   podDetails?: PodDetails | null;
   /** Trackable Share & Save URL for this product (listing link or shop link). */
   productUrl?: string | null;
+  /** Public https mockup image of the listing — becomes the post's media. */
+  mockupUrl?: string | null;
 };
 
 const DEMO_HASHTAGS = [
@@ -259,7 +261,13 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
       ];
 
   const scheduledFor = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const assetUrl = `demo://octane-ajax/promo/${input.jobId}/slideshow.mp4`;
+  // Real listing mockup when available — the auto-poster only publishes jobs
+  // whose asset is a live https image. The demo:// placeholder is kept ONLY
+  // as a last resort for legacy demo flows without a listing image.
+  const assetUrl =
+    input.mockupUrl?.trim().startsWith("https://") === true
+      ? input.mockupUrl.trim()
+      : `demo://octane-ajax/promo/${input.jobId}/slideshow.mp4`;
 
   const mockupCount = podDetails ? 3 : Math.max(1, pageTitles.length);
   const videoSpec = buildVideoSpec({

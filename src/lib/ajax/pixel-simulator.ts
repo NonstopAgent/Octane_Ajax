@@ -152,6 +152,7 @@ function promoInputFromJob(job: QueuedJobRow): {
         etsyListingId: listing?.gumroad_product_id,
         listingUrl: listing?.gumroad_url,
       }),
+      mockupUrl: listing?.mockup_url ?? null,
     },
     generationId: generation?.id ?? null,
     mockupSources: {

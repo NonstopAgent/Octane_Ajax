@@ -43,6 +43,25 @@ describe("buildPixelPromoPackage", () => {
     assert.ok(promo.metadata.source.pageTitles.includes("Weekly grid"));
   });
 
+  it("uses the real listing mockup as the post asset when provided", () => {
+    const promo = buildPixelPromoPackage({
+      jobId: "job-3",
+      listingTitle: "Gotcha Day Mug",
+      mockupUrl: "https://images.printify.com/mockup/abc/123.jpg",
+    });
+    assert.equal(
+      promo.assetUrl,
+      "https://images.printify.com/mockup/abc/123.jpg",
+    );
+    // Non-https (or missing) mockups keep the legacy demo placeholder.
+    const fallback = buildPixelPromoPackage({
+      jobId: "job-4",
+      listingTitle: "Gotcha Day Mug",
+      mockupUrl: "ftp://not-a-real-image",
+    });
+    assert.match(fallback.assetUrl, /demo:\/\//);
+  });
+
   it("schedules content job updates with metadata when column exists", () => {
     assert.equal(CONTENT_JOBS_HAS_METADATA_COLUMN, true);
     const promo = buildPixelPromoPackage({
