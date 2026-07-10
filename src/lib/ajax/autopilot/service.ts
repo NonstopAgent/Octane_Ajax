@@ -685,17 +685,17 @@ export async function runShopAutopilot(
       }
     }
     try {
-      const weekAgo = new Date(
-        Date.now() - 7 * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      // Heal EVERY published listing, not just the newest week — enrichment
+      // is a cheap no-op when a listing is already healthy (gallery full,
+      // video job pending/done), but this is the path that re-renders videos
+      // whose jobs were superseded and tops up thin galleries shop-wide.
       const { data: recentRows } = await supabase
         .from(TABLES.LISTINGS)
         .select("id, created_at, product_generations ( structure )")
         .eq("user_id", userId)
         .eq("status", "published")
-        .gte("created_at", weekAgo)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(25);
       const printifyAdapterForHeal = createPrintifyAdapter();
       for (const row of (recentRows ?? []) as unknown as InternalListingRow[]) {
         const generations =
