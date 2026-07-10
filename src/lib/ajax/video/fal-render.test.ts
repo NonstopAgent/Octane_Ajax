@@ -21,12 +21,19 @@ function res(body: unknown, ok = true, status = 200) {
 }
 
 describe("buildFalInput", () => {
-  it("forces 9:16, maps duration, and keeps the product faithful", () => {
+  it("forces 9:16, caps at 5s, and hardens against product morphing", () => {
     const input = buildFalInput(spec, "https://img/mock.png");
     assert.equal(input.aspect_ratio, "9:16");
-    assert.equal(input.duration, "10");
+    // Always 5s — kling drifts from the source image in longer clips.
+    assert.equal(input.duration, "5");
     assert.equal(input.image_url, "https://img/mock.png");
-    assert.match(input.prompt, /EXACTLY/);
+    // Camera-only motion on a rigid product; no marketing hook in the prompt
+    // (story text makes the model animate content instead of the camera).
+    assert.match(input.prompt, /Camera motion ONLY/);
+    assert.match(input.prompt, /perfectly still/);
+    assert.ok(!input.prompt.includes(spec.hookVariants[0] ?? "@@none@@"));
+    assert.match(input.negative_prompt, /morphing/);
+    assert.equal(input.cfg_scale, 0.7);
   });
 });
 

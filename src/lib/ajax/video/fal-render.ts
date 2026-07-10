@@ -14,13 +14,18 @@
 import type { VideoSpec } from "@/lib/ajax/pixel/video-spec";
 
 const FAL_QUEUE_BASE = "https://queue.fal.run";
-const DEFAULT_MODEL = "fal-ai/kling-video/v1/standard/image-to-video";
+// v1.6 tracks the conditioning image much more faithfully than v1 — v1 clips
+// started fine then MORPHED the product in the back half. Same queue base
+// ("fal-ai/kling-video"), so status/result polling is unaffected.
+const DEFAULT_MODEL = "fal-ai/kling-video/v1.6/standard/image-to-video";
 
 export type FalInput = {
   prompt: string;
   image_url: string;
   duration: "5" | "10";
   aspect_ratio: "9:16" | "16:9" | "1:1";
+  negative_prompt: string;
+  cfg_scale: number;
 };
 
 export type RenderStatus = "pending" | "completed" | "failed";
@@ -64,8 +69,16 @@ function authHeaders(): Record<string, string> {
 }
 
 /**
- * Map a video spec + mockup into a fal image-to-video request. Keeps the product
- * faithful (no hallucinated redesign) and forces vertical 9:16 short-form framing.
+ * Map a video spec + mockup into a fal image-to-video request. Anti-morph
+ * hardening (operator saw clips start fine then mutate the product):
+ *   - 5s ONLY — kling drifts from the conditioning image in the back half of
+ *     10s clips; every extra second is drift budget.
+ *   - CAMERA-ONLY prompt. The marketing hook text is deliberately EXCLUDED:
+ *     feeding "Celebrate your rescue dog's gotcha day" to an i2v model makes
+ *     it try to ANIMATE that story (spawning dogs, remolding the mug). The
+ *     hook belongs in the caption, not the render.
+ *   - negative_prompt against morphing/warping/new objects.
+ *   - cfg_scale 0.7 (> 0.5 default) for tighter prompt/source adherence.
  */
 export function buildFalInput(
   spec: VideoSpec,
@@ -73,29 +86,32 @@ export function buildFalInput(
   aspectRatio: FalInput["aspect_ratio"] = "9:16",
 ): FalInput {
   // Defensive: the route may pass a partial spec from external JSON.
-  const hook = spec.hookVariants?.[0] ?? "";
   const motion = spec.shots?.[0]?.motion ?? "zoom_in";
   const energy = spec.audio?.energy ?? "calm";
-  const durationSec = spec.durationSec ?? 10;
   const motionWords: Record<string, string> = {
-    zoom_in: "slow push-in",
-    zoom_out: "gentle pull-back",
-    pan_left: "smooth left pan",
-    pan_right: "smooth right pan",
-    static: "subtle parallax",
+    zoom_in: "slow smooth camera push-in",
+    zoom_out: "gentle camera pull-back",
+    pan_left: "slow left camera pan",
+    pan_right: "slow right camera pan",
+    static: "nearly still camera with subtle parallax",
   };
   const prompt = [
-    `Product marketing clip for social. ${hook}`.trim(),
-    `Camera: ${motionWords[motion] ?? "subtle motion"}, cinematic but understated.`,
-    "Keep the product, artwork, and any text/logo EXACTLY as shown — do not redesign, restyle, or add objects.",
-    `Mood: ${energy}. Vertical 9:16 short-form product ad.`,
+    "Studio product video of this exact physical product, photographed as-is.",
+    `Camera motion ONLY: ${motionWords[motion] ?? "subtle camera motion"}, cinematic, understated.`,
+    "The product itself stays perfectly still and rigid — same shape, same printed artwork, same text, same colors, first frame to last frame.",
+    "No new objects, no hands, no people, no animals, no scene changes.",
+    `Soft ${energy} lighting mood. Vertical 9:16 product ad.`,
   ].join(" ");
 
   return {
     prompt,
     image_url: imageUrl,
-    duration: durationSec >= 8 ? "10" : "5",
+    // Hard cap at 5s regardless of the spec's storyboard length.
+    duration: "5",
     aspect_ratio: aspectRatio,
+    negative_prompt:
+      "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, objects appearing, hands, people, animals, scene change, camera cut, glitch, distortion, blur, low quality",
+    cfg_scale: 0.7,
   };
 }
 
