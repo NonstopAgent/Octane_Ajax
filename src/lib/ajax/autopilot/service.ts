@@ -238,14 +238,19 @@ export async function runShopAutopilot(
     [];
 
   // Recent marketing (avoid re-queueing the same listing every hour).
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // 3-day window (was 7): at 5-7 social posts/day the queue needs ~6 fresh
+  // promo packs daily, and each listing can be re-promoted twice a week
+  // with a different caption — normal cadence on Pinterest.
+  const marketingWindowAgo = new Date(
+    Date.now() - 3 * 24 * 60 * 60 * 1000,
+  ).toISOString();
   const recentMarketing = new Set<string>();
   {
     const { data } = await supabase
       .from(TABLES.CONTENT_JOBS)
       .select("listing_id, created_at")
       .eq("user_id", userId)
-      .gte("created_at", weekAgo);
+      .gte("created_at", marketingWindowAgo);
     for (const row of data ?? []) {
       if (row.listing_id) recentMarketing.add(row.listing_id);
     }
