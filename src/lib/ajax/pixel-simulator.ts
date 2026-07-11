@@ -5,6 +5,10 @@ import {
   mapListingFromDb,
 } from "@/lib/ajax/mappers";
 import { generatePixelMarketing, generateTikTokQueuePackage } from "@/lib/ajax/pixel/service";
+import {
+  fetchTrendBrief,
+  pillarForIndex,
+} from "@/lib/ajax/pixel/trend-research";
 import type { TikTokMockupSources } from "@/lib/ajax/pixel/tiktok-package";
 import { buildTikTokQueuePackage } from "@/lib/ajax/pixel/tiktok-package";
 import {
@@ -293,9 +297,17 @@ export async function runPixelMarketing(
   );
   await sleep(1500);
 
+  // Strategist context: today's live trend brief (Google-grounded, cached
+  // ~daily) + a rotating content pillar so the feed isn't wall-to-wall ads.
+  const trendBrief = await fetchTrendBrief(supabase, userId);
+  let jobIndex = 0;
+
   for (const job of jobs) {
     const { input: promoInput, generationId, mockupSources } =
       promoInputFromJob(job);
+    promoInput.trendBrief = trendBrief;
+    promoInput.contentPillar = pillarForIndex(jobIndex);
+    jobIndex += 1;
     let promo: PixelPromoPackage;
     try {
       promo = await generatePixelMarketing(promoInput);

@@ -176,6 +176,8 @@ async function fetchLlmMarketing(
           pageCount: ctx.pageCount,
           pageTitles: ctx.pageTitles,
           productUrl: input.productUrl,
+          contentPillar: input.contentPillar,
+          trendBrief: input.trendBrief,
         }),
       },
     ],

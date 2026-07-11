@@ -59,6 +59,10 @@ export type PixelPromoInput = {
   productUrl?: string | null;
   /** Public https mockup image of the listing — becomes the post's media. */
   mockupUrl?: string | null;
+  /** Strategist: assigned content pillar (product | relatable | trend). */
+  contentPillar?: string | null;
+  /** Strategist: today's live trend brief (omitted when unavailable). */
+  trendBrief?: string | null;
 };
 
 const DEMO_HASHTAGS = [
