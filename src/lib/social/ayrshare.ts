@@ -78,7 +78,12 @@ export async function publishPost(input: {
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
   };
-  if (input.profileKey) headers["Profile-Key"] = input.profileKey;
+  // Ayrshare Business: posts target the Primary Profile by default. If the
+  // operator linked their socials under a User Profile instead, set
+  // AYRSHARE_PROFILE_KEY and every post routes there — no relinking needed.
+  const profileKey =
+    input.profileKey ?? process.env.AYRSHARE_PROFILE_KEY?.trim() ?? null;
+  if (profileKey) headers["Profile-Key"] = profileKey;
 
   const body: Record<string, unknown> = {
     post: input.post,
