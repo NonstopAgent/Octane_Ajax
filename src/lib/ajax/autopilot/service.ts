@@ -624,8 +624,56 @@ export async function runShopAutopilot(
     }
   }
 
+  // ---- Traffic: swap PNG post assets for the listing's Etsy JPEG -------------
+  // TikTok photo posts reject PNG (Printify mockups); Etsy re-hosts every
+  // listing photo as JPEG on its CDN. Refreshing staged jobs' assets here
+  // unlocks TikTok for every image post — current queue and future ones.
+  if (credentials) {
+    try {
+      const { data: pngJobs } = await supabase
+        .from(TABLES.CONTENT_JOBS)
+        .select("id, asset_url, product_listings ( gumroad_product_id )")
+        .eq("user_id", userId)
+        .eq("status", "scheduled")
+        .like("asset_url", "%.png%")
+        .limit(8);
+      for (const row of pngJobs ?? []) {
+        const listing = firstOrSelf(
+          row.product_listings as
+            | { gumroad_product_id?: string | null }
+            | { gumroad_product_id?: string | null }[]
+            | null,
+        );
+        const etsyListingId = listing?.gumroad_product_id?.trim();
+        if (!etsyListingId) continue;
+        try {
+          const urls = await adapter.getListingImageUrls(
+            etsyListingId,
+            credentials.access_token,
+          );
+          const jpeg = urls.find((u) =>
+            /\.jpe?g(\?|$)/i.test(u.split("?")[0] ?? ""),
+          );
+          if (jpeg) {
+            await supabase
+              .from(TABLES.CONTENT_JOBS)
+              .update({ asset_url: jpeg })
+              .eq("id", row.id)
+              .eq("user_id", userId);
+          }
+        } catch {
+          // Non-fatal: job keeps its PNG (poster skips TikTok for it).
+        }
+      }
+    } catch (err) {
+      result.errors.push(
+        `asset-refresh: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
+  }
+
   // ---- Traffic: post a staged Pixel promo to social (Ayrshare) ---------------
-  // Dormant until AYRSHARE_API_KEY exists; capped at 2 posts/day.
+  // Dormant until AYRSHARE_API_KEY exists; per-platform daily caps.
   try {
     const { runSocialAutoPoster } = await import("@/lib/social/auto-poster");
     const social = await runSocialAutoPoster(supabase, userId);

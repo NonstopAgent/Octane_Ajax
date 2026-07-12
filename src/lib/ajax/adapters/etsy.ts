@@ -417,6 +417,28 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     },
 
     /**
+     * Public CDN URLs (full size, rank order) of a listing's images. Etsy
+     * serves these as JPEG — which TikTok's photo posts require (it rejects
+     * PNG) — so social posts prefer these over raw Printify mockup PNGs.
+     */
+    async getListingImageUrls(
+      listingId: string,
+      accessToken: string,
+    ): Promise<string[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/listings/${listingId}/images`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: { url_fullxfull?: string; rank?: number }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+        .map((r) => r.url_fullxfull ?? "")
+        .filter((u) => u.startsWith("https://"));
+    },
+
+    /**
      * Attach a product video to a listing (Etsy allows one; audio is stripped;
      * 5–15s, ≤100MB, mp4/h264, 1:1 recommended). Mirrors uploadListingImage.
      */
