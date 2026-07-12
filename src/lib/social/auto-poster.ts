@@ -81,7 +81,7 @@ export async function runSocialAutoPoster(
       counts[key] = (counts[key] ?? 0) + 1;
     }
   }
-  const targets = duePlatforms(counts, defaultPlatforms());
+  let targets = duePlatforms(counts, defaultPlatforms());
   if (targets.length === 0) {
     summary.skipped = "daily_cap";
     return summary;
@@ -108,6 +108,17 @@ export async function runSocialAutoPoster(
     return summary;
   }
 
+  // TikTok's photo posts reject PNG (Ayrshare: "PNG files are not supported
+  // by TikTok"). Skip TikTok for PNG assets — it gets JPEG posts and the 9:16
+  // videos instead of an hourly error loop.
+  if (job.asset_url!.toLowerCase().split("?")[0]!.endsWith(".png")) {
+    targets = targets.filter((p) => p !== "tiktok");
+    if (targets.length === 0) {
+      summary.skipped = "daily_cap";
+      return summary;
+    }
+  }
+
   const hashtags = (job.metadata?.hashtags ?? [])
     .map((h) => (h.startsWith("#") ? h : `#${h}`))
     .slice(0, 12)
@@ -124,6 +135,12 @@ export async function runSocialAutoPoster(
   });
 
   if (result.ok) {
+    // Platforms that actually accepted the post (partial success counts —
+    // the job is DONE either way; retrying would duplicate the successes).
+    const landed =
+      result.posts && result.posts.length > 0
+        ? result.posts.map((p) => p.platform).filter(Boolean)
+        : targets;
     // NOTE: content_jobs.status check constraint allows 'published' (not
     // 'posted') — using an invalid value would silently fail the update and
     // the same job would repost every hour.
@@ -136,6 +153,7 @@ export async function runSocialAutoPoster(
           social: {
             ayrsharePostId: result.ayrsharePostId ?? null,
             posts: result.posts ?? [],
+            partialErrors: result.error ?? null,
             postedAt: new Date().toISOString(),
           },
         } as Json,
@@ -143,15 +161,16 @@ export async function runSocialAutoPoster(
       .eq("id", job.id)
       .eq("user_id", userId);
     summary.posted += 1;
+    if (result.error) summary.errors.push(`partial: ${result.error}`);
     await supabase.from(TABLES.EVENTS).insert({
       user_id: userId,
       event_type: "social_posted",
-      message: `Pixel promo posted to ${targets.join(", ")}: "${job.caption!.slice(0, 70)}"`,
+      message: `Pixel promo posted to ${landed.join(", ")}: "${job.caption!.slice(0, 70)}"${result.error ? ` (skipped: ${result.error.slice(0, 80)})` : ""}`,
       agent_slug: "pixel",
       room: "media_studio",
       metadata: {
         contentJobId: job.id,
-        platforms: targets,
+        platforms: landed,
         posts: result.posts ?? [],
       } as unknown as Json,
     });

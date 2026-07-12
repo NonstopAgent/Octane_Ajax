@@ -107,23 +107,35 @@ export async function publishPost(input: {
       errors?: { message?: string; platform?: string }[];
     };
 
-    if (!res.ok || json.status === "error") {
-      const msg =
-        json.errors
-          ?.map((e) => `${e.platform ?? "?"}: ${e.message ?? "error"}`)
-          .join("; ") || `Ayrshare error (${res.status}).`;
-      return { ok: false, error: msg };
-    }
-
-    return {
-      ok: true,
-      ayrsharePostId: json.id,
-      posts: (json.postIds ?? []).map((p) => ({
+    const errMsg = json.errors
+      ?.map((e) => `${e.platform ?? "?"}: ${e.message ?? "error"}`)
+      .join("; ");
+    const posts = (json.postIds ?? [])
+      .map((p) => ({
         platform: p.platform ?? "",
         postUrl: p.postUrl,
         status: p.status ?? "",
-      })),
-    };
+      }))
+      .filter((p) => p.status.toLowerCase() !== "error");
+
+    // PARTIAL SUCCESS IS SUCCESS. Ayrshare posts to the platforms it can and
+    // errors the rest (e.g. TikTok rejects PNG while Pinterest+IG publish).
+    // Treating that as failure made the poster RETRY the whole job — which
+    // re-posted identical pins to the platforms that had already accepted it.
+    if (posts.length > 0) {
+      return {
+        ok: true,
+        ayrsharePostId: json.id,
+        posts,
+        error: errMsg || undefined,
+      };
+    }
+
+    if (!res.ok || json.status === "error") {
+      return { ok: false, error: errMsg || `Ayrshare error (${res.status}).` };
+    }
+
+    return { ok: true, ayrsharePostId: json.id, posts };
   } catch (err) {
     return {
       ok: false,
