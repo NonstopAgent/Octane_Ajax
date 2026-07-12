@@ -124,10 +124,13 @@ export async function runSocialAutoPoster(
   });
 
   if (result.ok) {
+    // NOTE: content_jobs.status check constraint allows 'published' (not
+    // 'posted') — using an invalid value would silently fail the update and
+    // the same job would repost every hour.
     await supabase
       .from(TABLES.CONTENT_JOBS)
       .update({
-        status: "posted",
+        status: "published",
         metadata: {
           ...(job.metadata ?? {}),
           social: {
