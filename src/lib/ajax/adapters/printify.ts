@@ -310,9 +310,33 @@ export function pickMockupImages(
     }
   });
 
-  return [...byAngle.values()]
+  const picks = [...byAngle.values()]
     .sort((a, b) => a.priority - b.priority || a.index - b.index)
     .slice(0, max);
+
+  // Printify's CDN stopped emitting camera_label on some blueprints, which
+  // collapses EVERY mockup into one "angle" and starves galleries down to a
+  // single photo. When angle variety runs short, pad with the remaining
+  // distinct images — a near-duplicate second photo beats an empty gallery.
+  if (picks.length < max) {
+    const chosenIndexes = new Set(picks.map((p) => p.index));
+    const seenSrc = new Set(picks.map((p) => p.image.src));
+    images.forEach((image, index) => {
+      if (picks.length >= max) return;
+      if (!image?.src || chosenIndexes.has(index) || seenSrc.has(image.src)) {
+        return;
+      }
+      chosenIndexes.add(index);
+      seenSrc.add(image.src);
+      picks.push({
+        image,
+        priority: CAMERA_PRIORITY.length + images.length + index,
+        index,
+      });
+    });
+  }
+
+  return picks;
 }
 
 /**

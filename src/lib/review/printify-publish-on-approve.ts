@@ -332,8 +332,8 @@ export async function enrichEtsyListingAfterPublish(
               supabase,
               userId,
               "video_enqueue_skipped",
-              "Listing has no video and the render did not enqueue (renderer dormant or budget guard) — was previously silent.",
-              { listingId, etsyListingId },
+              `Listing has no video and the render did not enqueue: ${queued.etsyError ?? "unknown reason"}.`,
+              { listingId, etsyListingId, reason: queued.etsyError ?? null },
             );
           }
         } else {

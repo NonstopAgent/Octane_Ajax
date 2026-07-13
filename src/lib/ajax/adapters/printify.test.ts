@@ -173,6 +173,29 @@ describe("printify adapter — mockup selection", () => {
     ];
     assert.equal(selectMockupsForPublishing(images), null);
   });
+
+  it("pads the gallery when camera labels collapse to a single angle", () => {
+    // Printify's CDN dropped camera_label on some blueprints — every mockup
+    // then dedupes into one "angle" and listings starve at 1 photo. Distinct
+    // images must still fill the gallery.
+    const images = Array.from({ length: 6 }, (_, i) =>
+      mockupImage("front", {
+        src: `https://images.printify.com/mockup/p1/v1/front-${i}.png`,
+        is_default: i === 0,
+        is_selected_for_publishing: i === 0,
+      }),
+    );
+    const result = selectMockupsForPublishing(images);
+    assert.ok(result, "padding should expand the selection");
+    const selected = result!.filter((i) => i.is_selected_for_publishing);
+    assert.equal(selected.length, 6);
+    // Identical srcs must NOT be double-picked.
+    const dupes = [
+      mockupImage("front", { is_default: true }),
+      mockupImage("front"),
+    ];
+    assert.equal(selectMockupsForPublishing(dupes), null);
+  });
 });
 
 describe("buildSiblingMockupUrls", () => {

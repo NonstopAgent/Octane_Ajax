@@ -244,9 +244,15 @@ export async function enqueueApprovalVideos(
     listingUrl?: string | null;
     hashtags?: string[];
   },
-): Promise<{ etsy: boolean; social: boolean }> {
-  const out = { etsy: false, social: false };
-  if (!isVideoRenderConfigured()) return out;
+): Promise<{ etsy: boolean; social: boolean; etsyError?: string }> {
+  const out: { etsy: boolean; social: boolean; etsyError?: string } = {
+    etsy: false,
+    social: false,
+  };
+  if (!isVideoRenderConfigured()) {
+    out.etsyError = "FAL_KEY not configured";
+    return out;
+  }
 
   const dataUri = `data:image/jpeg;base64,${input.mockupBuffer.toString(
     "base64",
@@ -271,6 +277,11 @@ export async function enqueueApprovalVideos(
       etsyListingId: input.etsyListingId,
     });
     out.etsy = e.ok;
+    if (!e.ok) out.etsyError = "video_jobs insert failed";
+  } else {
+    // Surface WHY fal declined — silent submit failures hid a fully dead
+    // render pipeline for days.
+    out.etsyError = etsySubmit.error ?? "fal submit failed";
   }
 
   // Social auto-post is OFF by default (listing video is the point). It fires
