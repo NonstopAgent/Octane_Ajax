@@ -5,6 +5,7 @@
  * links today and creator/shop-affiliate links in phase 2.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { decorateUrl, type AffiliateNetwork } from "@/lib/affiliate/links";
 import { createServiceClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -17,7 +18,7 @@ export async function GET(
     const supabase = createServiceClient();
     const { data: link } = await supabase
       .from(TABLES.AFFILIATE_LINKS)
-      .select("id, destination_url")
+      .select("id, destination_url, network")
       .eq("slug", slug)
       .maybeSingle();
 
@@ -35,7 +36,13 @@ export async function GET(
       })
       .then(() => undefined);
 
-    const res = NextResponse.redirect(link.destination_url, 302);
+    // Re-decorate at redirect time so env tags (e.g. AFFILIATE_AMAZON_TAG)
+    // added after a link was stored still apply to it.
+    const destination = decorateUrl(
+      link.destination_url,
+      (link.network ?? "generic") as AffiliateNetwork,
+    );
+    const res = NextResponse.redirect(destination, 302);
     res.headers.set("X-Robots-Tag", "noindex, nofollow");
     return res;
   } catch {

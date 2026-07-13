@@ -31,10 +31,18 @@ export function slugify(value: string, maxLen = 60): string {
     .replace(/-+$/g, "");
 }
 
-/** Append the network's tracking parameters when configured. */
+/**
+ * Append the network's tracking parameters when configured. Idempotent —
+ * safe to run at both link-creation time and redirect time, so env tags
+ * added later apply retroactively to already-stored links.
+ */
 export function decorateUrl(url: string, network: AffiliateNetwork): string {
   try {
     const u = new URL(url);
+    // Already wrapped by a network deep-link (e.g. Awin) — leave untouched.
+    if (u.hostname === "www.awin1.com" || u.hostname === "awin1.com") {
+      return url;
+    }
     if (network === "amazon") {
       const tag = process.env.AFFILIATE_AMAZON_TAG?.trim();
       if (tag) u.searchParams.set("tag", tag);
