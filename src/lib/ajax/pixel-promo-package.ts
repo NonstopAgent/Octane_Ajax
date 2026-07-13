@@ -16,6 +16,8 @@ export type PixelPromoMetadata = {
   pinterestDescription: string;
   tiktokHookIdeas: string[];
   hashtags: string[];
+  /** Content pillar this post was written for (learning-loop dimension). */
+  pillar?: string | null;
   /** Playbook-grounded 9:16 short-form video plan (hook, timed shots, audio, CTA). */
   videoSpec?: VideoSpec;
   /** Trackable Share & Save product URL to include when posting. */
@@ -63,6 +65,8 @@ export type PixelPromoInput = {
   contentPillar?: string | null;
   /** Strategist: today's live trend brief (omitted when unavailable). */
   trendBrief?: string | null;
+  /** Learning loop: measured engagement summary of recent posts. */
+  performanceNotes?: string | null;
 };
 
 const DEMO_HASHTAGS = [
@@ -290,6 +294,7 @@ export function buildPixelPromoPackage(input: PixelPromoInput): PixelPromoPackag
     pinterestDescription,
     tiktokHookIdeas,
     hashtags,
+    pillar: input.contentPillar ?? null,
     videoSpec,
     productUrl,
     source: {

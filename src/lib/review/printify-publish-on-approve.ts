@@ -179,7 +179,16 @@ export async function enrichEtsyListingAfterPublish(
     if (!etsyListingId) {
       return skip(
         "could not resolve the Etsy listing id (will self-heal on the next autopilot pass)",
-        { productTitle: product.data.title },
+        {
+          productTitle: product.data.title,
+          // Diagnostics: what Printify actually returned in `external` —
+          // pins down WHY binding stopped resolving (shape change vs. never
+          // populated vs. slow).
+          externalRaw: JSON.stringify(product.data.externalRaw ?? null).slice(
+            0,
+            400,
+          ),
+        },
       );
     }
 

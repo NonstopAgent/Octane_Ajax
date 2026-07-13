@@ -131,6 +131,7 @@ function mapLlmToPromoPackage(
     pinterestDescription: llm.pinterestDescription.trim(),
     tiktokHookIdeas: llm.tiktokHookIdeas.map((h) => h.trim()),
     hashtags,
+    pillar: input.contentPillar ?? null,
     productUrl,
     source: {
       ...base.metadata.source,
@@ -178,6 +179,7 @@ async function fetchLlmMarketing(
           productUrl: input.productUrl,
           contentPillar: input.contentPillar,
           trendBrief: input.trendBrief,
+          performanceNotes: input.performanceNotes,
         }),
       },
     ],

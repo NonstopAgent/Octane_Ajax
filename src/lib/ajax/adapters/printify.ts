@@ -64,6 +64,9 @@ export type PrintifyProductDetails = {
   /** Sales-channel listing id (the Etsy listing id when Etsy-connected). */
   externalId: string | null;
   externalHandle: string | null;
+  /** Raw `external` payload — diagnostics for binding failures (the external
+   * id silently stopped resolving on July 9; this shows what Printify sent). */
+  externalRaw: unknown;
 };
 
 /** Slim row from the shop's product list (donor discovery). */
@@ -427,6 +430,7 @@ export function createDemoPrintifyAdapter(
         images: [],
         externalId: null,
         externalHandle: null,
+        externalRaw: null,
       });
     },
 
@@ -613,6 +617,7 @@ export function createLivePrintifyAdapter(
         images: Array.isArray(product.images) ? product.images : [],
         externalId: external?.id != null ? String(external.id) : null,
         externalHandle: external?.handle ?? null,
+        externalRaw: product.external ?? null,
       });
     },
 

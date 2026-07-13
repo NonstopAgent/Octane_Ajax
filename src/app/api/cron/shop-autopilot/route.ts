@@ -8,7 +8,10 @@
  *
  * Security: Vercel sends CRON_SECRET as Bearer token; 401 without it.
  */
-export const maxDuration = 300;
+// 800s under Fluid Compute (Vercel clamps to the plan limit if lower). The
+// pass is ordered quality-first with production LAST, so a timeout only ever
+// costs the optional new-product step at the tail — never enrichment.
+export const maxDuration = 800;
 
 import { NextResponse, type NextRequest } from "next/server";
 import { runShopAutopilot } from "@/lib/ajax/autopilot/service";

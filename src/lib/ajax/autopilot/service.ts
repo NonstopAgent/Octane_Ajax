@@ -612,97 +612,6 @@ export async function runShopAutopilot(
     }
   }
 
-  // ---- Produce: keep the factory moving -------------------------------------
-  const targetListings = Number(
-    process.env.AUTOPILOT_TARGET_LISTINGS ?? DEFAULT_TARGET_LISTINGS,
-  );
-
-  // ---- Portfolio: capacity awareness — RECOMMEND retirement, never execute ---
-  // Operator rule: Ajax does not retire listings on its own. When a listing
-  // looks like dead weight (old enough, real traffic window, zero sales), it
-  // becomes a War-Room-style recommendation for the operator to accept or
-  // ignore. `takeDownListing` stays available for explicit operator actions.
-  let publishedCount = 0;
-  try {
-    const candidates = await gatherTakedownCandidates(supabase, userId);
-    publishedCount = candidates.length;
-    const atCapacity = publishedCount >= targetListings;
-    const cut = selectTakedownCandidate(candidates, { atCapacity });
-    if (cut) {
-      const age = Math.round(cut.ageDays ?? 0);
-      const recTitle = `Consider retiring "${cut.title.slice(0, 60)}"`;
-      if (!openRecTitles.has(recTitle)) {
-        openRecTitles.add(recTitle);
-        await insertRecommendation(supabase, userId, runId, {
-          category: "cut",
-          title: recTitle,
-          rationale: atCapacity
-            ? `Shop is at capacity (${publishedCount}/${targetListings}) and this is the weakest non-seller: ${cut.views} views in ${age} days, no sales.`
-            : `${cut.views} views in ${age} days with no sales. Retiring is optional — a tag/photo/price fix may be the better move first.`,
-          recommendedAction:
-            "If you agree, deactivate it on Etsy (Listings → select → Deactivate). Ajax will not retire listings automatically.",
-          priority: 2,
-          etsyListingId: cut.listingId,
-        });
-        result.recommended += 1;
-      }
-    }
-  } catch (err) {
-    result.errors.push(
-      `takedown: ${err instanceof Error ? err.message : "failed"}`,
-    );
-  }
-
-  const { count: pendingReviews } = await supabase
-    .from(TABLES.REVIEW_QUEUE)
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("status", "pending");
-
-  if ((pendingReviews ?? 0) > 0) {
-    // Self-clear the gate: autonomously review the oldest pending item so the
-    // factory never freezes waiting on a human. Approve → downstream Etsy draft +
-    // video + marketing via runPostApproval; autonomous "revise" counts as reject.
-    try {
-      const cleared = await autoReviewPending(supabase, userId, {
-        reviewId: null,
-        act: true,
-      });
-      if (cleared?.acted) {
-        result.reviewsCleared += 1;
-        if (cleared.postApproval) await runPostApproval(cleared.postApproval);
-      } else if (cleared) {
-        result.cycleBlocked = true;
-      }
-    } catch (err) {
-      result.cycleBlocked = true;
-      result.errors.push(
-        `review: ${err instanceof Error ? err.message : "failed"}`,
-      );
-    }
-  } else if (result.takenDown === 0 && publishedCount < targetListings) {
-    try {
-      const nova = await runNovaStep(supabase, userId);
-      const forge = await runForgeStep(supabase, userId, { runId: nova.runId });
-      try {
-        await runGenerationPodJob(supabase, userId, forge.generationId);
-      } catch (fulfillErr) {
-        result.errors.push(
-          `fulfillment: ${fulfillErr instanceof Error ? fulfillErr.message : "failed"}`,
-        );
-      }
-      result.cycleTriggered = true;
-    } catch (err) {
-      if (err instanceof CycleBlockedError) {
-        result.cycleBlocked = true;
-      } else {
-        result.errors.push(
-          `cycle: ${err instanceof Error ? err.message : "failed"}`,
-        );
-      }
-    }
-  }
-
   // ---- Traffic: swap PNG post assets for the listing's Etsy JPEG -------------
   // TikTok photo posts reject PNG (Printify mockups); Etsy re-hosts every
   // listing photo as JPEG on its CDN. Refreshing staged jobs' assets here
@@ -749,6 +658,17 @@ export async function runShopAutopilot(
         `asset-refresh: ${err instanceof Error ? err.message : "failed"}`,
       );
     }
+  }
+
+  // ---- Learn: measure recent posts' engagement (Ayrshare analytics) ----------
+  // ≤4 fetches/pass; feeds Pixel's performance notes so copy improves itself.
+  try {
+    const { runSocialAnalytics } = await import("@/lib/social/analytics");
+    await runSocialAnalytics(supabase, userId);
+  } catch (err) {
+    result.errors.push(
+      `analytics: ${err instanceof Error ? err.message : "failed"}`,
+    );
   }
 
   // ---- Traffic: post a staged Pixel promo to social (Ayrshare) ---------------
@@ -861,6 +781,98 @@ export async function runShopAutopilot(
       result.errors.push(
         `enrich-heal: ${err instanceof Error ? err.message : "failed"}`,
       );
+    }
+  }
+
+  // ---- Produce: keep the factory moving (LAST on purpose) --------------------
+  // A full Nova→Forge→publish cycle can take minutes; when it ran mid-pass it
+  // regularly ate the function's whole time budget and starved everything
+  // after it (self-heal, asset refresh, social poster) — the exact reason
+  // enrichment silently stopped happening. Production now goes last: a
+  // timeout costs one new product (next hour catches up), never quality.
+  const targetListings = Number(
+    process.env.AUTOPILOT_TARGET_LISTINGS ?? DEFAULT_TARGET_LISTINGS,
+  );
+
+  // Portfolio capacity awareness — RECOMMEND retirement, never execute.
+  let publishedCount = 0;
+  try {
+    const candidates = await gatherTakedownCandidates(supabase, userId);
+    publishedCount = candidates.length;
+    const atCapacity = publishedCount >= targetListings;
+    const cut = selectTakedownCandidate(candidates, { atCapacity });
+    if (cut) {
+      const age = Math.round(cut.ageDays ?? 0);
+      const recTitle = `Consider retiring "${cut.title.slice(0, 60)}"`;
+      if (!openRecTitles.has(recTitle)) {
+        openRecTitles.add(recTitle);
+        await insertRecommendation(supabase, userId, runId, {
+          category: "cut",
+          title: recTitle,
+          rationale: atCapacity
+            ? `Shop is at capacity (${publishedCount}/${targetListings}) and this is the weakest non-seller: ${cut.views} views in ${age} days, no sales.`
+            : `${cut.views} views in ${age} days with no sales. Retiring is optional — a tag/photo/price fix may be the better move first.`,
+          recommendedAction:
+            "If you agree, deactivate it on Etsy (Listings → select → Deactivate). Ajax will not retire listings automatically.",
+          priority: 2,
+          etsyListingId: cut.listingId,
+        });
+        result.recommended += 1;
+      }
+    }
+  } catch (err) {
+    result.errors.push(
+      `takedown: ${err instanceof Error ? err.message : "failed"}`,
+    );
+  }
+
+  const { count: pendingReviews } = await supabase
+    .from(TABLES.REVIEW_QUEUE)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "pending");
+
+  if ((pendingReviews ?? 0) > 0) {
+    // Self-clear the gate: autonomously review the oldest pending item so the
+    // factory never freezes waiting on a human. Approve → downstream Etsy draft +
+    // video + marketing via runPostApproval; autonomous "revise" counts as reject.
+    try {
+      const cleared = await autoReviewPending(supabase, userId, {
+        reviewId: null,
+        act: true,
+      });
+      if (cleared?.acted) {
+        result.reviewsCleared += 1;
+        if (cleared.postApproval) await runPostApproval(cleared.postApproval);
+      } else if (cleared) {
+        result.cycleBlocked = true;
+      }
+    } catch (err) {
+      result.cycleBlocked = true;
+      result.errors.push(
+        `review: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
+  } else if (result.takenDown === 0 && publishedCount < targetListings) {
+    try {
+      const nova = await runNovaStep(supabase, userId);
+      const forge = await runForgeStep(supabase, userId, { runId: nova.runId });
+      try {
+        await runGenerationPodJob(supabase, userId, forge.generationId);
+      } catch (fulfillErr) {
+        result.errors.push(
+          `fulfillment: ${fulfillErr instanceof Error ? fulfillErr.message : "failed"}`,
+        );
+      }
+      result.cycleTriggered = true;
+    } catch (err) {
+      if (err instanceof CycleBlockedError) {
+        result.cycleBlocked = true;
+      } else {
+        result.errors.push(
+          `cycle: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
     }
   }
 

@@ -24,6 +24,8 @@ YOU ARE A STRATEGIST, NOT AN AD MACHINE. Every post is assigned a CONTENT PILLAR
 
 BUILD OUR OWN TRENDS: where natural, frame posts as episodes of repeatable branded series pet parents can join — e.g. "Gotcha Day Glow-Up" (shelter photo → today), "Senior Sunday" (gray-muzzle tributes), "Says Who? Chaos Pets". Use the series name in the hook/hashtag so the format compounds week over week.
 
+LEARN FROM RESULTS: when PERFORMANCE NOTES are provided below, they are measured engagement from OUR OWN posts. Bias ~80% of your choices (hook style, pillar voice, product emphasis) toward what the notes show working; spend ~20% exploring fresh angles so learning never stalls.
+
 PLATFORM CRAFT (primary channels: TikTok + Pinterest):
 - TikTok: the first line/first second decides everything — native, lo-fi, person-to-person tone; hooks reference the format ("POV:", "Tell me you have a rescue dog without telling me…", text-on-screen setups). No polished-ad voice.
 - Pinterest: it's a SEARCH ENGINE — the pin title and description must contain the exact phrases buyers type (occasion + recipient + product), evergreen wording, no slang hooks.
@@ -71,6 +73,8 @@ export function buildPixelMarketingUserPrompt(input: {
   contentPillar?: string | null;
   /** Today's live trend brief (Google-grounded); omit block when null. */
   trendBrief?: string | null;
+  /** Learning loop: measured engagement summary of our own recent posts. */
+  performanceNotes?: string | null;
 }): string {
   const lines = [
     input.contentPillar
@@ -109,12 +113,21 @@ export function buildPixelMarketingUserPrompt(input: {
       ]
     : [];
 
+  const performanceBlock = input.performanceNotes?.trim()
+    ? [
+        "",
+        "PERFORMANCE NOTES (measured engagement from our own recent posts — bias toward what works):",
+        input.performanceNotes.trim(),
+      ]
+    : [];
+
   return [
     "Generate marketing copy for this print-on-demand product listing.",
     "",
     ...lines,
     ...linkGuidance,
     ...trendBlock,
+    ...performanceBlock,
     "",
     "Match the tone to the niche. Keep claims factual and compliant.",
   ].join("\n");

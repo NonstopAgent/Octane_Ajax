@@ -298,14 +298,23 @@ export async function runPixelMarketing(
   await sleep(1500);
 
   // Strategist context: today's live trend brief (Google-grounded, cached
-  // ~daily) + a rotating content pillar so the feed isn't wall-to-wall ads.
+  // ~daily), the learning loop's performance notes (measured engagement of
+  // our own posts), and a rotating content pillar so the feed isn't ads-only.
   const trendBrief = await fetchTrendBrief(supabase, userId);
+  let performanceNotes: string | null = null;
+  try {
+    const { fetchPerformanceNotes } = await import("@/lib/social/analytics");
+    performanceNotes = await fetchPerformanceNotes(supabase, userId);
+  } catch {
+    performanceNotes = null;
+  }
   let jobIndex = 0;
 
   for (const job of jobs) {
     const { input: promoInput, generationId, mockupSources } =
       promoInputFromJob(job);
     promoInput.trendBrief = trendBrief;
+    promoInput.performanceNotes = performanceNotes;
     promoInput.contentPillar = pillarForIndex(jobIndex);
     jobIndex += 1;
     let promo: PixelPromoPackage;
