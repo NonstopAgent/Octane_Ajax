@@ -132,6 +132,20 @@ export async function enrichEtsyListingAfterPublish(
     // exact-title match against the shop's active listings.
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let etsyListingId = product.data.externalId;
+
+    // Trust a previously persisted binding first: the autopilot's
+    // binding-backfill repairs rows by title match, and once titles get
+    // renamed (medic/widget) the fallbacks below can never re-derive it.
+    if (!etsyListingId) {
+      const { data: row } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("gumroad_product_id")
+        .eq("id", listingId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      const stored = String(row?.gumroad_product_id ?? "");
+      if (/^\d+$/.test(stored)) etsyListingId = stored;
+    }
     for (
       let attempt = 0;
       !etsyListingId && attempt < bindingAttempts;
