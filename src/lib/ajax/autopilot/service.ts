@@ -743,7 +743,19 @@ export async function runShopAutopilot(
       // (Vercel then RETRIED the cron — double passes), and starved the
       // newest listings of enrichment entirely.
       const HEAL_BATCH = 8;
-      const healOffset = (new Date().getUTCHours() % 3) * HEAL_BATCH;
+      // Rotation must cover EVERY published listing: a fixed `hour % 3`
+      // (24 slots) silently excluded rows past #24 once the shop hit 30 —
+      // those listings never healed. Derive batch count from the live total.
+      const { count: publishedTotal } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "published");
+      const healBatches = Math.max(
+        1,
+        Math.ceil((publishedTotal ?? HEAL_BATCH) / HEAL_BATCH),
+      );
+      const healOffset = (new Date().getUTCHours() % healBatches) * HEAL_BATCH;
       const { data: recentRows } = await supabase
         .from(TABLES.LISTINGS)
         .select("id, created_at, product_generations ( structure )")
@@ -752,6 +764,7 @@ export async function runShopAutopilot(
         .order("created_at", { ascending: false })
         .range(healOffset, healOffset + HEAL_BATCH - 1);
       const printifyAdapterForHeal = createPrintifyAdapter();
+      const healNoFulfillment: string[] = [];
       for (const row of (recentRows ?? []) as unknown as InternalListingRow[]) {
         const generations =
           row.product_generations == null
@@ -765,7 +778,12 @@ export async function runShopAutopilot(
           } | null
         )?.metadata?.fulfillment;
         const printifyProductId = fulfillment?.printifyProductId?.trim();
-        if (!printifyProductId) continue;
+        if (!printifyProductId) {
+          // Previously a silent `continue` — rows without a fulfillment id
+          // vanished from healing with zero trace. Surface them.
+          healNoFulfillment.push(row.id);
+          continue;
+        }
         await enrichEtsyListingAfterPublish(
           supabase,
           userId,
@@ -776,6 +794,16 @@ export async function runShopAutopilot(
         );
         // Breathe between listings — stay under Etsy's per-second limit.
         await new Promise((r) => setTimeout(r, 400));
+      }
+      if (healNoFulfillment.length > 0) {
+        await supabase.from(TABLES.EVENTS).insert({
+          user_id: userId,
+          event_type: "autopilot_heal_skipped",
+          message: `Self-heal skipped ${healNoFulfillment.length} listing(s) with no Printify fulfillment id in their generation structure — these can never receive photos/videos until re-linked.`,
+          agent_slug: "forge",
+          room: "storefront",
+          metadata: { listingIds: healNoFulfillment } as unknown as Json,
+        });
       }
     } catch (err) {
       result.errors.push(

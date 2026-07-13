@@ -236,12 +236,19 @@ export async function enrichEtsyListingAfterPublish(
     );
 
     let added = 0;
+    let fetchFailed = 0;
     if (existing.length < galleryUrls.length) {
       for (let i = existing.length; i < galleryUrls.length; i += 1) {
         const res = await fetch(galleryUrls[i]!);
-        if (!res.ok) continue; // unverified sibling render — skip quietly
+        if (!res.ok) {
+          fetchFailed += 1;
+          continue; // unverified sibling render — skip
+        }
         const contentType = res.headers.get("content-type") ?? "";
-        if (!contentType.startsWith("image")) continue;
+        if (!contentType.startsWith("image")) {
+          fetchFailed += 1;
+          continue;
+        }
         const buffer = Buffer.from(await res.arrayBuffer());
         if (!firstImageBuffer) firstImageBuffer = buffer;
         await etsy.uploadListingImage(
@@ -263,6 +270,26 @@ export async function enrichEtsyListingAfterPublish(
           { listingId, printifyProductId, etsyListingId, added, gallerySource },
         );
       }
+    }
+    // A listing stuck under 5 photos with no progress used to exit silently —
+    // the exact failure mode that kept "healthy" passes shipping thin
+    // listings. Emit the reason so the next debugging session starts here.
+    if (added === 0 && existing.length + added < 5) {
+      await insertGumroadEvent(
+        supabase,
+        userId,
+        "etsy_gallery_stalled",
+        `Gallery stuck at ${existing.length} photo(s): ${galleryUrls.length} candidate URL(s) from ${gallerySource}, ${fetchFailed} failed fetch/verify — likely a thin donor pool or dead mockup CDN paths for this blueprint.`,
+        {
+          listingId,
+          printifyProductId,
+          etsyListingId,
+          galleryCount: existing.length,
+          candidates: galleryUrls.length,
+          gallerySource,
+          fetchFailed,
+        },
+      );
     }
 
     // --- Video (one per listing, ever) --------------------------------------
@@ -300,7 +327,23 @@ export async function enrichEtsyListingAfterPublish(
               "Queued a product video render; it attaches to the Etsy listing when the render finishes.",
               { listingId, etsyListingId, provider: "printify" },
             );
+          } else {
+            await insertGumroadEvent(
+              supabase,
+              userId,
+              "video_enqueue_skipped",
+              "Listing has no video and the render did not enqueue (renderer dormant or budget guard) — was previously silent.",
+              { listingId, etsyListingId },
+            );
           }
+        } else {
+          await insertGumroadEvent(
+            supabase,
+            userId,
+            "video_enqueue_skipped",
+            "Listing has no video and no fetchable mockup image to render from — was previously silent.",
+            { listingId, etsyListingId },
+          );
         }
       }
     } catch {

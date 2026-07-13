@@ -37,6 +37,7 @@ export type AutoPostSummary = {
 
 type StagedJob = {
   id: string;
+  listing_id: string | null;
   caption: string | null;
   asset_url: string | null;
   metadata: {
@@ -45,6 +46,41 @@ type StagedJob = {
     postAttempts?: number;
   } | null;
 };
+
+/**
+ * TikTok is video-first — and its photo API rejects PNGs AND square images
+ * (every product mockup we have is square, so image posts can never land
+ * there). TikTok therefore only ever gets the listing's rendered product
+ * video; when none exists yet it is skipped for the pass instead of burning
+ * the job's retry budget on a guaranteed rejection.
+ */
+async function findListingVideoUrl(
+  supabase: Supabase,
+  userId: string,
+  listingId: string | null,
+): Promise<string | null> {
+  if (!listingId) return null;
+  const { data: listingRow } = await supabase
+    .from(TABLES.LISTINGS)
+    .select("gumroad_product_id")
+    .eq("id", listingId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const etsyId = String(listingRow?.gumroad_product_id ?? "");
+  if (!/^\d+$/.test(etsyId)) return null;
+  const { data: vid } = await supabase
+    .from(TABLES.VIDEO_JOBS)
+    .select("video_url")
+    .eq("user_id", userId)
+    .eq("etsy_listing_id", etsyId)
+    .eq("status", "done")
+    .not("video_url", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const url = vid?.video_url?.trim() ?? "";
+  return url.startsWith("https://") ? url : null;
+}
 
 export async function runSocialAutoPoster(
   supabase: Supabase,
@@ -90,7 +126,7 @@ export async function runSocialAutoPoster(
   // Oldest staged promo with real content.
   const { data: jobs } = await supabase
     .from(TABLES.CONTENT_JOBS)
-    .select("id, caption, asset_url, metadata")
+    .select("id, listing_id, caption, asset_url, metadata")
     .eq("user_id", userId)
     .eq("status", "scheduled")
     .order("created_at", { ascending: true })
@@ -108,15 +144,19 @@ export async function runSocialAutoPoster(
     return summary;
   }
 
-  // TikTok's photo posts reject PNG (Ayrshare: "PNG files are not supported
-  // by TikTok"). Skip TikTok for PNG assets — it gets JPEG posts and the 9:16
-  // videos instead of an hourly error loop.
-  if (job.asset_url!.toLowerCase().split("?")[0]!.endsWith(".png")) {
-    targets = targets.filter((p) => p !== "tiktok");
-    if (targets.length === 0) {
-      summary.skipped = "daily_cap";
-      return summary;
-    }
+  // Split the send: images go to the photo platforms, TikTok gets the
+  // listing's product video (see findListingVideoUrl for why).
+  const wantTiktok = targets.includes("tiktok");
+  const photoTargets = targets.filter((p) => p !== "tiktok");
+  const tiktokVideoUrl = wantTiktok
+    ? await findListingVideoUrl(supabase, userId, job.listing_id)
+    : null;
+
+  if (photoTargets.length === 0 && !tiktokVideoUrl) {
+    // Only TikTok was due and this listing has no video yet — leave the job
+    // staged (untouched) for a pass where a photo platform has budget.
+    summary.skipped = "tiktok_no_video";
+    return summary;
   }
 
   const hashtags = (job.metadata?.hashtags ?? [])
@@ -128,19 +168,54 @@ export async function runSocialAutoPoster(
     .filter(Boolean)
     .join("\n\n");
 
-  const result = await publishPost({
-    post,
-    platforms: targets,
-    mediaUrls: [job.asset_url!],
-  });
+  const attempts: { platform: string; ok: boolean; error?: string }[] = [];
+  let result: Awaited<ReturnType<typeof publishPost>> | null = null;
+  if (photoTargets.length > 0) {
+    result = await publishPost({
+      post,
+      platforms: photoTargets,
+      mediaUrls: [job.asset_url!],
+    });
+    attempts.push(
+      ...photoTargets.map((p) => ({
+        platform: p,
+        ok: result!.ok,
+        error: result!.error ?? undefined,
+      })),
+    );
+  }
+  let tiktokResult: Awaited<ReturnType<typeof publishPost>> | null = null;
+  if (wantTiktok && tiktokVideoUrl) {
+    tiktokResult = await publishPost({
+      post,
+      platforms: ["tiktok"],
+      mediaUrls: [tiktokVideoUrl],
+    });
+    attempts.push({
+      platform: "tiktok",
+      ok: tiktokResult.ok,
+      error: tiktokResult.error ?? undefined,
+    });
+  }
 
-  if (result.ok) {
+  const anyOk = (result?.ok ?? false) || (tiktokResult?.ok ?? false);
+  const combinedError =
+    [result?.error, tiktokResult?.error].filter(Boolean).join(" | ") || null;
+
+  if (anyOk) {
     // Platforms that actually accepted the post (partial success counts —
     // the job is DONE either way; retrying would duplicate the successes).
-    const landed =
-      result.posts && result.posts.length > 0
+    const photoLanded = result?.ok
+      ? result.posts && result.posts.length > 0
         ? result.posts.map((p) => p.platform).filter(Boolean)
-        : targets;
+        : photoTargets
+      : [];
+    const tiktokLanded = tiktokResult?.ok
+      ? tiktokResult.posts && tiktokResult.posts.length > 0
+        ? tiktokResult.posts.map((p) => p.platform).filter(Boolean)
+        : ["tiktok"]
+      : [];
+    const landed = [...photoLanded, ...tiktokLanded];
     // NOTE: content_jobs.status check constraint allows 'published' (not
     // 'posted') — using an invalid value would silently fail the update and
     // the same job would repost every hour.
@@ -151,9 +226,11 @@ export async function runSocialAutoPoster(
         metadata: {
           ...(job.metadata ?? {}),
           social: {
-            ayrsharePostId: result.ayrsharePostId ?? null,
-            posts: result.posts ?? [],
-            partialErrors: result.error ?? null,
+            ayrsharePostId:
+              result?.ayrsharePostId ?? tiktokResult?.ayrsharePostId ?? null,
+            posts: [...(result?.posts ?? []), ...(tiktokResult?.posts ?? [])],
+            partialErrors: combinedError,
+            tiktokVideoUrl: tiktokVideoUrl ?? null,
             postedAt: new Date().toISOString(),
           },
         } as Json,
@@ -161,17 +238,18 @@ export async function runSocialAutoPoster(
       .eq("id", job.id)
       .eq("user_id", userId);
     summary.posted += 1;
-    if (result.error) summary.errors.push(`partial: ${result.error}`);
+    if (combinedError) summary.errors.push(`partial: ${combinedError}`);
     await supabase.from(TABLES.EVENTS).insert({
       user_id: userId,
       event_type: "social_posted",
-      message: `Pixel promo posted to ${landed.join(", ")}: "${job.caption!.slice(0, 70)}"${result.error ? ` (skipped: ${result.error.slice(0, 80)})` : ""}`,
+      message: `Pixel promo posted to ${landed.join(", ")}${tiktokLanded.length > 0 ? " (TikTok got the product video)" : ""}: "${job.caption!.slice(0, 70)}"${combinedError ? ` (skipped: ${combinedError.slice(0, 80)})` : ""}`,
       agent_slug: "pixel",
       room: "media_studio",
       metadata: {
         contentJobId: job.id,
         platforms: landed,
-        posts: result.posts ?? [],
+        posts: [...(result?.posts ?? []), ...(tiktokResult?.posts ?? [])],
+        attempts,
       } as unknown as Json,
     });
   } else {
@@ -182,19 +260,19 @@ export async function runSocialAutoPoster(
         metadata: {
           ...(job.metadata ?? {}),
           postAttempts: (job.metadata?.postAttempts ?? 0) + 1,
-          lastPostError: result.error ?? "unknown",
+          lastPostError: combinedError ?? "unknown",
         } as Json,
       })
       .eq("id", job.id)
       .eq("user_id", userId);
-    summary.errors.push(result.error ?? "social post failed");
+    summary.errors.push(combinedError ?? "social post failed");
     await supabase.from(TABLES.EVENTS).insert({
       user_id: userId,
       event_type: "social_post_failed",
-      message: `Social post failed (attempt ${(job.metadata?.postAttempts ?? 0) + 1}/${MAX_ATTEMPTS}): ${(result.error ?? "unknown").slice(0, 140)}`,
+      message: `Social post failed (attempt ${(job.metadata?.postAttempts ?? 0) + 1}/${MAX_ATTEMPTS}): ${(combinedError ?? "unknown").slice(0, 140)}`,
       agent_slug: "pixel",
       room: "media_studio",
-      metadata: { contentJobId: job.id } as Json,
+      metadata: { contentJobId: job.id, attempts } as unknown as Json,
     });
   }
 
