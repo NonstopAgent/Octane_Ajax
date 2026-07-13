@@ -169,6 +169,34 @@ export async function runShopAutopilot(
     return result;
   }
 
+  // ---- Overlap lock ----------------------------------------------------------
+  // When a pass runs long, Vercel's cron can retry it — two concurrent passes
+  // double every Etsy/Printify call (rate limits) and double-post promos.
+  // If another pass started in the last 8 minutes, stand down.
+  try {
+    const lockWindow = new Date(Date.now() - 8 * 60 * 1000).toISOString();
+    const { data: running } = await supabase
+      .from(TABLES.EVENTS)
+      .select("id")
+      .eq("user_id", userId)
+      .eq("event_type", "autopilot_started")
+      .gte("created_at", lockWindow)
+      .limit(1);
+    if ((running ?? []).length > 0) {
+      result.skipped = "overlapping_pass";
+      return result;
+    }
+    await logEvent(
+      supabase,
+      userId,
+      "autopilot_started",
+      "Autopilot pass started.",
+      {},
+    );
+  } catch {
+    // Lock is best-effort — never block the pass on it.
+  }
+
   // ---- Etsy access ---------------------------------------------------------
   let credentials;
   try {
@@ -230,6 +258,55 @@ export async function runShopAutopilot(
       if (row.gumroad_product_id) {
         internalByEtsyId.set(String(row.gumroad_product_id), row);
       }
+    }
+  }
+
+  // ---- Binding backfill ------------------------------------------------------
+  // When Printify's external id never materializes (and a later title rename
+  // breaks the exact-title fallback), rows keep a Printify hex id in
+  // gumroad_product_id and every downstream step (gallery, video,
+  // personalization) silently skips. Repair here: any published row whose
+  // stored id is NOT numeric gets matched against the live listings by
+  // normalized title and rebound permanently.
+  if (credentials && liveListings.length > 0) {
+    try {
+      const { data: unbound } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("id, title, gumroad_product_id")
+        .eq("user_id", userId)
+        .eq("status", "published")
+        .not("gumroad_product_id", "is", null);
+      const norm = (s: string) =>
+        s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 60);
+      const liveByTitle = new Map(
+        liveListings.map((l) => [norm(l.title), l.listingId]),
+      );
+      const boundIds = new Set(etsyIds);
+      for (const row of unbound ?? []) {
+        const stored = String(row.gumroad_product_id ?? "");
+        if (/^\d+$/.test(stored)) continue; // already a real Etsy id
+        const liveId = liveByTitle.get(norm(row.title ?? ""));
+        if (!liveId || boundIds.has(liveId)) continue;
+        await supabase
+          .from(TABLES.LISTINGS)
+          .update({
+            gumroad_product_id: liveId,
+            gumroad_url: `https://www.etsy.com/listing/${liveId}`,
+          })
+          .eq("id", row.id)
+          .eq("user_id", userId);
+        await logEvent(
+          supabase,
+          userId,
+          "listing_binding_repaired",
+          `Rebound "${(row.title ?? "").slice(0, 60)}" to Etsy listing ${liveId} (Printify external id never resolved).`,
+          { listingId: row.id, etsyListingId: liveId, previous: stored },
+        );
+      }
+    } catch (err) {
+      result.errors.push(
+        `binding-backfill: ${err instanceof Error ? err.message : "failed"}`,
+      );
     }
   }
 
@@ -738,17 +815,20 @@ export async function runShopAutopilot(
       }
     }
     try {
-      // Heal EVERY published listing, not just the newest week — enrichment
-      // is a cheap no-op when a listing is already healthy (gallery full,
-      // video job pending/done), but this is the path that re-renders videos
-      // whose jobs were superseded and tops up thin galleries shop-wide.
+      // Heal every published listing — but in ROTATING batches of 8/hour,
+      // not all at once. Enriching 25 listings back-to-back blew through
+      // Etsy's per-second rate limit, stretched the pass past its timeout
+      // (Vercel then RETRIED the cron — double passes), and starved the
+      // newest listings of enrichment entirely.
+      const HEAL_BATCH = 8;
+      const healOffset = (new Date().getUTCHours() % 3) * HEAL_BATCH;
       const { data: recentRows } = await supabase
         .from(TABLES.LISTINGS)
         .select("id, created_at, product_generations ( structure )")
         .eq("user_id", userId)
         .eq("status", "published")
         .order("created_at", { ascending: false })
-        .limit(25);
+        .range(healOffset, healOffset + HEAL_BATCH - 1);
       const printifyAdapterForHeal = createPrintifyAdapter();
       for (const row of (recentRows ?? []) as unknown as InternalListingRow[]) {
         const generations =
@@ -772,6 +852,8 @@ export async function runShopAutopilot(
           printifyAdapterForHeal,
           { bindingAttempts: 1 },
         );
+        // Breathe between listings — stay under Etsy's per-second limit.
+        await new Promise((r) => setTimeout(r, 400));
       }
     } catch (err) {
       result.errors.push(

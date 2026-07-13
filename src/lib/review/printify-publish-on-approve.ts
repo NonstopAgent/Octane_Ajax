@@ -169,6 +169,23 @@ export async function enrichEtsyListingAfterPublish(
       );
     }
 
+    // Persist the binding the moment it resolves — later title renames
+    // (medic/operator/Etsy widget) break the exact-title fallback, so a
+    // resolved id must never be lost again.
+    try {
+      await supabase
+        .from(TABLES.LISTINGS)
+        .update({
+          gumroad_product_id: etsyListingId,
+          gumroad_url: `https://www.etsy.com/listing/${etsyListingId}`,
+        })
+        .eq("id", listingId)
+        .eq("user_id", userId)
+        .neq("gumroad_product_id", etsyListingId);
+    } catch {
+      // Best-effort — enrichment continues either way.
+    }
+
     // --- Photos -------------------------------------------------------------
     let firstImageBuffer: Buffer | null = null;
     // The moat: every listing accepts buyer personalization (pet name/date,
