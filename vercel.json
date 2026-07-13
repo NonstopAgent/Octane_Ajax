@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/video-jobs",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/daily-guide",
+      "schedule": "30 7 * * *"
     }
   ]
 }

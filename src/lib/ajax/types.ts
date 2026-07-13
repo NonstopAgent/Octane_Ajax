@@ -102,7 +102,8 @@ export interface FactoryEvent {
 export interface ContentJob {
   id: string;
   userId: string;
-  listingId: string;
+  /** Null for non-listing promos (e.g. gift-guide posts). */
+  listingId: string | null;
   platform: string;
   contentType: string;
   status: ContentJobStatus;

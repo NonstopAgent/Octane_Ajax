@@ -132,4 +132,7 @@ export const TABLES = {
   VIDEO_JOBS: "video_jobs",
   LISTING_PERFORMANCE: "listing_performance_snapshots",
   ETSY_OAUTH_SESSIONS: "etsy_oauth_sessions",
+  GUIDES: "affiliate_guides",
+  AFFILIATE_LINKS: "affiliate_links",
+  AFFILIATE_CLICKS: "affiliate_clicks",
 } as const;

@@ -4,7 +4,8 @@ import { TABLES } from "@/lib/supabase/schema";
 
 export type MarketingContentJob = {
   id: string;
-  listingId: string;
+  /** Null for non-listing promos (e.g. gift-guide posts). */
+  listingId: string | null;
   listingTitle: string | null;
   platform: string;
   contentType: string;

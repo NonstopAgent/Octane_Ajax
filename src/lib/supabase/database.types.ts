@@ -9,6 +9,105 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      affiliate_guides: {
+        Row: {
+          id: string;
+          user_id: string;
+          slug: string;
+          title: string;
+          description: string | null;
+          hero_image_url: string | null;
+          content_md: string;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          slug: string;
+          title: string;
+          description?: string | null;
+          hero_image_url?: string | null;
+          content_md: string;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          slug?: string;
+          title?: string;
+          description?: string | null;
+          hero_image_url?: string | null;
+          content_md?: string;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      affiliate_links: {
+        Row: {
+          id: string;
+          user_id: string;
+          slug: string;
+          destination_url: string;
+          network: string;
+          label: string | null;
+          partner_code: string | null;
+          commission_pct: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          slug: string;
+          destination_url: string;
+          network?: string;
+          label?: string | null;
+          partner_code?: string | null;
+          commission_pct?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          slug?: string;
+          destination_url?: string;
+          network?: string;
+          label?: string | null;
+          partner_code?: string | null;
+          commission_pct?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      affiliate_clicks: {
+        Row: {
+          id: string;
+          link_id: string;
+          clicked_at: string;
+          referrer: string | null;
+          user_agent: string | null;
+        };
+        Insert: {
+          id?: string;
+          link_id: string;
+          clicked_at?: string;
+          referrer?: string | null;
+          user_agent?: string | null;
+        };
+        Update: {
+          id?: string;
+          link_id?: string;
+          clicked_at?: string;
+          referrer?: string | null;
+          user_agent?: string | null;
+        };
+        Relationships: [];
+      };
       businesses: {
         Row: {
           id: string;
@@ -556,7 +655,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          listing_id: string;
+          listing_id: string | null;
           platform: string;
           content_type: string;
           status: string;
@@ -569,7 +668,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string;
-          listing_id: string;
+          listing_id?: string | null;
           platform?: string;
           content_type?: string;
           status?: string;
