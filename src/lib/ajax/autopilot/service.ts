@@ -281,7 +281,9 @@ export async function runShopAutopilot(
       const liveByTitle = new Map(
         liveListings.map((l) => [norm(l.title), l.listingId]),
       );
-      const boundIds = new Set(etsyIds);
+      // Only ids ALREADY claimed by an internal row are off-limits — building
+      // this from all live ids made every candidate look taken (0 rebinds).
+      const boundIds = new Set(internalByEtsyId.keys());
       for (const row of unbound ?? []) {
         const stored = String(row.gumroad_product_id ?? "");
         if (/^\d+$/.test(stored)) continue; // already a real Etsy id
