@@ -61,6 +61,13 @@ export type PrintifyPublishResult = {
  * listing the publish-time pass missed (it only ADDS photos / queues a
  * video — it never publishes or changes a listing's active/inactive state).
  */
+export type EnrichOutcome = {
+  /** Photos on the Etsy listing after this pass. */
+  galleryCount: number;
+  /** Photos added this pass. */
+  added: number;
+};
+
 export async function enrichEtsyListingAfterPublish(
   supabase: Supabase,
   userId: string,
@@ -73,9 +80,12 @@ export async function enrichEtsyListingAfterPublish(
      * or this listing needs the next pass anyway. */
     bindingAttempts?: number;
   } = {},
-): Promise<void> {
+): Promise<EnrichOutcome | null> {
   const bindingAttempts = options.bindingAttempts ?? 5;
-  const skip = async (reason: string, extra: Record<string, unknown> = {}) => {
+  const skip = async (
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<null> => {
     await insertGumroadEvent(
       supabase,
       userId,
@@ -83,6 +93,7 @@ export async function enrichEtsyListingAfterPublish(
       `Listing enrichment skipped: ${reason}`,
       { listingId, printifyProductId, ...extra },
     );
+    return null;
   };
 
   try {
@@ -271,20 +282,69 @@ export async function enrichEtsyListingAfterPublish(
         );
       }
     }
-    // A listing stuck under 5 photos with no progress used to exit silently —
+    // --- Photo floor: our own stored art mockup ------------------------------
+    // Some blueprints come back from Printify with a single mockup and no
+    // same-blueprint donor (both stuck mugs did) — Etsy's search-visibility
+    // banner flags exactly this ("listings have 1 photo"). We ALWAYS have our
+    // own generated art mockup, so no listing may ever sit at 1 photo.
+    let galleryCount = existing.length + added;
+    if (galleryCount < 2) {
+      try {
+        const { data: listingRow } = await supabase
+          .from(TABLES.LISTINGS)
+          .select("mockup_url")
+          .eq("id", listingId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        const mockupUrl = (listingRow?.mockup_url ?? "").trim();
+        if (mockupUrl.startsWith("https://")) {
+          const res = await fetch(mockupUrl);
+          const contentType = res.headers.get("content-type") ?? "";
+          if (res.ok && contentType.startsWith("image")) {
+            const buffer = Buffer.from(await res.arrayBuffer());
+            if (!firstImageBuffer) firstImageBuffer = buffer;
+            await etsy.uploadListingImage(
+              etsyListingId,
+              buffer,
+              "art-mockup.jpg",
+              credentials.shop_id,
+              credentials.access_token,
+              galleryCount + 1,
+            );
+            galleryCount += 1;
+            await insertGumroadEvent(
+              supabase,
+              userId,
+              "etsy_gallery_filled",
+              `Added our own art mockup as photo #${galleryCount} (Printify offered no additional mockups for this blueprint).`,
+              {
+                listingId,
+                printifyProductId,
+                etsyListingId,
+                source: "own_art_mockup",
+              },
+            );
+          }
+        }
+      } catch {
+        // Floor is best-effort — the stall event below still fires.
+      }
+    }
+
+    // A listing stuck at 1 photo with no path forward used to exit silently —
     // the exact failure mode that kept "healthy" passes shipping thin
     // listings. Emit the reason so the next debugging session starts here.
-    if (added === 0 && existing.length + added < 5) {
+    if (galleryCount < 2) {
       await insertGumroadEvent(
         supabase,
         userId,
         "etsy_gallery_stalled",
-        `Gallery stuck at ${existing.length} photo(s): ${galleryUrls.length} candidate URL(s) from ${gallerySource}, ${fetchFailed} failed fetch/verify — likely a thin donor pool or dead mockup CDN paths for this blueprint.`,
+        `Gallery STILL stuck at ${galleryCount} photo(s) after all sources: ${galleryUrls.length} candidate URL(s) from ${gallerySource}, ${fetchFailed} failed fetch/verify, art-mockup floor unavailable.`,
         {
           listingId,
           printifyProductId,
           etsyListingId,
-          galleryCount: existing.length,
+          galleryCount,
           candidates: galleryUrls.length,
           gallerySource,
           fetchFailed,
@@ -349,6 +409,8 @@ export async function enrichEtsyListingAfterPublish(
     } catch {
       // Video is a bonus — never let it break enrichment.
     }
+
+    return { galleryCount, added };
   } catch (err) {
     await insertGumroadEvent(
       supabase,
@@ -357,6 +419,7 @@ export async function enrichEtsyListingAfterPublish(
       `Listing enrichment failed: ${err instanceof Error ? err.message : "unknown"}`,
       { listingId, printifyProductId },
     );
+    return null;
   }
 }
 

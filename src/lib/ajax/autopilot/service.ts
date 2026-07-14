@@ -82,6 +82,8 @@ export type AutopilotResult = {
   cycleBlocked: boolean;
   reviewsCleared: number;
   takenDown: number;
+  /** Listings this pass left below the 2-photo minimum (Etsy flags these). */
+  galleryThin: number;
   errors: string[];
 };
 
@@ -97,6 +99,7 @@ function emptyResult(): AutopilotResult {
     cycleBlocked: false,
     reviewsCleared: 0,
     takenDown: 0,
+    galleryThin: 0,
     errors: [],
   };
 }
@@ -784,7 +787,7 @@ export async function runShopAutopilot(
           healNoFulfillment.push(row.id);
           continue;
         }
-        await enrichEtsyListingAfterPublish(
+        const outcome = await enrichEtsyListingAfterPublish(
           supabase,
           userId,
           row.id,
@@ -792,8 +795,29 @@ export async function runShopAutopilot(
           printifyAdapterForHeal,
           { bindingAttempts: 1 },
         );
+        if (outcome && outcome.galleryCount < 2) {
+          result.galleryThin += 1;
+        }
         // Breathe between listings — stay under Etsy's per-second limit.
         await new Promise((r) => setTimeout(r, 400));
+      }
+      if (result.galleryThin > 0) {
+        // A pass must never call the shop "healthy" over thin listings —
+        // surface a fix recommendation the operator actually sees.
+        const recTitle = `Fix ${result.galleryThin} listing(s) stuck below 2 photos`;
+        if (!openRecTitles.has(recTitle)) {
+          openRecTitles.add(recTitle);
+          await insertRecommendation(supabase, userId, runId, {
+            category: "fix",
+            title: recTitle,
+            rationale:
+              "These listings ended the heal pass with fewer than 2 photos — Printify offered no extra mockups, no donor matched, and the art-mockup floor could not upload. Etsy's search-visibility banner flags exactly this.",
+            recommendedAction:
+              "Check the etsy_gallery_stalled events for the exact listings and reasons; add a photo manually if it persists more than a day.",
+            priority: 1,
+          });
+          result.recommended += 1;
+        }
       }
       if (healNoFulfillment.length > 0) {
         await supabase.from(TABLES.EVENTS).insert({
@@ -917,8 +941,8 @@ export async function runShopAutopilot(
     supabase,
     userId,
     "autopilot_summary",
-    acted > 0
-      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.takenDown ? `, retired ${result.takenDown} underperforming listing(s)` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}.`
+    acted > 0 || result.galleryThin > 0
+      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.takenDown ? `, retired ${result.takenDown} underperforming listing(s)` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}${result.galleryThin > 0 ? ` ⚠️ ${result.galleryThin} listing(s) still below the 2-photo minimum` : ""}.`
       : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: AI review could not clear the gate)" : ""}.`,
     { runId, ...result } as unknown as Json,
   );
@@ -937,7 +961,7 @@ async function insertRecommendation(
     rationale: string;
     recommendedAction: string;
     priority: number;
-    etsyListingId: string;
+    etsyListingId?: string;
   },
 ): Promise<void> {
   await supabase.from(TABLES.STRATEGY).insert({
@@ -949,7 +973,10 @@ async function insertRecommendation(
     recommended_action: rec.recommendedAction,
     priority: rec.priority,
     confidence: 80,
-    evidence: { source: "shop_autopilot", etsyListingId: rec.etsyListingId } as Json,
+    evidence: {
+      source: "shop_autopilot",
+      etsyListingId: rec.etsyListingId ?? null,
+    } as Json,
     status: "proposed",
   });
 }
