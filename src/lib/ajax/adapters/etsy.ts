@@ -96,6 +96,10 @@ export type EtsyListingPatch = {
   description?: string;
   shipping_profile_id?: number;
   return_policy_id?: number;
+  /** Shop section (storefront navigation category). */
+  shop_section_id?: number;
+  /** 1-4 puts the listing in the shop's Featured row; 0/absent leaves it. */
+  featured_rank?: number;
   /** Buyer personalization (the moat: name/date/photo-link customization). */
   personalization_is_required?: boolean;
   personalization_char_count_max?: number;
@@ -482,6 +486,53 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
      * exposes only lifetime counters (no daily series), so the analytics poller
      * snapshots these daily and derives velocity from the deltas.
      */
+    /** Storefront navigation sections ({id, title} pairs). */
+    async getShopSections(
+      shopId: string,
+      accessToken: string,
+    ): Promise<{ shopSectionId: number; title: string }[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/sections`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: { shop_section_id?: number; title?: string }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .filter((s) => s.shop_section_id != null)
+        .map((s) => ({
+          shopSectionId: s.shop_section_id!,
+          title: s.title ?? "",
+        }));
+    },
+
+    /** Create a storefront section; returns its id. */
+    async createShopSection(
+      shopId: string,
+      accessToken: string,
+      title: string,
+    ): Promise<number> {
+      const body = new URLSearchParams({ title });
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/sections`,
+        {
+          method: "POST",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        },
+      );
+      const parsed = await parseEtsyJson<{ shop_section_id?: number }>(
+        response,
+      );
+      if (parsed.shop_section_id == null) {
+        throw new Error("Etsy createShopSection returned no id.");
+      }
+      return parsed.shop_section_id;
+    },
+
     async getShopListings(
       shopId: string,
       accessToken: string,
@@ -617,6 +668,12 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       }
       if (patch.return_policy_id != null) {
         body.set("return_policy_id", String(patch.return_policy_id));
+      }
+      if (patch.shop_section_id != null) {
+        body.set("shop_section_id", String(patch.shop_section_id));
+      }
+      if (patch.featured_rank != null) {
+        body.set("featured_rank", String(patch.featured_rank));
       }
       if ([...body.keys()].length === 0) return;
 

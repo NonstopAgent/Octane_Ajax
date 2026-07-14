@@ -836,6 +836,28 @@ export async function runShopAutopilot(
     }
   }
 
+  // ---- Storefront organization (daily, 05:00 UTC) ----------------------------
+  // Sections + featured row re-applied once a day so the shop page never
+  // drifts back into a flat unsorted wall (Etsy's own sections UI silently
+  // drops saves; the operator found the raw layout "horrible" — never again).
+  if (new Date().getUTCHours() === 5) {
+    try {
+      const { organizeStore } = await import("@/lib/etsy/organize-store");
+      const org = await organizeStore(supabase, userId);
+      await logEvent(
+        supabase,
+        userId,
+        "store_organized",
+        `Storefront maintained: ${org.assigned} listing(s) sectioned, ${org.featured.length} featured${org.sectionsCreated.length ? `, created section(s): ${org.sectionsCreated.join(", ")}` : ""}${org.errors.length ? ` (errors: ${org.errors.slice(0, 2).join(" | ")})` : ""}.`,
+        { ...org } as unknown as Json,
+      );
+    } catch (err) {
+      result.errors.push(
+        `organize: ${err instanceof Error ? err.message : "failed"}`,
+      );
+    }
+  }
+
   // ---- Produce: keep the factory moving (LAST on purpose) --------------------
   // A full Nova→Forge→publish cycle can take minutes; when it ran mid-pass it
   // regularly ate the function's whole time budget and starved everything
