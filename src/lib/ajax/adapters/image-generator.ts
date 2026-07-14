@@ -65,6 +65,19 @@ export type PersonalizedPortraitInput = {
   productTitle?: string;
 };
 
+export type LifestyleSceneInput = {
+  /** The product mockup to place into a scene (raw bytes). */
+  productImage: Buffer;
+  productTitle: string;
+};
+
+export type GeneratedLifestyleScene = {
+  sceneId: string;
+  imageBase64: string;
+  provider: string;
+  model: string;
+};
+
 export type GeneratedArtwork = {
   assetId: string;
   imageUrl: string;
@@ -99,6 +112,32 @@ export interface ImageGeneratorAdapter {
   generatePersonalizedPortrait(
     input: PersonalizedPortraitInput,
   ): Promise<AdapterResult<GeneratedPortrait>>;
+  /**
+   * Place a product mockup into a warm real-life scene (worn, hung, on a
+   * table) — the source frame for listing/social videos, so clips feel like
+   * lifestyle footage instead of a camera zooming into a catalog photo.
+   */
+  generateLifestyleScene(
+    input: LifestyleSceneInput,
+  ): Promise<AdapterResult<GeneratedLifestyleScene>>;
+}
+
+/** Scene direction per product type — inferred from the listing title. */
+export function lifestyleSceneDirection(productTitle: string): string {
+  const t = productTitle.toLowerCase();
+  if (t.includes("sweatshirt") || t.includes("hoodie")) {
+    return "The sweatshirt is worn by a person with a relaxed pose in a cozy, sunlit living room, a happy dog resting beside them; OR displayed hanging on a rustic wooden door with warm morning light. Show the garment naturally draped on a body or hanger — NOT floating.";
+  }
+  if (t.includes("t-shirt") || t.includes("tshirt") || t.includes("shirt")) {
+    return "The t-shirt is worn by a person outdoors at golden hour with a dog on a leash beside them, candid lifestyle photography feel. Show the garment naturally on a body — NOT floating.";
+  }
+  if (t.includes("mug")) {
+    return "The mug sits on a wooden kitchen table beside a steaming coffee pot, with a cozy sleeping dog visible in the soft-focus background, warm morning window light.";
+  }
+  if (t.includes("print") || t.includes("poster") || t.includes("art")) {
+    return "The art print hangs framed on a warmly lit living room wall above a couch, with a cat curled up on the couch below, cozy home interior photography.";
+  }
+  return "The product is styled in a warm, cozy home scene with a pet nearby, natural window light, lifestyle photography feel.";
 }
 
 export type ImageGeneratorAdapterOptions = AdapterConfig & {
@@ -213,6 +252,17 @@ export function createDemoImageGeneratorAdapter(
       return demoResult("Personalized portrait generated in demo mode.", {
         portraitId,
         imageUrl: `demo://octane-ajax/portraits/${portraitId}.png`,
+        provider,
+        model: DEFAULT_IMAGE_MODEL,
+      });
+    },
+
+    async generateLifestyleScene(input) {
+      const sceneId = `scene-${crypto.randomUUID().slice(0, 8)}`;
+      void input;
+      return demoResult("Lifestyle scene generated in demo mode.", {
+        sceneId,
+        imageBase64: "",
         provider,
         model: DEFAULT_IMAGE_MODEL,
       });
@@ -338,6 +388,44 @@ export function createLiveImageGeneratorAdapter(
       return liveResult("Personalized portrait generated.", {
         portraitId,
         imageUrl,
+        provider: "openai",
+        model,
+      });
+    },
+
+    async generateLifestyleScene(input) {
+      const imageFile = await toFile(input.productImage, "product.png", {
+        type: "image/png",
+      });
+
+      const prompt = [
+        "Professional lifestyle product photograph.",
+        lifestyleSceneDirection(input.productTitle),
+        "CRITICAL: the product and its printed design must remain EXACTLY as shown in the input image — same artwork, same text, same colors, unaltered and clearly readable.",
+        "Photorealistic, warm and inviting, shallow depth of field, no added text or watermarks, no brand logos.",
+      ].join(" ");
+
+      const response = await client.images.edit({
+        model,
+        image: imageFile,
+        prompt,
+        n: 1,
+        size: "1024x1024",
+      });
+
+      const image = response.data?.[0];
+      if (!image?.b64_json && !image?.url) {
+        throw new Error("OpenAI lifestyle scene returned no image.");
+      }
+      let b64 = image.b64_json ?? "";
+      if (!b64 && image.url) {
+        const { buffer } = await fetchImageBuffer(image.url, fetchImpl);
+        b64 = buffer.toString("base64");
+      }
+
+      return liveResult("Lifestyle scene generated.", {
+        sceneId: `scene-${crypto.randomUUID().slice(0, 8)}`,
+        imageBase64: b64,
         provider: "openai",
         model,
       });

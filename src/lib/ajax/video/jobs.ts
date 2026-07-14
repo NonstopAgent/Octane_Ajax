@@ -254,9 +254,31 @@ export async function enqueueApprovalVideos(
     return out;
   }
 
-  const dataUri = `data:image/jpeg;base64,${input.mockupBuffer.toString(
+  // Lifestyle-first: place the product into a real scene (worn, hung on a
+  // door, on a kitchen table) and animate THAT — zoom-ins on catalog shots
+  // looked like nobody tried. Falls back to the raw mockup if the scene
+  // generation fails so a bad image day never blocks videos entirely.
+  let sourceDataUri = `data:image/jpeg;base64,${input.mockupBuffer.toString(
     "base64",
   )}`;
+  let renderStyle: "product" | "lifestyle" = "product";
+  try {
+    const { createImageGeneratorAdapter, isImageGeneratorConfigured } =
+      await import("@/lib/ajax/adapters/image-generator");
+    if (isImageGeneratorConfigured()) {
+      const scene = await createImageGeneratorAdapter().generateLifestyleScene({
+        productImage: input.mockupBuffer,
+        productTitle: input.title,
+      });
+      if (scene.data.imageBase64) {
+        sourceDataUri = `data:image/png;base64,${scene.data.imageBase64}`;
+        renderStyle = "lifestyle";
+      }
+    }
+  } catch {
+    // Scene generation is an upgrade, not a dependency.
+  }
+
   const spec = buildVideoSpec({
     productTitle: input.title,
     niche: input.niche ?? null,
@@ -264,9 +286,10 @@ export async function enqueueApprovalVideos(
   });
 
   const etsySubmit = await submitVideoRender({
-    imageUrl: dataUri,
+    imageUrl: sourceDataUri,
     spec,
     aspectRatio: "1:1",
+    style: renderStyle,
   });
   if (etsySubmit.ok && etsySubmit.requestId) {
     const e = await enqueueVideoJob(supabase, {
@@ -298,9 +321,10 @@ export async function enqueueApprovalVideos(
   }
   if (socialOn) {
     const socialSubmit = await submitVideoRender({
-      imageUrl: dataUri,
+      imageUrl: sourceDataUri,
       spec,
       aspectRatio: "9:16",
+      style: renderStyle,
     });
     if (socialSubmit.ok && socialSubmit.requestId) {
       const tagLine = (input.hashtags ?? [])

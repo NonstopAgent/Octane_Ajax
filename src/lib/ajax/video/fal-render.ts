@@ -84,6 +84,14 @@ export function buildFalInput(
   spec: VideoSpec,
   imageUrl: string,
   aspectRatio: FalInput["aspect_ratio"] = "9:16",
+  /**
+   * "product": flat catalog shot — camera motion only, nothing may live.
+   * "lifestyle": the source frame is a real-life scene (worn garment, mug on
+   * a table, framed print) — allow subtle ambient life while the product's
+   * printed design stays rigid. Zoom-only clips of catalog photos looked
+   * like nobody tried; scene sources + gentle life is the fix.
+   */
+  style: "product" | "lifestyle" = "product",
 ): FalInput {
   // Defensive: the route may pass a partial spec from external JSON.
   const motion = spec.shots?.[0]?.motion ?? "zoom_in";
@@ -95,13 +103,22 @@ export function buildFalInput(
     pan_right: "slow right camera pan",
     static: "nearly still camera with subtle parallax",
   };
-  const prompt = [
-    "Studio product video of this exact physical product, photographed as-is.",
-    `Camera motion ONLY: ${motionWords[motion] ?? "subtle camera motion"}, cinematic, understated.`,
-    "The product itself stays perfectly still and rigid — same shape, same printed artwork, same text, same colors, first frame to last frame.",
-    "No new objects, no hands, no people, no animals, no scene changes.",
-    `Soft ${energy} lighting mood. Vertical 9:16 product ad.`,
-  ].join(" ");
+  const prompt =
+    style === "lifestyle"
+      ? [
+          "Cozy lifestyle video of this exact scene, filmed like a warm home moment.",
+          `Gentle camera move: ${motionWords[motion] ?? "slow smooth push-in"}, cinematic, understated.`,
+          "Subtle natural life only: soft light shifting, steam curling, fabric settling, calm slow breathing — nothing sudden, no one enters or leaves.",
+          "The product and its printed design stay perfectly rigid and unchanged — same artwork, same text, same colors, first frame to last frame.",
+          `Warm ${energy} mood. Feels like a real moment at home, not a catalog.`,
+        ].join(" ")
+      : [
+          "Studio product video of this exact physical product, photographed as-is.",
+          `Camera motion ONLY: ${motionWords[motion] ?? "subtle camera motion"}, cinematic, understated.`,
+          "The product itself stays perfectly still and rigid — same shape, same printed artwork, same text, same colors, first frame to last frame.",
+          "No new objects, no hands, no people, no animals, no scene changes.",
+          `Soft ${energy} lighting mood. Vertical 9:16 product ad.`,
+        ].join(" ");
 
   return {
     prompt,
@@ -110,7 +127,9 @@ export function buildFalInput(
     duration: "5",
     aspect_ratio: aspectRatio,
     negative_prompt:
-      "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, objects appearing, hands, people, animals, scene change, camera cut, glitch, distortion, blur, low quality",
+      style === "lifestyle"
+        ? "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, scene change, camera cut, people appearing or leaving, distorted faces, extra limbs, glitch, distortion, blur, low quality"
+        : "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, objects appearing, hands, people, animals, scene change, camera cut, glitch, distortion, blur, low quality",
     cfg_scale: 0.7,
   };
 }
@@ -121,6 +140,7 @@ export async function submitVideoRender(
     imageUrl: string;
     spec: VideoSpec;
     aspectRatio?: FalInput["aspect_ratio"];
+    style?: "product" | "lifestyle";
   },
   opts: { fetchImpl?: FetchImpl } = {},
 ): Promise<RenderResult> {
@@ -134,7 +154,7 @@ export async function submitVideoRender(
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify(
-        buildFalInput(args.spec, args.imageUrl, args.aspectRatio),
+        buildFalInput(args.spec, args.imageUrl, args.aspectRatio, args.style),
       ),
       signal: AbortSignal.timeout(15000),
     });
