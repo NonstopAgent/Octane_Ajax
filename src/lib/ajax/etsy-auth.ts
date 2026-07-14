@@ -21,6 +21,10 @@ export const ETSY_OAUTH_SCOPES = [
   "listings_r",
   "listings_w",
   "shops_r",
+  // Storefront maintenance (creating shop sections) — added 2026-07-13 for
+  // the automated store organizer. Existing connections keep working; a
+  // one-time reconnect picks this up and makes section creation autonomous.
+  "shops_w",
   "email_r",
 ] as const;
 

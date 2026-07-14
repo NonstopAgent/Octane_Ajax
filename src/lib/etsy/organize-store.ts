@@ -71,16 +71,27 @@ export async function organizeStore(
     for (const s of existing) sectionIds.set(s.title.toLowerCase(), s.shopSectionId);
     for (const title of wanted) {
       if (!sectionIds.has(title.toLowerCase())) {
-        const id = await etsy.createShopSection(
-          credentials.shop_id,
-          credentials.access_token,
-          title,
-        );
-        sectionIds.set(title.toLowerCase(), id);
-        summary.sectionsCreated.push(title);
-        await sleep(300);
+        try {
+          const id = await etsy.createShopSection(
+            credentials.shop_id,
+            credentials.access_token,
+            title,
+          );
+          sectionIds.set(title.toLowerCase(), id);
+          summary.sectionsCreated.push(title);
+          await sleep(300);
+        } catch (err) {
+          // Creating sections needs the shops_w scope, which older Etsy
+          // connections lack. Keep going with whatever sections DO exist —
+          // aborting here once blocked assignment of 28 listings over one
+          // missing section.
+          summary.errors.push(
+            `create "${title}": ${err instanceof Error ? err.message : "failed"}`,
+          );
+        }
       }
     }
+    if (sectionIds.size === 0) return summary;
   } catch (err) {
     summary.errors.push(
       `sections: ${err instanceof Error ? err.message : "failed"}`,
