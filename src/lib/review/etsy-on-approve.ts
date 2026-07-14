@@ -177,10 +177,17 @@ export async function publishListingToEtsyOnApprove(
             supabase,
             userId,
             "video_render_queued",
-            `Queued a product video render${
+            `Queued a ${q.style === "lifestyle" ? "lifestyle" : "plain product"} video render${
               q.social ? " + social post" : ""
-            }; it attaches when the render finishes.`,
-            { listingId, provider: "etsy", etsy: q.etsy, social: q.social },
+            }; it attaches when the render finishes.${q.style !== "lifestyle" ? ` ⚠️ Lifestyle scene unavailable: ${q.styleError ?? "unknown reason"}.` : ""}`,
+            {
+              listingId,
+              provider: "etsy",
+              etsy: q.etsy,
+              social: q.social,
+              style: q.style ?? null,
+              styleError: q.styleError ?? null,
+            },
           );
         }
       } catch {

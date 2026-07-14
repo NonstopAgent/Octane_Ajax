@@ -384,8 +384,16 @@ export async function enrichEtsyListingAfterPublish(
               supabase,
               userId,
               "video_render_queued",
-              "Queued a product video render; it attaches to the Etsy listing when the render finishes.",
-              { listingId, etsyListingId, provider: "printify" },
+              queued.style === "lifestyle"
+                ? "Queued a LIFESTYLE product video (worn/hung/styled scene); it attaches to the Etsy listing when the render finishes."
+                : `⚠️ Queued a plain product video (camera move on the catalog photo — the weak kind) because the lifestyle scene could not be generated: ${queued.styleError ?? "unknown reason"}.`,
+              {
+                listingId,
+                etsyListingId,
+                provider: "printify",
+                style: queued.style ?? null,
+                styleError: queued.styleError ?? null,
+              },
             );
           } else {
             await insertGumroadEvent(

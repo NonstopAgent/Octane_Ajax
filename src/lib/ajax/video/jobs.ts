@@ -244,8 +244,20 @@ export async function enqueueApprovalVideos(
     listingUrl?: string | null;
     hashtags?: string[];
   },
-): Promise<{ etsy: boolean; social: boolean; etsyError?: string }> {
-  const out: { etsy: boolean; social: boolean; etsyError?: string } = {
+): Promise<{
+  etsy: boolean;
+  social: boolean;
+  etsyError?: string;
+  style?: "product" | "lifestyle";
+  styleError?: string;
+}> {
+  const out: {
+    etsy: boolean;
+    social: boolean;
+    etsyError?: string;
+    style?: "product" | "lifestyle";
+    styleError?: string;
+  } = {
     etsy: false,
     social: false,
   };
@@ -273,11 +285,19 @@ export async function enqueueApprovalVideos(
       if (scene.data.imageBase64) {
         sourceDataUri = `data:image/png;base64,${scene.data.imageBase64}`;
         renderStyle = "lifestyle";
+      } else {
+        out.styleError = "scene generator returned no image";
       }
+    } else {
+      out.styleError = "image generator not configured";
     }
-  } catch {
-    // Scene generation is an upgrade, not a dependency.
+  } catch (err) {
+    // Scene generation is an upgrade, not a dependency — but a silent fallback
+    // is how we shipped a shop full of catalog zoom-ins without knowing. The
+    // reason rides back out on the result so the caller can log it.
+    out.styleError = err instanceof Error ? err.message : "scene render failed";
   }
+  out.style = renderStyle;
 
   const spec = buildVideoSpec({
     productTitle: input.title,
@@ -342,6 +362,13 @@ export async function enqueueApprovalVideos(
         businessId: input.businessId,
         kind: "social",
         requestId: socialSubmit.requestId,
+        // Tag the 9:16 clip with its listing so the social auto-poster can find
+        // it later. Without this the vertical render was posted once and then
+        // orphaned — every recurring promo fell back to the square listing clip
+        // (or a static photo) even though we had already paid for a feed-ready
+        // vertical video. Attachment to Etsy is unaffected: that path filters
+        // on kind = 'etsy_listing'.
+        etsyListingId: input.etsyListingId,
         postText: post,
       });
       out.social = s.ok;

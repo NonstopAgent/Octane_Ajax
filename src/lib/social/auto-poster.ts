@@ -48,17 +48,21 @@ type StagedJob = {
 };
 
 /**
- * TikTok is video-first — and its photo API rejects PNGs AND square images
- * (every product mockup we have is square, so image posts can never land
- * there). TikTok therefore only ever gets the listing's rendered product
- * video; when none exists yet it is skipped for the pass instead of burning
- * the job's retry budget on a guaranteed rejection.
+ * Every platform here is video-first in 2026 — Reels, Pins and TikToks with
+ * motion get reach; a single square catalog photo gets buried. So the poster
+ * sends the listing's rendered LIFESTYLE video to every due platform and only
+ * falls back to the static mockup when no video exists yet.
+ *
+ * Preference order: the 9:16 social clip (vertical, built for feeds) over the
+ * 1:1 listing clip. TikTok additionally rejects PNGs and square images, so it
+ * is skipped entirely on a photo-only pass rather than burning retries on a
+ * guaranteed rejection.
  */
-async function findListingVideoUrl(
+async function findPromoVideo(
   supabase: Supabase,
   userId: string,
   listingId: string | null,
-): Promise<string | null> {
+): Promise<{ url: string; vertical: boolean } | null> {
   if (!listingId) return null;
   const { data: listingRow } = await supabase
     .from(TABLES.LISTINGS)
@@ -68,18 +72,22 @@ async function findListingVideoUrl(
     .maybeSingle();
   const etsyId = String(listingRow?.gumroad_product_id ?? "");
   if (!/^\d+$/.test(etsyId)) return null;
-  const { data: vid } = await supabase
+  const { data: vids } = await supabase
     .from(TABLES.VIDEO_JOBS)
-    .select("video_url")
+    .select("video_url, kind")
     .eq("user_id", userId)
     .eq("etsy_listing_id", etsyId)
     .eq("status", "done")
     .not("video_url", "is", null)
     .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const url = vid?.video_url?.trim() ?? "";
-  return url.startsWith("https://") ? url : null;
+    .limit(5);
+  const rows = (vids ?? []).filter((v) =>
+    (v.video_url ?? "").trim().startsWith("https://"),
+  );
+  const social = rows.find((v) => v.kind === "social");
+  const chosen = social ?? rows[0];
+  if (!chosen?.video_url) return null;
+  return { url: chosen.video_url.trim(), vertical: chosen.kind === "social" };
 }
 
 export async function runSocialAutoPoster(
@@ -117,7 +125,7 @@ export async function runSocialAutoPoster(
       counts[key] = (counts[key] ?? 0) + 1;
     }
   }
-  let targets = duePlatforms(counts, defaultPlatforms());
+  const targets = duePlatforms(counts, defaultPlatforms());
   if (targets.length === 0) {
     summary.skipped = "daily_cap";
     return summary;
@@ -144,15 +152,13 @@ export async function runSocialAutoPoster(
     return summary;
   }
 
-  // Split the send: images go to the photo platforms, TikTok gets the
-  // listing's product video (see findListingVideoUrl for why).
-  const wantTiktok = targets.includes("tiktok");
+  // Video-first: one lifestyle clip to EVERY due platform (Reels/Pins/TikToks
+  // with motion get reach; a lone square catalog photo does not). The static
+  // mockup is a fallback, not the plan.
+  const promoVideo = await findPromoVideo(supabase, userId, job.listing_id);
   const photoTargets = targets.filter((p) => p !== "tiktok");
-  const tiktokVideoUrl = wantTiktok
-    ? await findListingVideoUrl(supabase, userId, job.listing_id)
-    : null;
 
-  if (photoTargets.length === 0 && !tiktokVideoUrl) {
+  if (!promoVideo && photoTargets.length === 0) {
     // Only TikTok was due and this listing has no video yet — leave the job
     // staged (untouched) for a pass where a photo platform has budget.
     summary.skipped = "tiktok_no_video";
@@ -169,53 +175,46 @@ export async function runSocialAutoPoster(
     .join("\n\n");
 
   const attempts: { platform: string; ok: boolean; error?: string }[] = [];
-  let result: Awaited<ReturnType<typeof publishPost>> | null = null;
-  if (photoTargets.length > 0) {
-    result = await publishPost({
-      post,
-      platforms: photoTargets,
-      mediaUrls: [job.asset_url!],
-    });
-    attempts.push(
-      ...photoTargets.map((p) => ({
-        platform: p,
-        ok: result!.ok,
-        error: result!.error ?? undefined,
-      })),
-    );
-  }
-  let tiktokResult: Awaited<ReturnType<typeof publishPost>> | null = null;
-  if (wantTiktok && tiktokVideoUrl) {
-    tiktokResult = await publishPost({
-      post,
-      platforms: ["tiktok"],
-      mediaUrls: [tiktokVideoUrl],
-    });
-    attempts.push({
-      platform: "tiktok",
-      ok: tiktokResult.ok,
-      error: tiktokResult.error ?? undefined,
+  const sendTargets = promoVideo ? targets : photoTargets;
+  const mediaKind: "video" | "photo" = promoVideo ? "video" : "photo";
+  const result = await publishPost({
+    post,
+    platforms: sendTargets,
+    mediaUrls: [promoVideo ? promoVideo.url : job.asset_url!],
+    isVideo: Boolean(promoVideo),
+  });
+  attempts.push(
+    ...sendTargets.map((p) => ({
+      platform: p,
+      ok: result.ok,
+      error: result.error ?? undefined,
+    })),
+  );
+
+  if (!promoVideo) {
+    // Never silently ship the weak version — a static square photo is the
+    // low-reach path, and the operator should see WHY it happened.
+    await supabase.from(TABLES.EVENTS).insert({
+      user_id: userId,
+      event_type: "social_static_fallback",
+      message:
+        "Posted a static product photo (low reach): this listing has no finished video yet, so there was no clip to post.",
+      agent_slug: "pixel",
+      room: "media_studio",
+      metadata: { contentJobId: job.id, listingId: job.listing_id } as Json,
     });
   }
 
-  const anyOk = (result?.ok ?? false) || (tiktokResult?.ok ?? false);
-  const combinedError =
-    [result?.error, tiktokResult?.error].filter(Boolean).join(" | ") || null;
+  const anyOk = result.ok;
+  const combinedError = result.error || null;
 
   if (anyOk) {
     // Platforms that actually accepted the post (partial success counts —
     // the job is DONE either way; retrying would duplicate the successes).
-    const photoLanded = result?.ok
-      ? result.posts && result.posts.length > 0
+    const landed =
+      result.posts && result.posts.length > 0
         ? result.posts.map((p) => p.platform).filter(Boolean)
-        : photoTargets
-      : [];
-    const tiktokLanded = tiktokResult?.ok
-      ? tiktokResult.posts && tiktokResult.posts.length > 0
-        ? tiktokResult.posts.map((p) => p.platform).filter(Boolean)
-        : ["tiktok"]
-      : [];
-    const landed = [...photoLanded, ...tiktokLanded];
+        : sendTargets;
     // NOTE: content_jobs.status check constraint allows 'published' (not
     // 'posted') — using an invalid value would silently fail the update and
     // the same job would repost every hour.
@@ -226,11 +225,12 @@ export async function runSocialAutoPoster(
         metadata: {
           ...(job.metadata ?? {}),
           social: {
-            ayrsharePostId:
-              result?.ayrsharePostId ?? tiktokResult?.ayrsharePostId ?? null,
-            posts: [...(result?.posts ?? []), ...(tiktokResult?.posts ?? [])],
+            ayrsharePostId: result.ayrsharePostId ?? null,
+            posts: result.posts ?? [],
             partialErrors: combinedError,
-            tiktokVideoUrl: tiktokVideoUrl ?? null,
+            mediaKind,
+            videoUrl: promoVideo?.url ?? null,
+            vertical: promoVideo?.vertical ?? false,
             postedAt: new Date().toISOString(),
           },
         } as Json,
@@ -242,13 +242,14 @@ export async function runSocialAutoPoster(
     await supabase.from(TABLES.EVENTS).insert({
       user_id: userId,
       event_type: "social_posted",
-      message: `Pixel promo posted to ${landed.join(", ")}${tiktokLanded.length > 0 ? " (TikTok got the product video)" : ""}: "${job.caption!.slice(0, 70)}"${combinedError ? ` (skipped: ${combinedError.slice(0, 80)})` : ""}`,
+      message: `Pixel promo posted to ${landed.join(", ")} as ${mediaKind === "video" ? `${promoVideo?.vertical ? "a vertical 9:16" : "a square"} lifestyle video` : "a static photo (no video rendered yet)"}: "${job.caption!.slice(0, 70)}"${combinedError ? ` (skipped: ${combinedError.slice(0, 80)})` : ""}`,
       agent_slug: "pixel",
       room: "media_studio",
       metadata: {
         contentJobId: job.id,
         platforms: landed,
-        posts: [...(result?.posts ?? []), ...(tiktokResult?.posts ?? [])],
+        posts: result.posts ?? [],
+        mediaKind,
         attempts,
       } as unknown as Json,
     });
