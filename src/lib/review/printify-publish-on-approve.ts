@@ -142,12 +142,16 @@ export async function enrichEtsyListingAfterPublish(
     // overnight publishes). Retry the binding, then fall back to an
     // exact-title match against the shop's active listings.
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    let etsyListingId = product.data.externalId;
 
-    // Trust a previously persisted binding first: the autopilot's
-    // binding-backfill repairs rows by title match, and once titles get
-    // renamed (medic/widget) the fallbacks below can never re-derive it.
-    if (!etsyListingId) {
+    // BINDING PRECEDENCE: the row's stored numeric id WINS over Printify's
+    // external field. Printify kept a STALE listing id after a republish
+    // (its external said 4534795607 — a dead listing — while the real one
+    // was 4534788962), and because externalId used to take precedence every
+    // heal pass re-persisted the dead id, silently reverting manual repairs.
+    // Stored ids come from live-shop matches or operator repairs; Printify's
+    // external is the fallback, not the authority.
+    let etsyListingId: string | null = null;
+    {
       const { data: row } = await supabase
         .from(TABLES.LISTINGS)
         .select("gumroad_product_id")
@@ -157,6 +161,20 @@ export async function enrichEtsyListingAfterPublish(
       const stored = String(row?.gumroad_product_id ?? "");
       if (/^\d+$/.test(stored)) etsyListingId = stored;
     }
+    if (
+      etsyListingId &&
+      product.data.externalId &&
+      product.data.externalId !== etsyListingId
+    ) {
+      await insertGumroadEvent(
+        supabase,
+        userId,
+        "listing_binding_mismatch",
+        `Printify's external listing id (${product.data.externalId}) disagrees with the stored binding (${etsyListingId}) — using the stored id. Printify likely kept a stale id after a republish.`,
+        { listingId, printifyProductId, stored: etsyListingId, printify: product.data.externalId },
+      );
+    }
+    if (!etsyListingId) etsyListingId = product.data.externalId;
     for (
       let attempt = 0;
       !etsyListingId && attempt < bindingAttempts;
