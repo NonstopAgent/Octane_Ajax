@@ -16,8 +16,8 @@ import {
 import { buildVideoSpec } from "@/lib/ajax/pixel/video-spec";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { createEtsyAdapter } from "@/lib/ajax/adapters/etsy";
-// ayrshare is server-only; import it lazily so this module loads under node:test.
-import type { SocialPlatform } from "@/lib/social/ayrshare";
+// ayrshare is server-only; the drain deliberately does NOT import it anymore —
+// posting is owned exclusively by the capped auto-poster.
 
 export type VideoJobKind = "etsy_listing" | "social";
 
@@ -131,25 +131,23 @@ async function completeEtsy(
   return { ok: true };
 }
 
+/**
+ * Social renders are NO LONGER auto-published from the drain. This path
+ * predated the capped auto-poster and ran in parallel with it: every finished
+ * 9:16 render fired straight to every default platform — no daily caps, no
+ * TikTok draft mode, no social_posted event (so invisible to the cadence
+ * counter AND the learning loop). On 2026-07-14 that meant 23 renders became
+ * ~25 unthrottled posts in one night — exactly the spam-flag risk the
+ * operator got warned about. The drain now just marks the clip done with its
+ * URL; the auto-poster (caps, drafts, thumbnails, events) is the ONLY thing
+ * that posts.
+ */
 async function completeSocial(
-  job: VideoJobRow,
-  videoUrl: string,
-  deps: DrainDeps,
+  _job: VideoJobRow,
+  _videoUrl: string,
+  _deps: DrainDeps,
 ): Promise<{ ok: boolean; error?: string }> {
-  let publish = deps.publish;
-  let platforms = (job.platforms ?? []) as SocialPlatform[];
-  if (!publish || platforms.length === 0) {
-    const ayr = await import("@/lib/social/ayrshare");
-    publish = publish ?? ayr.publishPost;
-    if (platforms.length === 0) platforms = ayr.defaultPlatforms();
-  }
-  const result = await publish({
-    post: job.post_text ?? "New drop 🐾",
-    platforms,
-    mediaUrls: [videoUrl],
-    isVideo: true,
-  });
-  return result.ok ? { ok: true } : { ok: false, error: result.error };
+  return { ok: true };
 }
 
 /** Poll pending jobs and finish the ones whose render is done. */

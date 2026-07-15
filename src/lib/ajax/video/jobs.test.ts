@@ -112,7 +112,10 @@ describe("drainVideoJobs", () => {
     assert.ok(state.updates.some((u) => u.status === "done"));
   });
 
-  it("posts a completed social render to social", async () => {
+  it("completes a social render WITHOUT auto-publishing (poster owns posting)", async () => {
+    // Regression guard: the drain used to fire every finished social render
+    // straight to Ayrshare — uncapped, no events — producing ~25 posts in one
+    // night on 2026-07-14. Posting is the capped auto-poster's job alone.
     const state: State = {
       jobs: [
         {
@@ -128,17 +131,19 @@ describe("drainVideoJobs", () => {
       inserts: [],
       updates: [],
     };
-    let posted: { isVideo?: boolean; media?: string[] } | null = null;
+    let published = false;
     const summary = await drainVideoJobs(makeSupabase(state), "u1", {
       poll: completedPoll,
-      publish: (async (input: { mediaUrls?: string[]; isVideo?: boolean }) => {
-        posted = { isVideo: input.isVideo, media: input.mediaUrls };
+      publish: (async () => {
+        published = true;
         return { ok: true };
       }) as never,
     });
     assert.equal(summary.done, 1);
-    assert.equal(posted!.isVideo, true);
-    assert.deepEqual(posted!.media, ["https://fal.media/out.mp4"]);
+    assert.equal(published, false, "drain must never publish to social");
+    // The clip is stored as done with its URL so the poster can reuse it.
+    const done = state.updates.find((u) => u.status === "done");
+    assert.ok(done);
   });
 
   it("leaves a still-rendering job pending and bumps attempts", async () => {
