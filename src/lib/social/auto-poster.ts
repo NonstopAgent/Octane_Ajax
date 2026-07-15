@@ -165,9 +165,11 @@ export async function runSocialAutoPoster(
     return summary;
   }
 
+  // Instagram HARD-REJECTS posts over 10 hashtags ("Too many hashtags") —
+  // 12 was zeroing every IG send. 8 leaves margin for platform quirks.
   const hashtags = (job.metadata?.hashtags ?? [])
     .map((h) => (h.startsWith("#") ? h : `#${h}`))
-    .slice(0, 12)
+    .slice(0, 8)
     .join(" ");
   const link = job.metadata?.productUrl?.trim() || SHOP_URL;
   const post = [job.caption!.trim(), `🛒 ${link}`, hashtags]

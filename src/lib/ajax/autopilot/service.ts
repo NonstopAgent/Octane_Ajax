@@ -360,8 +360,38 @@ export async function runShopAutopilot(
     critical: boolean;
   }[] = [];
 
+  // DB rows that claim "published" but whose listing is NOT in the live
+  // active set: deactivated by Etsy/Printify sync, expired, or deleted. Three
+  // listings sat inactive for days with no one noticing (2026-07-14) because
+  // nothing ever compared the two worlds. Surface it every pass.
+  {
+    const liveIds = new Set(liveListings.map((l) => l.listingId));
+    const missing: string[] = [];
+    for (const [etsyId] of internalByEtsyId) {
+      if (!liveIds.has(etsyId)) missing.push(etsyId);
+    }
+    if (missing.length > 0) {
+      const recTitle = `Investigate ${missing.length} listing(s) that are no longer active on Etsy`;
+      if (!openRecTitles.has(recTitle)) {
+        openRecTitles.add(recTitle);
+        await insertRecommendation(supabase, userId, runId, {
+          category: "fix",
+          title: recTitle,
+          rationale: `These listing ids are published in the database but missing from the live active shop: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""}. Etsy or a Printify republish likely deactivated them.`,
+          recommendedAction:
+            "Check Shop Manager → Listings → Inactive. Fix media/shipping profile issues, then reactivate — or archive the DB row if retired deliberately.",
+          priority: 1,
+        });
+        result.recommended += 1;
+      }
+    }
+  }
+
   for (const live of liveListings.slice(0, MAX_LISTINGS_PER_PASS)) {
     if (!credentials) break;
+    // Pace the detail sweep — bursts of getListingDetails tripped Etsy's
+    // per-second limit (passes were erroring on 11-13 of 25 listings).
+    await new Promise((r) => setTimeout(r, 300));
     let details: EtsyListingDetails;
     try {
       details = await adapter.getListingDetails(

@@ -1,0 +1,110 @@
+import "server-only";
+
+/**
+ * Vision QA — the review gate's EYES.
+ *
+ * Until 2026-07-15 nothing in the pipeline ever LOOKED at the finished
+ * product: Sage reviewed text and the flat artwork, approved a poster whose
+ * art didn't fill the print area, and the poster shipped to Etsy and social.
+ * The first vision check in the whole system was the operator's own eyeballs.
+ *
+ * This module puts a cheap multimodal check on the REAL Printify mockup —
+ * the image buyers actually see — before anything is approved for publish.
+ *
+ * Failure policy: a model verdict of "fail" BLOCKS approval. A transport
+ * error (API down, bad key) fails OPEN with `checked:false` so a vendor
+ * outage can't freeze production — callers must log that loudly.
+ */
+
+export type VisionQaResult = {
+  /** False when the check could not run (no key / transport error). */
+  checked: boolean;
+  pass: boolean;
+  issues: string[];
+  model?: string;
+};
+
+const PROMPT = `You are a strict print-on-demand quality inspector. Look at this product mockup image and answer in JSON only.
+
+Check for these defects:
+1. FILL: does the printed design properly fill the product's print area? Unintended blank/white margins, letterboxing, or a design floating small inside a larger print area is a FAIL. (Deliberate framing/borders that look designed are fine.)
+2. CROP: is any text or key design element cut off at an edge?
+3. TEXT: is all text in the design legible (not garbled, warped, or misspelled)?
+4. MATCH: does the product in the image match this listing title: "{TITLE}"? (e.g. a mug mockup for a poster listing is a FAIL)
+5. QUALITY: any obvious rendering artifacts, distortion, or unfinished-looking areas?
+
+Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failed check, empty if pass"]}`;
+
+export async function visionCheckProductMockup(input: {
+  mockupUrl: string;
+  productTitle: string;
+}): Promise<VisionQaResult> {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) {
+    return {
+      checked: false,
+      pass: true,
+      issues: ["OPENAI_API_KEY not set — vision QA skipped"],
+    };
+  }
+  const model = process.env.VISION_QA_MODEL?.trim() || "gpt-4o-mini";
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: PROMPT.replace("{TITLE}", input.productTitle.slice(0, 140)),
+              },
+              { type: "image_url", image_url: { url: input.mockupUrl } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 300,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        checked: false,
+        pass: true,
+        issues: [`vision API error: ${json.error?.message ?? res.status}`],
+        model,
+      };
+    }
+    const raw = json.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { pass?: boolean; issues?: string[] };
+    return {
+      checked: true,
+      pass: parsed.pass === true,
+      issues: Array.isArray(parsed.issues)
+        ? parsed.issues.map((i) => String(i)).slice(0, 6)
+        : [],
+      model,
+    };
+  } catch (err) {
+    return {
+      checked: false,
+      pass: true,
+      issues: [
+        `vision check failed to run: ${err instanceof Error ? err.message : "unknown"}`,
+      ],
+      model,
+    };
+  }
+}

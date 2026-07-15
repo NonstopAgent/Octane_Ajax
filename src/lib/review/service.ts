@@ -18,6 +18,11 @@ import {
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
 import { publishListingViaPrintify } from "@/lib/review/printify-publish-on-approve";
+import { visionCheckProductMockup } from "@/lib/review/mockup-vision-qa";
+import {
+  createPrintifyAdapter,
+  isPrintifyConfigured,
+} from "@/lib/ajax/adapters/printify";
 import type { ProductGeneration } from "@/lib/product/domain";
 import type { ContentJob, ProductListing, ReviewItem } from "@/lib/ajax/types";
 import type { Json } from "@/lib/supabase/database.types";
@@ -212,6 +217,73 @@ export async function approveReview(
     pending.product_listings?.product_ideas?.raw_payload,
   );
   const isDemo = isDemoReviewBypass({ ideaRawPayload });
+
+  // ---- VISION GATE: the reviewer must SEE the product -----------------------
+  // Sage reviewed text + flat artwork and approved a poster whose art didn't
+  // fill the print area; it shipped to Etsy AND social. Nothing may be
+  // approved without a multimodal look at the real Printify mockup.
+  if (!isDemo && isPrintifyConfigured()) {
+    try {
+      const { data: gen } = await supabase
+        .from(TABLES.GENERATIONS)
+        .select("structure")
+        .eq("product_listing_id", listingId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const printifyProductId = (
+        gen?.structure as {
+          metadata?: { fulfillment?: { printifyProductId?: string } };
+        } | null
+      )?.metadata?.fulfillment?.printifyProductId?.trim();
+      if (printifyProductId) {
+        const product = await createPrintifyAdapter().getProduct(
+          printifyProductId,
+        );
+        const mockupUrl = product.data.images.find((i) => i.src)?.src;
+        const title =
+          pending.product_listings?.title ?? product.data.title ?? "";
+        if (mockupUrl) {
+          const qa = await visionCheckProductMockup({
+            mockupUrl,
+            productTitle: title,
+          });
+          if (qa.checked && !qa.pass) {
+            await insertEvent(supabase, userId, {
+              event_type: "vision_qa_failed",
+              agent_slug: AGENT_SLUGS.FORGE,
+              room: ROOM_SLUGS.REVIEW_GATE,
+              message: `Vision QA REJECTED the mockup before approval: ${qa.issues.join("; ").slice(0, 220)}`,
+              metadata: { reviewId, listingId, issues: qa.issues, model: qa.model } as Json,
+            });
+            throw new ReviewError(
+              `Vision QA failed on the product mockup: ${qa.issues.join("; ").slice(0, 200)}`,
+              422,
+            );
+          }
+          if (!qa.checked) {
+            await insertEvent(supabase, userId, {
+              event_type: "vision_qa_skipped",
+              agent_slug: AGENT_SLUGS.FORGE,
+              room: ROOM_SLUGS.REVIEW_GATE,
+              message: `Vision QA could not run (${qa.issues.join("; ").slice(0, 160)}) — approval proceeded UNCHECKED.`,
+              metadata: { reviewId, listingId } as Json,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof ReviewError) throw err;
+      // Diagnostics failures must not block production — but be loud.
+      await insertEvent(supabase, userId, {
+        event_type: "vision_qa_skipped",
+        agent_slug: AGENT_SLUGS.FORGE,
+        room: ROOM_SLUGS.REVIEW_GATE,
+        message: `Vision QA errored (${err instanceof Error ? err.message : "unknown"}) — approval proceeded UNCHECKED.`,
+        metadata: { reviewId, listingId } as Json,
+      });
+    }
+  }
   const generation = await loadGenerationForListing(
     supabase,
     userId,
