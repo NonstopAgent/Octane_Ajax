@@ -63,6 +63,13 @@ export async function publishPost(input: {
   platforms: SocialPlatform[];
   mediaUrls?: string[];
   isVideo?: boolean;
+  /**
+   * REQUIRED by Pinterest for video pins — Ayrshare rejects the whole pin
+   * with "Invalid thumbnail url" without it (which silently zeroed a full
+   * day of Pinterest posting on 2026-07-14). Any https jpg/png works; we
+   * pass the listing's static mockup.
+   */
+  pinterestThumbnailUrl?: string | null;
   profileKey?: string | null;
 }): Promise<PublishResult> {
   const key = socialApiKey();
@@ -92,6 +99,13 @@ export async function publishPost(input: {
   if (input.mediaUrls && input.mediaUrls.length > 0) {
     body.mediaUrls = input.mediaUrls;
     if (input.isVideo) body.isVideo = true;
+  }
+  if (
+    input.isVideo &&
+    input.platforms.includes("pinterest") &&
+    input.pinterestThumbnailUrl?.startsWith("https://")
+  ) {
+    body.pinterestOptions = { thumbNail: input.pinterestThumbnailUrl };
   }
 
   try {

@@ -182,6 +182,9 @@ export async function runSocialAutoPoster(
     platforms: sendTargets,
     mediaUrls: [promoVideo ? promoVideo.url : job.asset_url!],
     isVideo: Boolean(promoVideo),
+    // Pinterest hard-requires a thumbnail on video pins — the job's static
+    // mockup is exactly that. Without it Ayrshare rejects the pin outright.
+    pinterestThumbnailUrl: promoVideo ? job.asset_url : null,
   });
   attempts.push(
     ...sendTargets.map((p) => ({
