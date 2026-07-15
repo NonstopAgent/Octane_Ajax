@@ -70,6 +70,13 @@ export async function publishPost(input: {
    * pass the listing's static mockup.
    */
   pinterestThumbnailUrl?: string | null;
+  /**
+   * TikTok drafts: the clip lands in the operator's TikTok app inbox
+   * ("Your content from Ayrshare is ready") to add a TRENDING SOUND and
+   * publish in-app — API posts can't attach trending audio, and silent
+   * clips get buried. Operator-chosen workflow (2026-07-14).
+   */
+  tiktokDraft?: boolean;
   profileKey?: string | null;
 }): Promise<PublishResult> {
   const key = socialApiKey();
@@ -106,6 +113,9 @@ export async function publishPost(input: {
     input.pinterestThumbnailUrl?.startsWith("https://")
   ) {
     body.pinterestOptions = { thumbNail: input.pinterestThumbnailUrl };
+  }
+  if (input.tiktokDraft && input.platforms.includes("tiktok")) {
+    body.tikTokOptions = { draft: true };
   }
 
   try {

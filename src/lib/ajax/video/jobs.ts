@@ -266,6 +266,31 @@ export async function enqueueApprovalVideos(
     return out;
   }
 
+  // HARD DAILY BUDGET CAP. 2026-07-14 submitted 64 renders (~$22) in one day
+  // when a regen wave met the per-listing double render — the operator saw
+  // $50 vanish in days. Renders queued today (any status: submitted = spent)
+  // count against VIDEO_DAILY_RENDER_CAP; over the cap, enrichment skips
+  // LOUDLY and the next day's budget picks the work back up.
+  const dailyCap = (() => {
+    const raw = Number(process.env.VIDEO_DAILY_RENDER_CAP);
+    return Number.isFinite(raw) && raw > 0 ? raw : 8;
+  })();
+  try {
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from(TABLES.VIDEO_JOBS)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", input.userId)
+      .gte("created_at", dayStart.toISOString());
+    if ((count ?? 0) >= dailyCap) {
+      out.etsyError = `daily render budget reached (${count}/${dailyCap} today) — resumes tomorrow or raise VIDEO_DAILY_RENDER_CAP`;
+      return out;
+    }
+  } catch {
+    // Budget check is best-effort; a DB hiccup must not block renders.
+  }
+
   // Lifestyle-first: place the product into a real scene (worn, hung on a
   // door, on a kitchen table) and animate THAT — zoom-ins on catalog shots
   // looked like nobody tried. Falls back to the raw mockup if the scene
@@ -327,12 +352,16 @@ export async function enqueueApprovalVideos(
     out.etsyError = etsySubmit.error ?? "fal submit failed";
   }
 
-  // Social auto-post is OFF by default (listing video is the point). It fires
-  // only when the operator opts in with SOCIAL_VIDEO_AUTOPOST=true AND Ayrshare
-  // is connected — so connecting social for manual posting won't silently start
-  // spending a second render per approval.
+  // The separate 9:16 vertical render is now OPT-IN (SOCIAL_VIDEO_RENDER_VERTICAL
+  // on top of SOCIAL_VIDEO_AUTOPOST): it DOUBLED per-listing cost ($0.70 vs
+  // $0.35) while TikTok demonstrably accepted the square listing clip. The
+  // social poster reuses the 1:1 clip; flip the env if analytics later show
+  // vertical meaningfully outperforms.
   let socialOn = false;
-  if (process.env.SOCIAL_VIDEO_AUTOPOST === "true") {
+  if (
+    process.env.SOCIAL_VIDEO_AUTOPOST === "true" &&
+    process.env.SOCIAL_VIDEO_RENDER_VERTICAL === "true"
+  ) {
     try {
       socialOn = (await import("@/lib/social/ayrshare")).isSocialConfigured();
     } catch {

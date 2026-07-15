@@ -185,6 +185,9 @@ export async function runSocialAutoPoster(
     // Pinterest hard-requires a thumbnail on video pins — the job's static
     // mockup is exactly that. Without it Ayrshare rejects the pin outright.
     pinterestThumbnailUrl: promoVideo ? job.asset_url : null,
+    // TikTok goes out as a DRAFT: the operator opens the app, adds a trending
+    // sound (the reach lever API posts can't touch), and taps publish.
+    tiktokDraft: true,
   });
   attempts.push(
     ...sendTargets.map((p) => ({
