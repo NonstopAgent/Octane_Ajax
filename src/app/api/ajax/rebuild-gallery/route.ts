@@ -21,6 +21,7 @@ export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import {
+  buildSiblingMockupUrls,
   createPrintifyAdapter,
   pickMockupImages,
 } from "@/lib/ajax/adapters/printify";
@@ -48,6 +49,12 @@ export async function POST(req: Request) {
       etsyListingId?: string;
       wipe?: boolean;
       target?: number;
+      /** Same-blueprint product with a healthy mockup selection. When this
+       * product's own API-visible selection has collapsed to 1 (placement
+       * updates reset it, and publish can only re-select from what it can
+       * see — circular), the donor's camera angles are borrowed by swapping
+       * product ids in the CDN paths, yielding THIS product's own renders. */
+      donorProductId?: string;
     };
     if (!body.printifyProductId?.trim() || !body.etsyListingId?.trim()) {
       return NextResponse.json(
@@ -74,21 +81,55 @@ export async function POST(req: Request) {
       ...(await etsy.getListingImages(listingId, credentials.access_token)),
     ];
 
-    const details = await printify.getProduct(body.printifyProductId.trim());
+    const productId = body.printifyProductId.trim();
+    const details = await printify.getProduct(productId);
     const picks = pickMockupImages(details.data.images ?? [], target);
+    let sourceUrls = picks.map((p) => p.image.src);
+    let usedDonor = false;
 
-    if (wipe && picks.length < minPicks) {
+    if (sourceUrls.length < minPicks && body.donorProductId?.trim()) {
+      const donor = await printify.getProduct(body.donorProductId.trim());
+      const candidates = buildSiblingMockupUrls(
+        donor.data.images ?? [],
+        body.donorProductId.trim(),
+        productId,
+        target,
+      );
+      const verified: string[] = [];
+      for (const url of candidates) {
+        try {
+          const head = await fetch(url, { method: "GET" });
+          if (head.ok) verified.push(url);
+        } catch {
+          // skip URLs that don't resolve
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      if (verified.length >= minPicks) {
+        // Own front mockup first when we have it, then the donor angles.
+        const own = sourceUrls[0];
+        sourceUrls = own
+          ? [own, ...verified.filter((u) => u !== own)]
+          : verified;
+        sourceUrls = sourceUrls.slice(0, target);
+        usedDonor = true;
+      }
+    }
+
+    if (wipe && sourceUrls.length < minPicks) {
       return NextResponse.json(
         {
           ok: false,
           notReady: true,
-          error: `Printify serves only ${picks.length} mockup(s) — regeneration still in progress; gallery left untouched.`,
+          error: `Printify serves only ${sourceUrls.length} usable mockup(s) — regeneration still in progress; gallery left untouched.`,
         },
         { status: 422 },
       );
     }
 
-    const uploadSet = wipe ? picks : picks.slice(staleIds.length > 0 ? 1 : 0);
+    const uploadSet = wipe
+      ? sourceUrls
+      : sourceUrls.slice(staleIds.length > 0 ? 1 : 0);
     let uploaded = 0;
     const errors: string[] = [];
 
@@ -116,10 +157,10 @@ export async function POST(req: Request) {
         await new Promise((r) => setTimeout(r, 350));
       }
     }
-    for (const pick of uploadSet) {
+    for (const srcUrl of uploadSet) {
       if (!wipe && staleIds.length + uploaded >= target) break;
       try {
-        const imgRes = await fetch(pick.image.src);
+        const imgRes = await fetch(srcUrl);
         if (!imgRes.ok) throw new Error(`download ${imgRes.status}`);
         const buffer = Buffer.from(await imgRes.arrayBuffer());
         await etsy.uploadListingImage(
@@ -175,6 +216,7 @@ export async function POST(req: Request) {
         etsyListingId: listingId,
         printifyProductId: body.printifyProductId,
         wipe,
+        usedDonor,
         before: staleIds.length + preDeleted,
         uploaded,
         deleted: deleted + preDeleted,
@@ -187,6 +229,7 @@ export async function POST(req: Request) {
       ok: true,
       uploaded,
       deleted,
+      usedDonor,
       galleryCount: afterCount,
       errors,
     });
