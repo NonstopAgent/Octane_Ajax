@@ -126,10 +126,12 @@ export function buildFalInput(
     // Hard cap at 5s regardless of the spec's storyboard length.
     duration: "5",
     aspect_ratio: aspectRatio,
+    // Text hardening (2026-07-17): the operator caught published videos with
+    // blurred/garbled printed text. Every text-failure mode is named.
     negative_prompt:
       style === "lifestyle"
-        ? "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, scene change, camera cut, people appearing or leaving, distorted faces, extra limbs, glitch, distortion, blur, low quality"
-        : "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, artwork mutating, objects appearing, hands, people, animals, scene change, camera cut, glitch, distortion, blur, low quality",
+        ? "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, garbled text, warped letters, misspelled words, blurry text, unreadable lettering, artwork mutating, scene change, camera cut, people appearing or leaving, distorted faces, extra limbs, glitch, distortion, blur, low quality"
+        : "morphing, warping, deforming, melting, product changing shape, text changing or dissolving, garbled text, warped letters, misspelled words, blurry text, unreadable lettering, artwork mutating, objects appearing, hands, people, animals, scene change, camera cut, glitch, distortion, blur, low quality",
     cfg_scale: 0.7,
   };
 }

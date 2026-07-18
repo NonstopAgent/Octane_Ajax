@@ -306,8 +306,28 @@ export async function enqueueApprovalVideos(
         productTitle: input.title,
       });
       if (scene.data.imageBase64) {
-        sourceDataUri = `data:image/png;base64,${scene.data.imageBase64}`;
-        renderStyle = "lifestyle";
+        const sceneUri = `data:image/png;base64,${scene.data.imageBase64}`;
+        // SCENE QA GATE — the scene generator REDRAWS the product, and on
+        // 2026-07-17 the operator caught videos with garbled printed text
+        // ("Cooper Chose Me" became invented words). A scene whose design
+        // doesn't match the real mockup letter-for-letter never becomes a
+        // video source; the crisp real mockup is the fallback.
+        const { visionCompareSceneToMockup } = await import(
+          "@/lib/review/mockup-vision-qa"
+        );
+        const compare = await visionCompareSceneToMockup({
+          mockupUrl: sourceDataUri,
+          sceneUrl: sceneUri,
+        });
+        if (!compare.checked || compare.pass) {
+          sourceDataUri = sceneUri;
+          renderStyle = "lifestyle";
+          if (!compare.checked) {
+            out.styleError = `scene QA could not run (${compare.issues[0] ?? "unknown"}) — lifestyle kept unverified`;
+          }
+        } else {
+          out.styleError = `scene rejected by QA: ${compare.issues.join("; ").slice(0, 160)} — using real mockup`;
+        }
       } else {
         out.styleError = "scene generator returned no image";
       }

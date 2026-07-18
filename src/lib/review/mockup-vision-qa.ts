@@ -35,6 +35,92 @@ Check for these defects:
 
 Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failed check, empty if pass"]}`;
 
+const COMPARE_PROMPT = `You are a strict print-on-demand quality inspector comparing two images of the SAME product. Image 1 is the authoritative product mockup. Image 2 is an AI-generated lifestyle scene of that product.
+
+Check ONLY the product's printed design in image 2 against image 1:
+1. TEXT: every word must match image 1 letter-for-letter and be legible. Garbled, warped, misspelled, blurred, or invented text is a FAIL.
+2. ARTWORK: same artwork, same colors, same composition. A redrawn/altered design is a FAIL.
+
+Respond with JSON exactly: {"match": true|false, "issues": ["short description, empty if match"]}`;
+
+/**
+ * Compare the printed design in a generated lifestyle scene against the real
+ * mockup. The scene generator REDRAWS the product — on 2026-07-17 the
+ * operator caught listing videos where the shirt's text was garbled
+ * ("Cooper Chose Me" became invented words). A scene that fails this check
+ * must never become a video source; callers fall back to the real mockup.
+ */
+export async function visionCompareSceneToMockup(input: {
+  mockupUrl: string;
+  sceneUrl: string;
+}): Promise<VisionQaResult> {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) {
+    return {
+      checked: false,
+      pass: true,
+      issues: ["OPENAI_API_KEY not set — scene QA skipped"],
+    };
+  }
+  const model = process.env.VISION_QA_MODEL?.trim() || "gpt-4o-mini";
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: COMPARE_PROMPT },
+              { type: "image_url", image_url: { url: input.mockupUrl } },
+              { type: "image_url", image_url: { url: input.sceneUrl } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 300,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        checked: false,
+        pass: true,
+        issues: [`vision API error: ${json.error?.message ?? res.status}`],
+        model,
+      };
+    }
+    const raw = json.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { match?: boolean; issues?: string[] };
+    return {
+      checked: true,
+      pass: parsed.match === true,
+      issues: Array.isArray(parsed.issues)
+        ? parsed.issues.map((i) => String(i)).slice(0, 6)
+        : [],
+      model,
+    };
+  } catch (err) {
+    return {
+      checked: false,
+      pass: true,
+      issues: [
+        `scene compare failed to run: ${err instanceof Error ? err.message : "unknown"}`,
+      ],
+      model,
+    };
+  }
+}
+
 export async function visionCheckProductMockup(input: {
   mockupUrl: string;
   productTitle: string;
