@@ -10,6 +10,12 @@ import {
   demoResult,
   liveResult,
 } from "@/lib/ajax/adapters/types";
+import {
+  centeredPlacement,
+  fitScale,
+  getPlaceholderDims,
+  type Placement,
+} from "@/lib/ajax/printify-placement";
 
 const PRINTIFY_API_BASE = "https://api.printify.com/v1";
 
@@ -37,6 +43,8 @@ export type PrintifyProductInput = {
   tags?: string[];
   /** Per-variant retail price (USD cents) keyed by variant id. */
   variantPrices?: Record<number, number>;
+  /** Artwork aspect ratio (w/h) for placement fitting. Defaults to 1 (square). */
+  artworkAspect?: number;
 };
 
 export type PrintifyProduct = {
@@ -163,6 +171,16 @@ export type PrintifyProductContentUpdate = {
   artworkUploadId?: string;
 };
 
+/** Outcome of normalizing a product's print-area placement. */
+export type PrintifyPlacementFix = {
+  productId: string;
+  blueprintId: number | null;
+  areaDims: { width: number; height: number } | null;
+  images: { id: string; before: Placement; after: Placement }[];
+  /** false = placement was already correct; no PUT issued. */
+  changed: boolean;
+};
+
 export interface PrintifyAdapter {
   uploadArtwork(
     input: PrintifyArtworkInput,
@@ -183,6 +201,11 @@ export interface PrintifyAdapter {
     productId: string,
     update: PrintifyProductContentUpdate,
   ): Promise<AdapterResult<{ productId: string; updated: string[] }>>;
+  /** Normalize print placement: contain-fit scale, centered, unrotated.
+   * Repairs the scale:1 defect wave; Printify regenerates mockups async. */
+  fixPrintPlacement(
+    productId: string,
+  ): Promise<AdapterResult<PrintifyPlacementFix>>;
   publishProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyPublishedProduct>>;
@@ -473,6 +496,23 @@ export function createDemoPrintifyAdapter(
       });
     },
 
+    async fixPrintPlacement(productId) {
+      const before = { x: 0.5, y: 0.5, scale: 1, angle: 0 };
+      return demoResult("Printify placement fix simulated.", {
+        productId,
+        blueprintId: 503,
+        areaDims: { width: 2475, height: 1050 },
+        images: [
+          {
+            id: "demo-art",
+            before,
+            after: { x: 0.5, y: 0.5, scale: fitScale(1, 2475 / 1050), angle: 0 },
+          },
+        ],
+        changed: true,
+      });
+    },
+
     async publishProduct(productId) {
       return demoResult("Printify product publish simulated.", {
         productId,
@@ -577,10 +617,30 @@ export function createLivePrintifyAdapter(
                 images: [
                   {
                     id: input.artworkUploadId,
-                    x: 0.5,
-                    y: 0.5,
-                    scale: 1,
-                    angle: 0,
+                    // Contain-fit, centered. The old hardcoded scale:1 rendered
+                    // square art at full print-area WIDTH — on mug wraps that
+                    // cropped tops/bottoms and sheared text at the wrap edges
+                    // (the July 2026 defect wave). Never ship scale 1 unless
+                    // the art's aspect actually matches the print area's.
+                    ...(await (async () => {
+                      const dims = await getPlaceholderDims({
+                        blueprintId,
+                        printProviderId,
+                        variantId: variantIds[0],
+                        apiToken: token,
+                        fetchImpl,
+                      });
+                      if (!dims) {
+                        console.warn(
+                          `[printify] no catalog dims for blueprint ${blueprintId} — creating with conservative 0.85 scale.`,
+                        );
+                        return { x: 0.5, y: 0.5, scale: 0.85, angle: 0 };
+                      }
+                      return centeredPlacement(
+                        input.artworkAspect ?? 1,
+                        dims.width / dims.height,
+                      );
+                    })()),
                   },
                 ],
               },
@@ -764,6 +824,137 @@ export function createLivePrintifyAdapter(
       }
 
       return liveResult("Printify product updated.", { productId, updated });
+    },
+
+    async fixPrintPlacement(productId) {
+      const productUrl = `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`;
+      const res = await fetchImpl(productUrl, { headers });
+      if (!res.ok) {
+        throw new Error(`Printify product fetch failed (${res.status}).`);
+      }
+      type RawImage = Record<string, unknown> & {
+        id?: string;
+        x?: number;
+        y?: number;
+        scale?: number;
+        angle?: number;
+        width?: number;
+        height?: number;
+      };
+      type RawPlaceholder = Record<string, unknown> & {
+        position?: string;
+        images?: RawImage[];
+      };
+      type RawArea = Record<string, unknown> & {
+        variant_ids?: number[];
+        placeholders?: RawPlaceholder[];
+      };
+      const product = (await res.json()) as {
+        blueprint_id?: number;
+        print_provider_id?: number;
+        print_areas?: RawArea[];
+      };
+      const blueprintId = product.blueprint_id ?? null;
+      const providerId = product.print_provider_id ?? null;
+      const areas = Array.isArray(product.print_areas) ? product.print_areas : [];
+      if (!blueprintId || !providerId || areas.length === 0) {
+        throw new Error("Product has no print areas to repair.");
+      }
+
+      const fixes: { id: string; before: Placement; after: Placement }[] = [];
+      let areaDims: { width: number; height: number } | null = null;
+      let changed = false;
+
+      const nextAreas = areas
+        .map((area) => ({
+          variant_ids: area.variant_ids ?? [],
+          placeholders: (area.placeholders ?? [])
+            .filter((ph) => (ph.images ?? []).length > 0)
+            .map((ph) => ({ area, ph })),
+        }))
+        .filter((a) => a.placeholders.length > 0);
+      if (nextAreas.length === 0) {
+        throw new Error("Product has no printed placeholders to repair.");
+      }
+
+      const body = {
+        print_areas: [] as {
+          variant_ids: number[];
+          placeholders: {
+            position: string;
+            images: { id: string; x: number; y: number; scale: number; angle: number }[];
+          }[];
+        }[],
+      };
+
+      for (const area of nextAreas) {
+        const placeholders = [];
+        for (const { ph } of area.placeholders) {
+          const position = ph.position ?? "front";
+          const dims = await getPlaceholderDims({
+            blueprintId,
+            printProviderId: providerId,
+            variantId: area.variant_ids[0],
+            position,
+            apiToken: token,
+            fetchImpl,
+          });
+          if (!dims) {
+            throw new Error(
+              `No print-area dimensions for blueprint ${blueprintId}/${position} — refusing to guess placement.`,
+            );
+          }
+          areaDims = dims;
+          const areaAspect = dims.width / dims.height;
+          const images = (ph.images ?? []).map((img) => {
+            const before: Placement = {
+              x: typeof img.x === "number" ? img.x : 0.5,
+              y: typeof img.y === "number" ? img.y : 0.5,
+              scale: typeof img.scale === "number" ? img.scale : 1,
+              angle: typeof img.angle === "number" ? img.angle : 0,
+            };
+            const imgAspect =
+              img.width && img.height && img.height > 0
+                ? img.width / img.height
+                : 1;
+            const after = centeredPlacement(imgAspect, areaAspect);
+            const id = typeof img.id === "string" ? img.id : "";
+            fixes.push({ id, before, after });
+            if (
+              Math.abs(before.scale - after.scale) > 0.02 ||
+              Math.abs(before.x - after.x) > 0.02 ||
+              Math.abs(before.y - after.y) > 0.02 ||
+              Math.abs(before.angle - after.angle) > 0.5
+            ) {
+              changed = true;
+            }
+            return { id, ...after };
+          });
+          placeholders.push({ position, images });
+        }
+        body.print_areas.push({ variant_ids: area.variant_ids, placeholders });
+      }
+
+      if (changed) {
+        const putRes = await fetchImpl(productUrl, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(body),
+        });
+        if (!putRes.ok) {
+          const errBody = await putRes.text();
+          throw new Error(
+            `Printify placement update failed (${putRes.status}): ${errBody}`,
+          );
+        }
+      }
+
+      return liveResult(
+        changed
+          ? "Print placement normalized — Printify is regenerating mockups."
+          : "Print placement already correct.",
+        { productId, blueprintId, areaDims, images: fixes, changed },
+      );
     },
 
     async publishProduct(productId) {
