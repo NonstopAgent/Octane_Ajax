@@ -1,14 +1,23 @@
 /**
- * POST /api/ajax/rebuild-gallery — pad a listing's Etsy gallery with the
- * product's own Printify mockups. Printify's publish sync doesn't reliably
- * push the full mockup selection to existing listings (three repaired
- * listings stayed at 2 photos), and the heal path only enforces a 2-photo
- * floor. This uploads a varied mockup set (front + angles + context) until
- * the gallery reaches the target.
+ * POST /api/ajax/rebuild-gallery — rebuild a listing's Etsy gallery from the
+ * product's CURRENT Printify mockups.
  *
- * Body: { printifyProductId: string, etsyListingId: string, target?: number }
+ * Modes:
+ *  - wipe (default): upload the full fresh mockup set, then DELETE every
+ *    pre-existing photo. Printify regenerates mockups slowly after a
+ *    placement fix, so galleries synced at publish time can mix fresh fronts
+ *    with STALE BROKEN context shots (the 2026-07-17 relist mistake: two
+ *    listings went live with old sheared/backward renders still in the
+ *    gallery). Stale photos never self-heal — they must go.
+ *  - append (wipe:false): legacy padding toward the target only.
+ *
+ * Freshness gate: wipe refuses to run until Printify serves >= minPicks
+ * distinct mockups (regeneration still in progress = leave the gallery
+ * alone and report, never rebuild from a half-rendered set).
+ *
+ * Body: { printifyProductId, etsyListingId, wipe?: boolean, target?: number }
  */
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import {
@@ -37,6 +46,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as {
       printifyProductId?: string;
       etsyListingId?: string;
+      wipe?: boolean;
       target?: number;
     };
     if (!body.printifyProductId?.trim() || !body.etsyListingId?.trim()) {
@@ -46,7 +56,9 @@ export async function POST(req: Request) {
       );
     }
     const listingId = body.etsyListingId.trim();
+    const wipe = body.wipe !== false;
     const target = Math.min(Math.max(body.target ?? 8, 2), 10);
+    const minPicks = 4;
 
     const credentials = await refreshEtsyToken(user.id, { supabase });
     if (!credentials) {
@@ -58,30 +70,30 @@ export async function POST(req: Request) {
     const etsy = createEtsyAdapter();
     const printify = createPrintifyAdapter();
 
-    const beforeImages = await etsy.getListingImages(
+    const staleIds = await etsy.getListingImages(
       listingId,
       credentials.access_token,
     );
-    const existingCount = beforeImages.length;
-    if (existingCount >= target) {
-      return NextResponse.json({
-        ok: true,
-        uploaded: 0,
-        galleryCount: existingCount,
-        note: "gallery already at target",
-      });
-    }
 
     const details = await printify.getProduct(body.printifyProductId.trim());
     const picks = pickMockupImages(details.data.images ?? [], target);
-    // Existing photos are almost always the front mockups Printify synced —
-    // skip the front-most picks that duplicate them and upload the rest.
-    const candidates = picks.slice(existingCount > 0 ? 1 : 0);
 
+    if (wipe && picks.length < minPicks) {
+      return NextResponse.json(
+        {
+          ok: false,
+          notReady: true,
+          error: `Printify serves only ${picks.length} mockup(s) — regeneration still in progress; gallery left untouched.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    const uploadSet = wipe ? picks : picks.slice(staleIds.length > 0 ? 1 : 0);
     let uploaded = 0;
     const errors: string[] = [];
-    for (const pick of candidates) {
-      if (existingCount + uploaded >= target) break;
+    for (const pick of uploadSet) {
+      if (!wipe && staleIds.length + uploaded >= target) break;
       try {
         const imgRes = await fetch(pick.image.src);
         if (!imgRes.ok) throw new Error(`download ${imgRes.status}`);
@@ -89,10 +101,10 @@ export async function POST(req: Request) {
         await etsy.uploadListingImage(
           listingId,
           buffer,
-          `mockup-${uploaded + 2}.jpg`,
+          `mockup-${uploaded + 1}.jpg`,
           credentials.shop_id,
           credentials.access_token,
-          existingCount + uploaded + 1,
+          uploaded + 1,
         );
         uploaded += 1;
       } catch (err) {
@@ -101,23 +113,47 @@ export async function POST(req: Request) {
       await new Promise((r) => setTimeout(r, 400));
     }
 
-    const afterImages = await etsy.getListingImages(
-      listingId,
-      credentials.access_token,
-    );
-    const afterCount = afterImages.length;
+    let deleted = 0;
+    if (wipe && uploaded >= minPicks) {
+      // Fresh set is in place — now remove every stale photo. Uploads went
+      // in FIRST so the listing never hits zero images (Etsy requirement).
+      for (const staleId of staleIds) {
+        try {
+          await etsy.deleteListingImage(
+            listingId,
+            staleId,
+            credentials.shop_id,
+            credentials.access_token,
+          );
+          deleted += 1;
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : "delete failed");
+        }
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    } else if (wipe && uploaded < minPicks) {
+      errors.push(
+        `only ${uploaded} fresh upload(s) succeeded — stale photos kept to avoid an empty gallery`,
+      );
+    }
+
+    const afterCount = (
+      await etsy.getListingImages(listingId, credentials.access_token)
+    ).length;
 
     await supabase.from(TABLES.EVENTS).insert({
       user_id: user.id,
       event_type: "gallery_rebuilt",
-      message: `Gallery rebuilt for listing ${listingId}: ${existingCount} → ${afterCount} photos (${uploaded} uploaded).`,
+      message: `Gallery ${wipe ? "wiped & rebuilt" : "padded"} for listing ${listingId}: ${staleIds.length} → ${afterCount} photos (${uploaded} fresh, ${deleted} stale removed).`,
       agent_slug: "forge",
       room: "storefront",
       metadata: {
         etsyListingId: listingId,
         printifyProductId: body.printifyProductId,
-        before: existingCount,
+        wipe,
+        before: staleIds.length,
         uploaded,
+        deleted,
         after: afterCount,
         errors,
       } as never,
@@ -126,6 +162,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       uploaded,
+      deleted,
       galleryCount: afterCount,
       errors,
     });

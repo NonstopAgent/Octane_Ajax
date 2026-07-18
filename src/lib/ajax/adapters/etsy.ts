@@ -403,6 +403,34 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       return { listing_image_id: imageId };
     },
 
+    /**
+     * Remove one image from a listing. Used by the gallery wipe-and-rebuild:
+     * Printify regenerates mockups SLOWLY after a placement fix, so galleries
+     * synced at publish time can mix fresh fronts with stale broken context
+     * shots — those stale photos never self-heal and must be deleted after
+     * the fresh set uploads.
+     */
+    async deleteListingImage(
+      listingId: string,
+      listingImageId: string,
+      shopId: string,
+      accessToken: string,
+    ): Promise<void> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/images/${listingImageId}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(apiKeyHeader, accessToken),
+        },
+      );
+      if (!response.ok && response.status !== 404) {
+        const body = await response.text();
+        throw new Error(
+          `Etsy image delete failed (${response.status}): ${body.slice(0, 200)}`,
+        );
+      }
+    },
+
     /** Ids of the images currently on a listing (gallery idempotency check). */
     async getListingImages(
       listingId: string,
