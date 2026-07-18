@@ -30,7 +30,44 @@ import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
+/**
+ * GET variant — same operation, parameters via query string. Exists because
+ * the operator browser-drives repairs and plain navigations are immune to
+ * the background-tab JS throttling that kept killing scripted POST drivers.
+ * Session-cookie auth applies identically.
+ */
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const p = url.searchParams;
+  const body = {
+    printifyProductId: p.get("pid") ?? undefined,
+    etsyListingId: p.get("etsy") ?? undefined,
+    wipe: p.get("wipe") !== "false",
+    target: p.get("target") ? Number(p.get("target")) : undefined,
+    donorProductId: p.get("donor") ?? undefined,
+  };
+  return runRebuild(body);
+}
+
 export async function POST(req: Request) {
+  const body = (await req.json().catch(() => ({}))) as Parameters<
+    typeof runRebuild
+  >[0];
+  return runRebuild(body);
+}
+
+async function runRebuild(body: {
+  printifyProductId?: string;
+  etsyListingId?: string;
+  wipe?: boolean;
+  target?: number;
+  /** Same-blueprint product with a healthy mockup selection. When this
+   * product's own API-visible selection has collapsed to 1 (placement
+   * updates reset it, and publish can only re-select from what it can
+   * see — circular), the donor's camera angles are borrowed by swapping
+   * product ids in the CDN paths, yielding THIS product's own renders. */
+  donorProductId?: string;
+}) {
   try {
     const supabase = await createClient();
     const {
@@ -44,18 +81,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = (await req.json().catch(() => ({}))) as {
-      printifyProductId?: string;
-      etsyListingId?: string;
-      wipe?: boolean;
-      target?: number;
-      /** Same-blueprint product with a healthy mockup selection. When this
-       * product's own API-visible selection has collapsed to 1 (placement
-       * updates reset it, and publish can only re-select from what it can
-       * see — circular), the donor's camera angles are borrowed by swapping
-       * product ids in the CDN paths, yielding THIS product's own renders. */
-      donorProductId?: string;
-    };
     if (!body.printifyProductId?.trim() || !body.etsyListingId?.trim()) {
       return NextResponse.json(
         { ok: false, error: "Pass printifyProductId and etsyListingId." },
