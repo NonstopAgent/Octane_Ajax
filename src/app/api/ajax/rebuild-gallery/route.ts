@@ -70,10 +70,9 @@ export async function POST(req: Request) {
     const etsy = createEtsyAdapter();
     const printify = createPrintifyAdapter();
 
-    const staleIds = await etsy.getListingImages(
-      listingId,
-      credentials.access_token,
-    );
+    const staleIds = [
+      ...(await etsy.getListingImages(listingId, credentials.access_token)),
+    ];
 
     const details = await printify.getProduct(body.printifyProductId.trim());
     const picks = pickMockupImages(details.data.images ?? [], target);
@@ -92,6 +91,31 @@ export async function POST(req: Request) {
     const uploadSet = wipe ? picks : picks.slice(staleIds.length > 0 ? 1 : 0);
     let uploaded = 0;
     const errors: string[] = [];
+
+    // Etsy caps listings at 20 images. If the stale set + fresh set would
+    // overflow (one legacy poster sat at 20/20 and every upload bounced),
+    // clear room FIRST — delete stale from the back, always keeping one so
+    // the listing never hits zero images.
+    let preDeleted = 0;
+    if (wipe && staleIds.length + uploadSet.length > 20) {
+      const room = staleIds.length + uploadSet.length - 20;
+      const removable = staleIds.slice(1).slice(-Math.min(room, staleIds.length - 1));
+      for (const staleId of removable) {
+        try {
+          await etsy.deleteListingImage(
+            listingId,
+            staleId,
+            credentials.shop_id,
+            credentials.access_token,
+          );
+          preDeleted += 1;
+          staleIds.splice(staleIds.indexOf(staleId), 1);
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : "pre-delete failed");
+        }
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    }
     for (const pick of uploadSet) {
       if (!wipe && staleIds.length + uploaded >= target) break;
       try {
@@ -151,9 +175,9 @@ export async function POST(req: Request) {
         etsyListingId: listingId,
         printifyProductId: body.printifyProductId,
         wipe,
-        before: staleIds.length,
+        before: staleIds.length + preDeleted,
         uploaded,
-        deleted,
+        deleted: deleted + preDeleted,
         after: afterCount,
         errors,
       } as never,

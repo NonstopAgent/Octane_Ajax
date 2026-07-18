@@ -403,6 +403,49 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       return { listing_image_id: imageId };
     },
 
+    /** Ids of the videos currently on a listing (Etsy allows at most one). */
+    async getListingVideos(
+      listingId: string,
+      accessToken: string,
+    ): Promise<string[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/listings/${listingId}/videos`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: { video_id?: number }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .map((r) => (r.video_id != null ? String(r.video_id) : ""))
+        .filter(Boolean);
+    },
+
+    /**
+     * Remove a listing's video. Repaired listings whose fresh render hasn't
+     * cleared the daily cap still carry the OLD clip showing the broken
+     * design — no video beats a broken video.
+     */
+    async deleteListingVideo(
+      listingId: string,
+      videoId: string,
+      shopId: string,
+      accessToken: string,
+    ): Promise<void> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/videos/${videoId}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(apiKeyHeader, accessToken),
+        },
+      );
+      if (!response.ok && response.status !== 404) {
+        const body = await response.text();
+        throw new Error(
+          `Etsy video delete failed (${response.status}): ${body.slice(0, 200)}`,
+        );
+      }
+    },
+
     /**
      * Remove one image from a listing. Used by the gallery wipe-and-rebuild:
      * Printify regenerates mockups SLOWLY after a placement fix, so galleries
