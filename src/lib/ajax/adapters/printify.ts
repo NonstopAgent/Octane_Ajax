@@ -195,6 +195,7 @@ export interface PrintifyAdapter {
   /** List shop products (donor discovery for mockup galleries). */
   listProducts(
     limit?: number,
+    page?: number,
   ): Promise<AdapterResult<PrintifyProductSummary[]>>;
   /** Update title and/or swap the print-area artwork on an existing product. */
   updateProductContent(
@@ -705,9 +706,9 @@ export function createLivePrintifyAdapter(
       });
     },
 
-    async listProducts(limit = 50) {
+    async listProducts(limit = 50, page = 1) {
       const response = await fetchImpl(
-        `${PRINTIFY_API_BASE}/shops/${shopId}/products.json?limit=${limit}`,
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products.json?limit=${limit}&page=${page}`,
         { headers },
       );
       if (!response.ok) {

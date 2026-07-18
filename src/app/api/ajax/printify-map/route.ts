@@ -25,14 +25,21 @@ export async function GET() {
     }
 
     const printify = createPrintifyAdapter();
-    const list = await printify.listProducts(50);
+    const summaries: Awaited<
+      ReturnType<typeof printify.listProducts>
+    >["data"] = [];
+    for (let page = 1; page <= 5; page++) {
+      const batch = await printify.listProducts(50, page);
+      summaries.push(...batch.data);
+      if (batch.data.length < 50) break;
+    }
     const rows: {
       productId: string;
       title: string;
       blueprintId: number | null;
       etsyListingId: string | null;
     }[] = [];
-    for (const row of list.data) {
+    for (const row of summaries) {
       try {
         const details = await printify.getProduct(row.productId);
         rows.push({
