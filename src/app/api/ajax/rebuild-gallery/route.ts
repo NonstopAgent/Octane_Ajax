@@ -221,6 +221,23 @@ async function runRebuild(body: {
     const uploadSet = wipe
       ? sourceUrls
       : sourceUrls.slice(staleIds.length > 0 ? 1 : 0);
+
+    // Prefetch every mockup in PARALLEL. Serial downloads (8 × 2-4s) pushed
+    // total runtime past the ~60s serverless wall and upload phases died
+    // silently, leaving live listings with 2-3 photos.
+    const buffers = await Promise.all(
+      uploadSet.map(async (srcUrl) => {
+        try {
+          const imgRes = await fetch(srcUrl, {
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!imgRes.ok) return null;
+          return Buffer.from(await imgRes.arrayBuffer());
+        } catch {
+          return null;
+        }
+      }),
+    );
     let uploaded = 0;
     const errors: string[] = [];
 
@@ -248,12 +265,13 @@ async function runRebuild(body: {
         await new Promise((r) => setTimeout(r, 350));
       }
     }
-    for (const srcUrl of uploadSet) {
+    for (const buffer of buffers) {
       if (!wipe && staleIds.length + uploaded >= target) break;
+      if (!buffer) {
+        errors.push("download failed");
+        continue;
+      }
       try {
-        const imgRes = await fetch(srcUrl);
-        if (!imgRes.ok) throw new Error(`download ${imgRes.status}`);
-        const buffer = Buffer.from(await imgRes.arrayBuffer());
         await etsy.uploadListingImage(
           listingId,
           buffer,
@@ -266,7 +284,7 @@ async function runRebuild(body: {
       } catch (err) {
         errors.push(err instanceof Error ? err.message : "upload failed");
       }
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 150));
     }
 
     if (body.phase === "upload") {
