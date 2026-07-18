@@ -430,13 +430,19 @@ export function createLiveImageGeneratorAdapter(
         "Photorealistic, warm and inviting, shallow depth of field, no added text or watermarks, no brand logos.",
       ].join(" ");
 
-      const response = await client.images.edit({
-        model,
-        image: imageFile,
-        prompt,
-        n: 1,
-        size: "1024x1024",
-      });
+      const response = await client.images.edit(
+        {
+          model,
+          image: imageFile,
+          prompt,
+          n: 1,
+          size: "1024x1024",
+        },
+        // gpt-image-1 edits routinely run 50-90s — the 45s client default
+        // timed out EVERY scene render on 2026-07-18 and silently downgraded
+        // all repair videos to product-style zooms.
+        { timeout: 150_000 },
+      );
 
       const image = response.data?.[0];
       if (!image?.b64_json && !image?.url) {
@@ -470,13 +476,18 @@ export function createLiveImageGeneratorAdapter(
         .filter(Boolean)
         .join(" ");
 
-      const response = await client.images.edit({
-        model,
-        image: imageFile,
-        prompt,
-        n: 1,
-        size: "1024x1536",
-      });
+      const response = await client.images.edit(
+        {
+          model,
+          image: imageFile,
+          prompt,
+          n: 1,
+          size: "1024x1536",
+        },
+        // Portrait canvases render even slower than square edits — same
+        // rationale as the lifestyle-scene per-call timeout above.
+        { timeout: 150_000 },
+      );
 
       const image = response.data?.[0];
       if (!image?.b64_json && !image?.url) {
