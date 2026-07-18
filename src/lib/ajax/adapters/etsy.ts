@@ -100,6 +100,8 @@ export type EtsyListingPatch = {
   shop_section_id?: number;
   /** 1-4 puts the listing in the shop's Featured row; 0/absent leaves it. */
   featured_rank?: number;
+  /** Listing lifecycle state — deactivate broken listings / reactivate fixed ones. */
+  state?: "active" | "inactive";
   /** Buyer personalization (the moat: name/date/photo-link customization). */
   personalization_is_required?: boolean;
   personalization_char_count_max?: number;
@@ -674,6 +676,9 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       }
       if (patch.featured_rank != null) {
         body.set("featured_rank", String(patch.featured_rank));
+      }
+      if (patch.state) {
+        body.set("state", patch.state);
       }
       if ([...body.keys()].length === 0) return;
 
