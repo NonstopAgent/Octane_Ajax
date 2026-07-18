@@ -207,6 +207,15 @@ export interface PrintifyAdapter {
   fixPrintPlacement(
     productId: string,
   ): Promise<AdapterResult<PrintifyPlacementFix>>;
+  /** Read the current print-area artwork (source file, not mockups). */
+  getProductArtwork(productId: string): Promise<
+    AdapterResult<{
+      id: string;
+      src: string | null;
+      width: number | null;
+      height: number | null;
+    }>
+  >;
   publishProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyPublishedProduct>>;
@@ -494,6 +503,15 @@ export function createDemoPrintifyAdapter(
       return demoResult("Printify product update simulated.", {
         productId,
         updated,
+      });
+    },
+
+    async getProductArtwork(productId) {
+      return demoResult("Printify artwork read simulated.", {
+        id: `demo-art-${productId.slice(0, 6)}`,
+        src: null,
+        width: 1024,
+        height: 1024,
       });
     },
 
@@ -825,6 +843,41 @@ export function createLivePrintifyAdapter(
       }
 
       return liveResult("Printify product updated.", { productId, updated });
+    },
+
+    async getProductArtwork(productId) {
+      const res = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        { headers },
+      );
+      if (!res.ok) {
+        throw new Error(`Printify product fetch failed (${res.status}).`);
+      }
+      const product = (await res.json()) as {
+        print_areas?: {
+          placeholders?: {
+            images?: {
+              id?: string;
+              src?: string;
+              width?: number;
+              height?: number;
+            }[];
+          }[];
+        }[];
+      };
+      const img = (product.print_areas ?? [])
+        .flatMap((a) => a.placeholders ?? [])
+        .flatMap((ph) => ph.images ?? [])
+        .find((i) => i?.id);
+      if (!img?.id) {
+        throw new Error("Product has no print-area artwork.");
+      }
+      return liveResult("Printify artwork read.", {
+        id: img.id,
+        src: img.src ?? null,
+        width: img.width ?? null,
+        height: img.height ?? null,
+      });
     },
 
     async fixPrintPlacement(productId) {

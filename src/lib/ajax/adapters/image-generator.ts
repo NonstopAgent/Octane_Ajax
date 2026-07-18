@@ -71,6 +71,12 @@ export type LifestyleSceneInput = {
   productTitle: string;
 };
 
+export type PortraitExtendInput = {
+  /** The square artwork to extend (raw bytes). */
+  artImage: Buffer;
+  productTitle?: string;
+};
+
 export type GeneratedLifestyleScene = {
   sceneId: string;
   imageBase64: string;
@@ -119,6 +125,15 @@ export interface ImageGeneratorAdapter {
    */
   generateLifestyleScene(
     input: LifestyleSceneInput,
+  ): Promise<AdapterResult<GeneratedLifestyleScene>>;
+  /**
+   * Extend square artwork to a 2:3 portrait canvas (1024x1536) by continuing
+   * its background — poster/print blueprints have 2:3 print areas, and square
+   * art on them either floats with empty bands or gets cropped. The original
+   * composition must survive untouched.
+   */
+  extendArtToPortrait(
+    input: PortraitExtendInput,
   ): Promise<AdapterResult<GeneratedLifestyleScene>>;
 }
 
@@ -262,6 +277,16 @@ export function createDemoImageGeneratorAdapter(
       void input;
       return demoResult("Lifestyle scene generated in demo mode.", {
         sceneId,
+        imageBase64: "",
+        provider,
+        model: DEFAULT_IMAGE_MODEL,
+      });
+    },
+
+    async extendArtToPortrait(input) {
+      void input;
+      return demoResult("Portrait extension simulated in demo mode.", {
+        sceneId: `extend-${crypto.randomUUID().slice(0, 8)}`,
         imageBase64: "",
         provider,
         model: DEFAULT_IMAGE_MODEL,
@@ -425,6 +450,46 @@ export function createLiveImageGeneratorAdapter(
 
       return liveResult("Lifestyle scene generated.", {
         sceneId: `scene-${crypto.randomUUID().slice(0, 8)}`,
+        imageBase64: b64,
+        provider: "openai",
+        model,
+      });
+    },
+
+    async extendArtToPortrait(input) {
+      const imageFile = await toFile(input.artImage, "art.png", {
+        type: "image/png",
+      });
+
+      const prompt = [
+        "Extend this artwork to fill a taller 2:3 portrait canvas.",
+        "CRITICAL: the original artwork — every subject, line, color, and especially any TEXT — must remain EXACTLY as-is, unaltered, centered horizontally.",
+        "Continue the existing background style seamlessly above and below the original composition. Do NOT add new subjects, text, borders, or watermarks.",
+        input.productTitle ? `This is print art for "${input.productTitle}".` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const response = await client.images.edit({
+        model,
+        image: imageFile,
+        prompt,
+        n: 1,
+        size: "1024x1536",
+      });
+
+      const image = response.data?.[0];
+      if (!image?.b64_json && !image?.url) {
+        throw new Error("OpenAI portrait extension returned no image.");
+      }
+      let b64 = image.b64_json ?? "";
+      if (!b64 && image.url) {
+        const { buffer } = await fetchImageBuffer(image.url, fetchImpl);
+        b64 = buffer.toString("base64");
+      }
+
+      return liveResult("Artwork extended to 2:3 portrait.", {
+        sceneId: `extend-${crypto.randomUUID().slice(0, 8)}`,
         imageBase64: b64,
         provider: "openai",
         model,
