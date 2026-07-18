@@ -45,6 +45,7 @@ export async function GET(req: Request) {
     wipe: p.get("wipe") !== "false",
     target: p.get("target") ? Number(p.get("target")) : undefined,
     donorProductId: p.get("donor") ?? undefined,
+    phase: (p.get("phase") ?? undefined) as "upload" | "cleanup" | undefined,
   };
   return runRebuild(body);
 }
@@ -67,6 +68,11 @@ async function runRebuild(body: {
    * see — circular), the donor's camera angles are borrowed by swapping
    * product ids in the CDN paths, yielding THIS product's own renders. */
   donorProductId?: string;
+  /** Split-run mode for the ~60s serverless wall: "upload" pushes the fresh
+   * set only; "cleanup" deletes everything but the NEWEST `target` images
+   * (Etsy image ids increase over time, so newest = the fresh uploads).
+   * Omit for the original single-pass behavior. */
+  phase?: "upload" | "cleanup";
 }) {
   try {
     const supabase = await createClient();
@@ -79,6 +85,66 @@ async function runRebuild(body: {
         { ok: false, error: "Unauthorized. Sign in first." },
         { status: 401 },
       );
+    }
+
+    if (body.phase === "cleanup") {
+      if (!body.etsyListingId?.trim()) {
+        return NextResponse.json(
+          { ok: false, error: "Pass etsyListingId." },
+          { status: 400 },
+        );
+      }
+      const listingId = body.etsyListingId.trim();
+      const target = Math.min(Math.max(body.target ?? 8, 2), 10);
+      const credentials = await refreshEtsyToken(user.id, { supabase });
+      if (!credentials) {
+        return NextResponse.json(
+          { ok: false, error: "Etsy shop not connected." },
+          { status: 500 },
+        );
+      }
+      const etsy = createEtsyAdapter();
+      const ids = await etsy.getListingImages(
+        listingId,
+        credentials.access_token,
+      );
+      const newestFirst = [...ids].sort((a, b) => Number(b) - Number(a));
+      const toDelete = newestFirst.slice(target);
+      let deleted = 0;
+      const errors: string[] = [];
+      for (const id of toDelete) {
+        try {
+          await etsy.deleteListingImage(
+            listingId,
+            id,
+            credentials.shop_id,
+            credentials.access_token,
+          );
+          deleted += 1;
+        } catch (err) {
+          errors.push(err instanceof Error ? err.message : "delete failed");
+        }
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      const after = (
+        await etsy.getListingImages(listingId, credentials.access_token)
+      ).length;
+      await supabase.from(TABLES.EVENTS).insert({
+        user_id: user.id,
+        event_type: "gallery_rebuilt",
+        message: `Gallery cleanup for listing ${listingId}: kept newest ${Math.min(target, ids.length)}, removed ${deleted} older photo(s) → ${after} photos.`,
+        agent_slug: "forge",
+        room: "storefront",
+        metadata: {
+          etsyListingId: listingId,
+          phase: "cleanup",
+          before: ids.length,
+          deleted,
+          after,
+          errors,
+        } as never,
+      });
+      return NextResponse.json({ ok: true, deleted, galleryCount: after, errors });
     }
 
     if (!body.printifyProductId?.trim() || !body.etsyListingId?.trim()) {
@@ -201,6 +267,35 @@ async function runRebuild(body: {
         errors.push(err instanceof Error ? err.message : "upload failed");
       }
       await new Promise((r) => setTimeout(r, 400));
+    }
+
+    if (body.phase === "upload") {
+      const afterUpload = (
+        await etsy.getListingImages(listingId, credentials.access_token)
+      ).length;
+      await supabase.from(TABLES.EVENTS).insert({
+        user_id: user.id,
+        event_type: "gallery_rebuilt",
+        message: `Gallery upload phase for listing ${listingId}: ${uploaded} fresh photo(s) added (now ${afterUpload}) — cleanup phase next.`,
+        agent_slug: "forge",
+        room: "storefront",
+        metadata: {
+          etsyListingId: listingId,
+          phase: "upload",
+          uploaded,
+          preDeleted,
+          after: afterUpload,
+          usedDonor,
+          errors,
+        } as never,
+      });
+      return NextResponse.json({
+        ok: true,
+        uploaded,
+        usedDonor,
+        galleryCount: afterUpload,
+        errors,
+      });
     }
 
     let deleted = 0;
