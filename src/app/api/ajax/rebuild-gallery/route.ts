@@ -46,6 +46,13 @@ export async function GET(req: Request) {
     target: p.get("target") ? Number(p.get("target")) : undefined,
     donorProductId: p.get("donor") ?? undefined,
     phase: (p.get("phase") ?? undefined) as "upload" | "cleanup" | undefined,
+    sourceUrls: p.get("urls")
+      ? p
+          .get("urls")!
+          .split("|")
+          .map((u) => decodeURIComponent(u))
+          .filter((u) => u.startsWith("https://"))
+      : undefined,
   };
   return runRebuild(body);
 }
@@ -73,6 +80,12 @@ async function runRebuild(body: {
    * (Etsy image ids increase over time, so newest = the fresh uploads).
    * Omit for the original single-pass behavior. */
   phase?: "upload" | "cleanup";
+  /** Explicit mockup URLs (operator-harvested from the Printify app). The
+   * API only lists a product's SELECTED mockups — every bp-49 sweatshirt
+   * has exactly 1 selected and no rich same-blueprint donor exists, but the
+   * full render set is visible in the Printify app UI. Bypasses the
+   * picks/donor logic entirely. */
+  sourceUrls?: string[];
 }) {
   try {
     const supabase = await createClient();
@@ -173,10 +186,15 @@ async function runRebuild(body: {
     ];
 
     const productId = body.printifyProductId.trim();
-    const details = await printify.getProduct(productId);
-    const picks = pickMockupImages(details.data.images ?? [], target);
-    let sourceUrls = picks.map((p) => p.image.src);
+    let sourceUrls: string[];
     let usedDonor = false;
+    if (body.sourceUrls?.length) {
+      sourceUrls = body.sourceUrls.slice(0, target);
+    } else {
+      const details = await printify.getProduct(productId);
+      const picks = pickMockupImages(details.data.images ?? [], target);
+      sourceUrls = picks.map((p) => p.image.src);
+    }
 
     if (sourceUrls.length < minPicks && body.donorProductId?.trim()) {
       const donor = await printify.getProduct(body.donorProductId.trim());
