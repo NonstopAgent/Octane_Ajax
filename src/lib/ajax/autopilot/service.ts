@@ -65,8 +65,10 @@ import { TABLES } from "@/lib/supabase/schema";
 
 /** Stop auto-producing once the shop has this many active listings (override via
  * AUTOPILOT_TARGET_LISTINGS). Set for a fuller starter storefront; the 85+ review
- * bar + hourly cadence keep quality high and spend paced. */
-const DEFAULT_TARGET_LISTINGS = 30;
+ * bar + hourly cadence keep quality high and spend paced.
+ * 2026-07-19: 30 → 35 for the operator-approved clip-on bandana launch
+ * (5 designs, then frozen again at 35). */
+const DEFAULT_TARGET_LISTINGS = 35;
 /** Cap Etsy detail lookups per pass (rate-limit hygiene). */
 const MAX_LISTINGS_PER_PASS = 25;
 

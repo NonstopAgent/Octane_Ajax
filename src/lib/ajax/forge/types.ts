@@ -149,6 +149,10 @@ const PRODUCT_TYPE_LEXICON: Record<PrintifyCatalogKey, ProductTypeLexiconEntry> 
     canonical: "Sweatshirt",
     accepted: /\bsweatshirts?\b|\bcrewnecks?\b/i,
   },
+  BANDANA_CLIPON: {
+    canonical: "Clip-On Pet Bandana",
+    accepted: /\bbandanas?\b/i,
+  },
 };
 
 /**
@@ -174,6 +178,7 @@ const WRONG_TYPE_PATTERNS: {
   { pattern: /\bart\s+prints?\b|\bwall\s+art\b/gi, except: ["POSTER_MATTE_VERTICAL"] },
   { pattern: /\bt[\s-]?shirts?\b|\btees?\b/gi, except: ["TEE_UNISEX"] },
   { pattern: /\bsweatshirts?\b|\bcrewnecks?\b/gi, except: ["SWEATSHIRT_CREWNECK"] },
+  { pattern: /\bbandanas?\b/gi, except: ["BANDANA_CLIPON"] },
 ];
 
 export type ReconciledListingCopy = {

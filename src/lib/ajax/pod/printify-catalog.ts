@@ -22,6 +22,7 @@ export const PRINTIFY_CATALOG_KEYS = [
   "POSTER_MATTE_VERTICAL",
   "TEE_UNISEX",
   "SWEATSHIRT_CREWNECK",
+  "BANDANA_CLIPON",
 ] as const;
 
 export type PrintifyCatalogKey = (typeof PRINTIFY_CATALOG_KEYS)[number];
@@ -121,6 +122,25 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
       "Screen-print style chest graphic that sits DIRECTLY on the fabric: bold isolated subject + text lockup with an organic silhouette. Isolated on a transparent background — absolutely NO background rectangle, square, color fill, or scene behind the design (that prints as an ugly box on the garment).",
     promptHint:
       "Best for cozy occupation/seasonal gifts (nurses week, holidays, grads).",
+  },
+  BANDANA_CLIPON: {
+    key: "BANDANA_CLIPON",
+    label: "Clip-on Pet Bandana",
+    // VERIFIED live via /api/ajax/catalog-probe?bp=1672 on 2026-07-19:
+    // "Generic brand — Clip-on Pet Bandana", provider 228 (Taylor),
+    // front placeholder ~1.76:1 (S 2175x1237, M 2775x1650, XL 4500x2325).
+    blueprintId: 1672,
+    printProviderId: 228,
+    variantIds: [115222, 115223, 115225], // S, M, XL
+    // Operator-approved price point ($14.99; XL carries a higher base cost).
+    variantPrices: { 115222: 1499, 115223: 1499, 115225: 1799 },
+    defaultPriceCents: 1499,
+    artworkAspectRatio: "16:9", // wide bandana panel (~1.76:1)
+    artworkBackground: "transparent",
+    artworkCompositionHint:
+      "Wide horizontal bandana panel design: a repeating or centered motif with a personalized pet-name lockup, sized so nothing important sits near the edges. Isolated on a transparent background — no background color, box, or scene.",
+    promptHint:
+      "Best for personalized pet-name accessories; adoption day, gotcha day, and new-pet gifts.",
   },
 };
 
