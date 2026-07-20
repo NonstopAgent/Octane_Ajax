@@ -543,7 +543,26 @@ async function executeNovaStep(
 
   const forgePick = pickForgeIdeaCandidate(novaResult.ideas);
   const forgeIndex = novaResult.ideas.indexOf(forgePick);
-  const selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+  // Operator-seeded ideas waiting in the DB are pre-approved work orders —
+  // they jump the queue over Nova's fresh batch (which otherwise wins every
+  // cycle and starves seeds like the 2026-07-20 bandana launch forever).
+  // Best-effort: any query hiccup (or demo-mode mock) falls back to Nova's pick.
+  let seedRow: (typeof ideaRows)[number] | null = null;
+  try {
+    const { data } = await supabase
+      .from(TABLES.IDEAS)
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "idea")
+      .eq("raw_payload->>operatorSeed", "true")
+      .order("trend_score", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    seedRow = (data as (typeof ideaRows)[number] | null) ?? null;
+  } catch {
+    seedRow = null;
+  }
+  const selectedRow = seedRow ?? ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
 
   tasks.push(
     await completeTask(supabase, novaTaskRow.id, {
@@ -623,7 +642,17 @@ async function executeForgeStep(
 
   const forgePick = pickForgeIdeaCandidate(evaluated);
   const forgeIndex = evaluated.indexOf(forgePick);
-  const selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+  // Operator-seeded ideas are pre-approved work orders (e.g. the 2026-07-20
+  // bandana launch) — they jump the queue over Nova's fresh batch, which
+  // otherwise wins every cycle and starves the seeds forever.
+  const operatorSeed = ideaRows.find(
+    (row) =>
+      row.status === "idea" &&
+      typeof row.raw_payload === "object" &&
+      row.raw_payload !== null &&
+      (row.raw_payload as Record<string, unknown>).operatorSeed === true,
+  );
+  const selectedRow = operatorSeed ?? ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
 
   const events: FactoryEvent[] = [];
   const tasks: ReturnType<typeof mapTaskFromDb>[] = [];
