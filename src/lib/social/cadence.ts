@@ -8,8 +8,11 @@
  */
 import type { SocialPlatform } from "@/lib/social/ayrshare";
 
-/** Platforms not listed here default to DEFAULT_PLATFORM_CAP per day. */
-const PLATFORM_CAP_DEFAULTS: Record<string, number> = { pinterest: 6 };
+/** Platforms not listed here default to DEFAULT_PLATFORM_CAP per day.
+ * tiktok 3 (2026-07-19 rebaseline: TikTok held 551 of 551 measured
+ * impressions and all real engagement — it earns the extra daily slot;
+ * costs nothing, reuses existing clips). */
+const PLATFORM_CAP_DEFAULTS: Record<string, number> = { pinterest: 6, tiktok: 3 };
 const DEFAULT_PLATFORM_CAP = 2;
 
 /**

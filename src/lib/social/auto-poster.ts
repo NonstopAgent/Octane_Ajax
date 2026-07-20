@@ -156,7 +156,13 @@ export async function runSocialAutoPoster(
   // with motion get reach; a lone square catalog photo does not). The static
   // mockup is a fallback, not the plan.
   const promoVideo = await findPromoVideo(supabase, userId, job.listing_id);
-  const photoTargets = targets.filter((p) => p !== "tiktok");
+  // Video-first platforms never receive photo-only posts. TikTok rejects
+  // them outright; Instagram accepts them but the 2026-07-19 rebaseline
+  // showed photo posts scoring ZERO engagement across the board while every
+  // top performer was video — an IG photo slot is a wasted slot.
+  const photoTargets = targets.filter(
+    (p) => p !== "tiktok" && p !== "instagram",
+  );
 
   if (!promoVideo && photoTargets.length === 0) {
     // Only TikTok was due and this listing has no video yet — leave the job
