@@ -26,9 +26,11 @@ export type VisionQaResult = {
 
 const PROMPT = `You are a strict print-on-demand quality inspector. Look at this product mockup image and answer in JSON only.
 
+IMPORTANT product-type context: on MUGS and APPAREL (shirts, sweatshirts, bandanas), the design is a centered graphic that occupies roughly 30-60% of the product face with clean product-colored margins around it — that is CORRECT professional placement, NOT a fill defect. Only POSTERS and ART PRINTS are full-bleed products where the artwork must fill the printed sheet edge to edge.
+
 Check for these defects:
-1. FILL: does the printed design properly fill the product's print area? Unintended blank/white margins, letterboxing, or a design floating small inside a larger print area is a FAIL. (Deliberate framing/borders that look designed are fine.)
-2. CROP: is any text or key design element cut off at an edge?
+1. FILL: for posters/art prints only — artwork floating small on the sheet with unintended blank bands is a FAIL. For mugs/apparel, do NOT fail for normal centered-graphic margins; fail only if the design is tiny (under ~20% of the face), dramatically off-center, or wrapped so it faces away from the camera.
+2. CROP: is any text or key design element cut off at an edge of the PRINTED DESIGN?
 3. TEXT: is all text in the design legible (not garbled, warped, or misspelled)?
 4. MATCH: does the product in the image match this listing title: "{TITLE}"? (e.g. a mug mockup for a poster listing is a FAIL)
 5. QUALITY: any obvious rendering artifacts, distortion, or unfinished-looking areas?
