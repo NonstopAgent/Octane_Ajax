@@ -118,6 +118,22 @@ export async function publishPost(input: {
     body.tikTokOptions = { draft: true };
   }
 
+  // Max Pack features (AYRSHARE_MAX_PACK=true once the add-on is active in
+  // the Ayrshare dashboard — it's a billed add-on, so the operator flips it):
+  //  - shortenLinks: trackable short links with click analytics — the only
+  //    way to see which posts actually drive Etsy traffic.
+  //  - Instagram autoResize: auto-fit images to IG's accepted dimensions,
+  //    killing a whole class of silent image rejects.
+  if (process.env.AYRSHARE_MAX_PACK === "true") {
+    body.shortenLinks = true;
+    if (!input.isVideo && input.platforms.includes("instagram")) {
+      body.instagramOptions = {
+        ...((body.instagramOptions as Record<string, unknown>) ?? {}),
+        autoResize: true,
+      };
+    }
+  }
+
   try {
     const res = await fetch(AYRSHARE_URL, {
       method: "POST",
