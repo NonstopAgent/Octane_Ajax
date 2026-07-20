@@ -10,10 +10,11 @@ describe("posting cadence (5-7/day, platform-aware)", () => {
     delete process.env.SOCIAL_PLATFORM_CAPS;
   });
 
-  it("defaults: pinterest 6/day, feed platforms 2/day", () => {
+  it("defaults: pinterest 6/day, tiktok 3/day, feed platforms 2/day", () => {
     assert.equal(capFor("pinterest"), 6);
     assert.equal(capFor("instagram"), 2);
-    assert.equal(capFor("tiktok"), 2);
+    // 2026-07-19 rebaseline: TikTok carried all measured engagement.
+    assert.equal(capFor("tiktok"), 3);
     assert.equal(capFor("facebook"), 2);
   });
 
@@ -21,19 +22,24 @@ describe("posting cadence (5-7/day, platform-aware)", () => {
     process.env.SOCIAL_PLATFORM_CAPS = "pinterest:8, instagram:1";
     assert.equal(platformCaps().pinterest, 8);
     assert.equal(capFor("instagram"), 1);
-    assert.equal(capFor("tiktok"), 2); // untouched default
+    assert.equal(capFor("tiktok"), 3); // untouched default
   });
 
   it("posts everywhere on the first passes of the day", () => {
     assert.deepEqual(duePlatforms({}, ALL), ALL);
   });
 
-  it("drops feed platforms at 2, keeps pinterest until 6", () => {
-    const counts = { pinterest: 2, instagram: 2, tiktok: 2 };
+  it("drops feed platforms at their caps, keeps pinterest until 6", () => {
+    const counts = { pinterest: 2, instagram: 2, tiktok: 3 };
     assert.deepEqual(duePlatforms(counts, ALL), ["pinterest"]);
     assert.deepEqual(
-      duePlatforms({ pinterest: 6, instagram: 2, tiktok: 2 }, ALL),
+      duePlatforms({ pinterest: 6, instagram: 2, tiktok: 3 }, ALL),
       [],
+    );
+    // tiktok keeps its third daily slot after the feed platforms cap out.
+    assert.deepEqual(
+      duePlatforms({ pinterest: 6, instagram: 2, tiktok: 2 }, ALL),
+      ["tiktok"],
     );
   });
 
