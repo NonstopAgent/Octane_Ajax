@@ -13,6 +13,49 @@ type ForgeBody = {
   runId?: string;
 };
 
+/**
+ * GET variant — same Forge step, navigation-triggered. The operator drives
+ * repairs and launches from a browser tab whose background-throttled fetches
+ * kept silently dying; plain navigations are immune. Session auth applies.
+ */
+export async function GET() {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized." },
+        { status: 401 },
+      );
+    }
+    const businessId = await getActiveBusinessId(supabase, user.id);
+    const summary = await runForgeStep(supabase, user.id, {}, businessId);
+    return NextResponse.json(summary);
+  } catch (err) {
+    if (err instanceof CycleBlockedError) {
+      return NextResponse.json(
+        { ok: false, code: err.code, error: err.message },
+        { status: 409 },
+      );
+    }
+    if (err instanceof SimulatorError) {
+      console.error("[run-forge:get]", err.message, err.cause);
+      return NextResponse.json(
+        { ok: false, code: err.code, error: err.message },
+        { status: 500 },
+      );
+    }
+    console.error("[run-forge:get] unexpected error", err);
+    return NextResponse.json(
+      { ok: false, error: "An unexpected error occurred while running Forge." },
+      { status: 500 },
+    );
+  }
+}
+
 /** POST /api/ajax/run-forge — Forge listing step (separate Vercel budget from Nova). */
 export async function POST(request: Request) {
   try {
