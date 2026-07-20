@@ -123,7 +123,12 @@ export async function runPodFulfillment(
     ? `${podDetails.artworkPrompt} ${catalogEntry.artworkCompositionHint}`
     : podDetails.artworkPrompt;
 
-  const artworkResult = await imageGeneratorAdapter.generateProductArtwork({
+  // ART GATE (2026-07-20): check the generated artwork against the listing
+  // concept BEFORE spending on Printify upload, product creation, mockup
+  // renders, and review cycles. Two mismatched designs burned full pipeline
+  // runs overnight; each retry here costs one image generation instead of a
+  // whole product. One corrective retry, then abort cheaply.
+  let artworkResult = await imageGeneratorAdapter.generateProductArtwork({
     productTitle: listingTitle,
     niche,
     stylePrompt,
@@ -137,6 +142,43 @@ export async function runPodFulfillment(
       "Artwork generation returned no image URL.",
       "artwork",
     );
+  }
+
+  {
+    const { visionCheckArtwork } = await import(
+      "@/lib/review/mockup-vision-qa"
+    );
+    const firstCheck = await visionCheckArtwork({
+      artUrl: artworkResult.data.imageUrl,
+      productTitle: listingTitle,
+    });
+    if (firstCheck.checked && !firstCheck.pass) {
+      const feedback = firstCheck.issues.join("; ").slice(0, 300);
+      artworkResult = await imageGeneratorAdapter.generateProductArtwork({
+        productTitle: listingTitle,
+        niche,
+        stylePrompt: `${stylePrompt} CRITICAL FIXES from a failed attempt — the previous artwork was rejected because: ${feedback}. The artwork MUST clearly depict: ${listingTitle}.`,
+        aestheticStyle: podDetails.aestheticStyle,
+        aspectRatio: artworkAspectRatio,
+        background: artworkBackground,
+      });
+      if (!artworkResult.data.imageUrl) {
+        throw new PodFulfillmentError(
+          "Artwork regeneration returned no image URL.",
+          "artwork",
+        );
+      }
+      const secondCheck = await visionCheckArtwork({
+        artUrl: artworkResult.data.imageUrl,
+        productTitle: listingTitle,
+      });
+      if (secondCheck.checked && !secondCheck.pass) {
+        throw new PodFulfillmentError(
+          `Artwork failed the art gate twice — aborting before any Printify spend. Issues: ${secondCheck.issues.join("; ").slice(0, 250)}`,
+          "artwork",
+        );
+      }
+    }
   }
 
   const uploadResult = await withTimeout(

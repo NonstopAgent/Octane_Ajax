@@ -7,7 +7,7 @@
  * On approve it returns the `postApproval` context; the CALLER runs runPostApproval
  * (route: via after(); cron: awaited) — this module never leaves it undone.
  */
-import { approveReview, rejectReview } from "@/lib/review/service";
+import { approveReview, rejectReview, ReviewError } from "@/lib/review/service";
 import { reviewListing } from "@/lib/ajax/reviewer/service";
 import { matchMarketSignals } from "@/lib/ajax/product-brain/market-signals";
 import { getActiveBusiness } from "@/lib/businesses/active";
@@ -120,10 +120,33 @@ export async function autoReviewPending(
         acted = "rejected";
       }
     } catch (err) {
-      console.warn(
-        "[auto-review] act failed:",
-        err instanceof Error ? err.message : err,
-      );
+      // A vision-gate rejection (422) means the PRODUCT is bad, not the
+      // process. Leaving the review pending re-burned a Sage grade + vision
+      // call every hourly pass forever AND blocked new production behind it
+      // (2026-07-20: two mismatched Nova items wedged the cycle overnight).
+      // Convert it into a real rejection so the cycle moves on.
+      if (err instanceof ReviewError && err.statusCode === 422) {
+        try {
+          await rejectReview(
+            supabase,
+            userId,
+            rev.id,
+            `Auto-rejected by the vision gate — ${err.message.slice(0, 400)}`,
+            { actor: "ai" },
+          );
+          acted = "rejected";
+        } catch (rejectErr) {
+          console.warn(
+            "[auto-review] vision-fail auto-reject failed:",
+            rejectErr instanceof Error ? rejectErr.message : rejectErr,
+          );
+        }
+      } else {
+        console.warn(
+          "[auto-review] act failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
   }
 

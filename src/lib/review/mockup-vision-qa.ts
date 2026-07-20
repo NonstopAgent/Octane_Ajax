@@ -35,6 +35,97 @@ Check for these defects:
 
 Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failed check, empty if pass"]}`;
 
+const ARTWORK_PROMPT = `You are a strict print-on-demand quality inspector looking at FLAT ARTWORK that will be printed on a product (not a product photo — margins and transparent backgrounds are expected and fine).
+
+Check ONLY these:
+1. SUBJECT: does the artwork's subject matter match this listing title: "{TITLE}"? (wrong animal, wrong theme, or unrelated imagery is a FAIL)
+2. TEXT: every word in the artwork must be correctly spelled, real English, and legible. Garbled, invented, or misspelled words are a FAIL.
+3. QUALITY: obvious rendering artifacts, mangled anatomy, or unfinished areas are a FAIL.
+
+Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failure, empty if pass"]}`;
+
+/**
+ * Gate the GENERATED ARTWORK before any money is spent downstream (Printify
+ * upload, product creation, mockup renders, Sage review cycles). Added
+ * 2026-07-20 after two mismatched designs burned full pipeline runs and the
+ * operator asked to stop the waste at the source.
+ */
+export async function visionCheckArtwork(input: {
+  artUrl: string;
+  productTitle: string;
+}): Promise<VisionQaResult> {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) {
+    return {
+      checked: false,
+      pass: true,
+      issues: ["OPENAI_API_KEY not set — artwork QA skipped"],
+    };
+  }
+  const model = process.env.VISION_QA_MODEL?.trim() || "gpt-4o-mini";
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: ARTWORK_PROMPT.replace(
+                  "{TITLE}",
+                  input.productTitle.slice(0, 140),
+                ),
+              },
+              { type: "image_url", image_url: { url: input.artUrl } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 300,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        checked: false,
+        pass: true,
+        issues: [`vision API error: ${json.error?.message ?? res.status}`],
+        model,
+      };
+    }
+    const raw = json.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { pass?: boolean; issues?: string[] };
+    return {
+      checked: true,
+      pass: parsed.pass === true,
+      issues: Array.isArray(parsed.issues)
+        ? parsed.issues.map((i) => String(i)).slice(0, 6)
+        : [],
+      model,
+    };
+  } catch (err) {
+    return {
+      checked: false,
+      pass: true,
+      issues: [
+        `artwork check failed to run: ${err instanceof Error ? err.message : "unknown"}`,
+      ],
+      model,
+    };
+  }
+}
+
 const COMPARE_PROMPT = `You are a strict print-on-demand quality inspector comparing two images of the SAME product. Image 1 is the authoritative product mockup. Image 2 is an AI-generated lifestyle scene of that product.
 
 Check ONLY the product's printed design in image 2 against image 1:
