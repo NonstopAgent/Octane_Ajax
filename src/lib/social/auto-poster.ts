@@ -18,7 +18,7 @@ import {
   isSocialConfigured,
   publishPost,
 } from "@/lib/social/ayrshare";
-import { duePlatforms } from "@/lib/social/cadence";
+import { duePlatforms, isWithinPostingWindow } from "@/lib/social/cadence";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -98,6 +98,13 @@ export async function runSocialAutoPoster(
 
   if (!isSocialConfigured()) {
     summary.skipped = "not_configured";
+    return summary;
+  }
+
+  // US engagement hours only (operator, 2026-07-20: posts were landing at
+  // 2-3 AM Central). Staged jobs are untouched — they post next window.
+  if (!isWithinPostingWindow()) {
+    summary.skipped = "outside_posting_window";
     return summary;
   }
 

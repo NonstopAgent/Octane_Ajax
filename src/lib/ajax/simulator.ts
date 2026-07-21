@@ -543,26 +543,7 @@ async function executeNovaStep(
 
   const forgePick = pickForgeIdeaCandidate(novaResult.ideas);
   const forgeIndex = novaResult.ideas.indexOf(forgePick);
-  // Operator-seeded ideas waiting in the DB are pre-approved work orders —
-  // they jump the queue over Nova's fresh batch (which otherwise wins every
-  // cycle and starves seeds like the 2026-07-20 bandana launch forever).
-  // Best-effort: any query hiccup (or demo-mode mock) falls back to Nova's pick.
-  let seedRow: (typeof ideaRows)[number] | null = null;
-  try {
-    const { data } = await supabase
-      .from(TABLES.IDEAS)
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "idea")
-      .eq("raw_payload->>operatorSeed", "true")
-      .order("trend_score", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    seedRow = (data as (typeof ideaRows)[number] | null) ?? null;
-  } catch {
-    seedRow = null;
-  }
-  const selectedRow = seedRow ?? ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+  const selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
 
   tasks.push(
     await completeTask(supabase, novaTaskRow.id, {
@@ -618,41 +599,45 @@ async function executeForgeStep(
   opts?: RunForgeStepOptions,
   businessId?: string | null,
 ): Promise<AjaxCycleSummary> {
-  const { runId, ideaRows } = await resolveRunIdeasForForge(
-    supabase,
-    userId,
-    opts?.runId,
-  );
+  // Operator seeds jump the queue over Nova runs entirely.
+  const seed = opts?.runId ? null : await fetchTopOperatorSeed(supabase, userId);
 
-  await assertForgeNotComplete(
-    supabase,
-    userId,
-    ideaRows.map((row) => row.id),
-  );
+  let runId: string;
+  let ideaRows: DbIdea[];
+  let forgePick: NovaEvaluatedIdea;
+  let selectedRow: DbIdea;
 
-  const evaluated = ideaRows
-    .map(ideaRowToNovaEvaluated)
-    .filter((idea): idea is NovaEvaluatedIdea => idea !== null);
+  if (seed) {
+    runId = `operator-seed-${String(seed.id).slice(0, 8)}`;
+    ideaRows = [seed];
+    forgePick = operatorSeedToEvaluated(seed);
+    selectedRow = seed;
+    await assertForgeNotComplete(supabase, userId, [seed.id]);
+  } else {
+    const resolved = await resolveRunIdeasForForge(supabase, userId, opts?.runId);
+    runId = resolved.runId;
+    ideaRows = resolved.ideaRows;
 
-  if (evaluated.length === 0) {
-    throw new SimulatorError(
-      "No Forge-eligible ideas in this run (all blocked by Product Brain).",
+    await assertForgeNotComplete(
+      supabase,
+      userId,
+      ideaRows.map((row) => row.id),
     );
-  }
 
-  const forgePick = pickForgeIdeaCandidate(evaluated);
-  const forgeIndex = evaluated.indexOf(forgePick);
-  // Operator-seeded ideas are pre-approved work orders (e.g. the 2026-07-20
-  // bandana launch) — they jump the queue over Nova's fresh batch, which
-  // otherwise wins every cycle and starves the seeds forever.
-  const operatorSeed = ideaRows.find(
-    (row) =>
-      row.status === "idea" &&
-      typeof row.raw_payload === "object" &&
-      row.raw_payload !== null &&
-      (row.raw_payload as Record<string, unknown>).operatorSeed === true,
-  );
-  const selectedRow = operatorSeed ?? ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+    const evaluated = ideaRows
+      .map(ideaRowToNovaEvaluated)
+      .filter((idea): idea is NovaEvaluatedIdea => idea !== null);
+
+    if (evaluated.length === 0) {
+      throw new SimulatorError(
+        "No Forge-eligible ideas in this run (all blocked by Product Brain).",
+      );
+    }
+
+    forgePick = pickForgeIdeaCandidate(evaluated);
+    const forgeIndex = evaluated.indexOf(forgePick);
+    selectedRow = ideaRows[forgeIndex >= 0 ? forgeIndex : 0]!;
+  }
 
   const events: FactoryEvent[] = [];
   const tasks: ReturnType<typeof mapTaskFromDb>[] = [];
@@ -846,6 +831,78 @@ async function executeForgeStep(
     events,
     tasks,
   };
+}
+
+/**
+ * Operator seeds are pre-approved work orders (e.g. the 2026-07-20 bandana
+ * launch). They live OUTSIDE Nova runs (no runId, no Product Brain rows), so
+ * both the run resolver and the brain-evaluated mapper are structurally blind
+ * to them — which starved the seeds behind Nova's fresh batch for a full day.
+ * This maps a seed row directly into the evaluated shape Forge consumes.
+ * (Declared after executeForgeStep only for the wiring test's block slicing —
+ * function declarations hoist.)
+ */
+function operatorSeedToEvaluated(row: DbIdea): NovaEvaluatedIdea {
+  const raw = (row.raw_payload ?? {}) as Record<string, unknown>;
+  const catalogHint =
+    typeof raw.catalogKey === "string"
+      ? ` IMPORTANT: build this product with catalogKey ${raw.catalogKey}.`
+      : "";
+  return {
+    niche: row.niche ?? "pet-parent",
+    targetBuyer: "pet parents shopping for personalized gifts",
+    problemSolved: "Operator-approved launch item for a validated niche.",
+    productConcept: row.title ?? "",
+    format: normalizeProductFormat(String(raw.format ?? "mug")),
+    category: normalizeProductCategory(String(raw.category ?? "pet_lovers")),
+    suggestedPrice: Number(raw.suggestedPrice ?? 16.99),
+    keywords: row.seo_keywords ?? [],
+    reasoning: `${row.description ?? ""}${catalogHint}`,
+    source: "fallback",
+    score: {
+      urgency: 9,
+      specificity: 9,
+      buyerClarity: 9,
+      usefulness: 9,
+      competitionRisk: 2,
+      complianceRisk: 1,
+      totalScore: 92,
+    },
+    validation: { riskLevel: "safe", violations: [] },
+    verdict: "approve_for_generation",
+    trendScore: Number(row.trend_score ?? 9),
+  };
+}
+
+async function fetchTopOperatorSeed(
+  supabase: Supabase,
+  userId: string,
+): Promise<DbIdea | null> {
+  try {
+    // Include "selected": cycle recovery idles the agents but never resets
+    // idea status, so a crash after the selected-flip would otherwise strand
+    // a seed forever. The listings check below keeps this idempotent.
+    const { data } = await supabase
+      .from(TABLES.IDEAS)
+      .select("*")
+      .eq("user_id", userId)
+      .in("status", ["idea", "selected"])
+      .eq("raw_payload->>operatorSeed", "true")
+      .order("trend_score", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(8);
+    const candidates = (data as DbIdea[] | null) ?? [];
+    for (const candidate of candidates) {
+      const { count } = await supabase
+        .from(TABLES.LISTINGS)
+        .select("id", { count: "exact", head: true })
+        .eq("product_idea_id", candidate.id);
+      if (!count) return candidate;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export type ResetDemoSummary = {

@@ -43,3 +43,58 @@ export function duePlatforms(
 ): SocialPlatform[] {
   return platforms.filter((p) => (counts[p.toLowerCase()] ?? 0) < capFor(p));
 }
+
+/**
+ * Posting window (2026-07-20): the hourly cron was firing around the clock,
+ * landing posts at 2-3 AM Central — dead air for a US pet-parent audience,
+ * and the operator flagged the "weird schedules". Posts now only go out
+ * during US engagement hours; staged jobs simply wait for the next window.
+ *
+ * Defaults: 8 AM - 10 PM America/Chicago (DST-aware via Intl). Override with
+ * SOCIAL_POSTING_WINDOW="8-22" (local hours) and SOCIAL_POSTING_TZ.
+ */
+export const POSTING_TIMEZONE_DEFAULT = "America/Chicago";
+const POSTING_WINDOW_START_DEFAULT = 8;
+const POSTING_WINDOW_END_DEFAULT = 22;
+
+export function localHour(now: Date, timeZone: string): number {
+  try {
+    const text = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(now);
+    const parsed = Number(text);
+    if (Number.isFinite(parsed)) return ((parsed % 24) + 24) % 24;
+  } catch {
+    // fall through to UTC below (bad TZ string must not kill the poster)
+  }
+  return now.getUTCHours();
+}
+
+export function postingWindow(): { startHour: number; endHour: number } {
+  const raw = process.env.SOCIAL_POSTING_WINDOW?.trim();
+  const match = raw?.match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (match) {
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    if (start >= 0 && start <= 23 && end >= 0 && end <= 24 && start !== end) {
+      return { startHour: start, endHour: end };
+    }
+  }
+  return {
+    startHour: POSTING_WINDOW_START_DEFAULT,
+    endHour: POSTING_WINDOW_END_DEFAULT,
+  };
+}
+
+/** True when `now` falls inside the local posting window (handles windows that wrap midnight). */
+export function isWithinPostingWindow(now: Date = new Date()): boolean {
+  const { startHour, endHour } = postingWindow();
+  const timeZone =
+    process.env.SOCIAL_POSTING_TZ?.trim() || POSTING_TIMEZONE_DEFAULT;
+  const hour = localHour(now, timeZone);
+  return startHour < endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour;
+}
