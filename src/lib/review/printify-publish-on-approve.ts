@@ -238,6 +238,34 @@ export async function enrichEtsyListingAfterPublish(
       // Best-effort — enrichment continues either way.
     }
 
+    // Etsy seller-policy compliance (2026-07-21): POD listings must disclose
+    // their production partner. The original 28 got Printify attached via a
+    // manual bulk edit; every NEW listing arrives bare. Idempotent — Etsy
+    // re-setting the same partner list is a no-op, and this runs on both the
+    // publish-time pass and the hourly self-heal.
+    try {
+      const partnerIds = await etsy.getProductionPartnerIds(
+        credentials.shop_id,
+        credentials.access_token,
+      );
+      if (partnerIds.length > 0) {
+        await etsy.updateListing(
+          credentials.shop_id,
+          etsyListingId,
+          credentials.access_token,
+          { production_partner_ids: partnerIds },
+        );
+      }
+    } catch (partnerErr) {
+      await insertGumroadEvent(
+        supabase,
+        userId,
+        "production_partner_attach_failed",
+        `Could not attach the production partner to listing ${etsyListingId}: ${partnerErr instanceof Error ? partnerErr.message : "unknown"}`,
+        { listingId, etsyListingId },
+      );
+    }
+
     // --- Photos -------------------------------------------------------------
     let firstImageBuffer: Buffer | null = null;
     // The moat: every listing accepts buyer personalization (pet name/date,

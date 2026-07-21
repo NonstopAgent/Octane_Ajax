@@ -106,6 +106,8 @@ export type EtsyListingPatch = {
   personalization_is_required?: boolean;
   personalization_char_count_max?: number;
   personalization_instructions?: string;
+  /** Etsy seller-policy compliance: POD listings must disclose their production partner(s). */
+  production_partner_ids?: number[];
 };
 
 /** Raw receipt slice for the personalization order intake poller. */
@@ -579,6 +581,23 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         }));
     },
 
+    /** Shop-level production partners (e.g. Printify) for listing compliance. */
+    async getProductionPartnerIds(
+      shopId: string,
+      accessToken: string,
+    ): Promise<number[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/production-partners`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: { production_partner_id?: number }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .map((p) => p.production_partner_id)
+        .filter((id): id is number => id != null);
+    },
+
     /** Create a storefront section; returns its id. */
     async createShopSection(
       shopId: string,
@@ -750,6 +769,12 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       }
       if (patch.state) {
         body.set("state", patch.state);
+      }
+      if (patch.production_partner_ids?.length) {
+        body.set(
+          "production_partner_ids",
+          patch.production_partner_ids.join(","),
+        );
       }
       if ([...body.keys()].length === 0) return;
 
