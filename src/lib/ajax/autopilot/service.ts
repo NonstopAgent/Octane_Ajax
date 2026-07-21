@@ -940,6 +940,47 @@ export async function runShopAutopilot(
     .eq("status", "pending");
 
   if ((pendingReviews ?? 0) > 0) {
+    // Self-heal (2026-07-21): a failed POD fulfillment leaves the pending
+    // listing without mockups, which blocks auto-review — and therefore the
+    // whole production line — forever. Retry the build first (the art gate
+    // may have been the cause and its rules can improve between deploys).
+    // Cap at 4 recorded failures so a genuinely unbuildable product cannot
+    // burn image spend every hour.
+    try {
+      const { data: pendingRow } = await supabase
+        .from(TABLES.REVIEW_QUEUE)
+        .select("listing_id")
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const pendingListingId = pendingRow?.listing_id;
+      if (pendingListingId) {
+        const { data: genRow } = await supabase
+          .from(TABLES.GENERATIONS)
+          .select("id, generation_status")
+          .eq("product_listing_id", pendingListingId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (genRow?.generation_status === "failed") {
+          const { count: failCount } = await supabase
+            .from(TABLES.EVENTS)
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .eq("event_type", "pod_fulfillment_failed")
+            .eq("metadata->>generationId", genRow.id);
+          if ((failCount ?? 0) < 4) {
+            await runGenerationPodJob(supabase, userId, genRow.id);
+          }
+        }
+      }
+    } catch (healErr) {
+      result.errors.push(
+        `fulfillment-retry: ${healErr instanceof Error ? healErr.message : "failed"}`,
+      );
+    }
     // Self-clear the gate: autonomously review the oldest pending item so the
     // factory never freezes waiting on a human. Approve → downstream Etsy draft +
     // video + marketing via runPostApproval; autonomous "revise" counts as reject.

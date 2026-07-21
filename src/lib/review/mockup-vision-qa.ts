@@ -37,10 +37,12 @@ Check for these defects:
 
 Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failed check, empty if pass"]}`;
 
-const ARTWORK_PROMPT = `You are a strict print-on-demand quality inspector looking at FLAT ARTWORK that will be printed on a product (not a product photo — margins and transparent backgrounds are expected and fine).
+const ARTWORK_PROMPT = `You are a print-on-demand quality inspector looking at FLAT ARTWORK that will be printed on a product (not a product photo — margins and transparent backgrounds are expected and fine).
+
+IMPORTANT context on personalized products: when the listing title says "Custom", "Personalized", or "Name", the artwork correctly shows ONE sample pet name (like "Buddy" or "Luna") as a placeholder — that sample name IS the personalization demo. NEVER fail artwork for showing a specific sample name, and NEVER require the literal words "Custom Name" to appear. Likewise, showing a dog when the title says "pet", or a dog AND cat together on a general pet product, is CORRECT — only a clearly WRONG or unrelated subject fails.
 
 Check ONLY these:
-1. SUBJECT: does the artwork's subject matter match this listing title: "{TITLE}"? (wrong animal, wrong theme, or unrelated imagery is a FAIL)
+1. SUBJECT: is the artwork clearly UNRELATED to this listing title: "{TITLE}"? (e.g. a car for a dog product, a birthday theme for a memorial). Reasonable interpretations of the theme PASS.
 2. TEXT: every word in the artwork must be correctly spelled, real English, and legible. Garbled, invented, or misspelled words are a FAIL.
 3. QUALITY: obvious rendering artifacts, mangled anatomy, or unfinished areas are a FAIL.
 
