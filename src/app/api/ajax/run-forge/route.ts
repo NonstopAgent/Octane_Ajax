@@ -1,7 +1,8 @@
-// 300 (was 60): the art gate adds up to two vision checks and a corrective
-// artwork regeneration to the Forge step — worth every second versus
-// shipping a bad product, but it no longer fits a 60s budget.
-export const maxDuration = 300;
+// 600 (was 300, was 60): the art gate adds up to two vision checks and a
+// corrective artwork regeneration to the Forge step, and each artwork call
+// may now legitimately run up to 240s — two attempts + gates no longer fit
+// a 300s budget. Worth every second versus shipping a bad product.
+export const maxDuration = 600;
 
 import { NextResponse } from "next/server";
 import {

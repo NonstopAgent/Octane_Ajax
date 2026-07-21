@@ -53,9 +53,10 @@ describe("demo workflow wiring", () => {
     assert.match(novaRoute, /runNovaStep/);
     assert.match(forgeRoute, /runForgeStep/);
     assert.match(novaRoute, /maxDuration\s*=\s*60/);
-    // Forge budget grew to 300 when the art gate (vision checks + one
-    // corrective regeneration) joined the step on 2026-07-20.
-    assert.match(forgeRoute, /maxDuration\s*=\s*300/);
+    // Forge budget grew to 300 when the art gate joined the step
+    // (2026-07-20), then 600 when artwork calls got a 240s ceiling
+    // (2026-07-21) — two attempts + gates must fit.
+    assert.match(forgeRoute, /maxDuration\s*=\s*600/);
     assert.match(simulator, /export async function runNovaStep/);
     assert.match(simulator, /export async function runForgeStep/);
     assert.match(simulator, /from ["']@\/lib\/ajax\/nova/);

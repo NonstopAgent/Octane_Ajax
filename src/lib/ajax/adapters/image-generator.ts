@@ -31,12 +31,18 @@ const DEFAULT_TRANSPARENT_IMAGE_MODEL = "gpt-image-1.5";
 
 /**
  * Hard ceiling for a single OpenAI image call. Kept below the serverless
- * function budget so a slow `gpt-image-1` call fails cleanly (and records a
- * `failed` status) instead of being killed mid-await and orphaning the row.
+ * function budget so a slow call fails cleanly (and records a `failed`
+ * status) instead of being killed mid-await and orphaning the row.
+ *
+ * 240s (was 45s): the 2026-07-21 bandana build timed out at the 45s default
+ * — wide transparent gpt-image-1.5 renders routinely run 50-90s+, and with
+ * the SDK's internal retries the whole call chain burned ~150s and still
+ * surfaced "Request timed out." Callers run inside the 800s autopilot cron
+ * or the 600s run-forge route, so 240s fits even a regeneration pass.
  */
 const IMAGE_GENERATION_TIMEOUT_MS = (() => {
   const raw = Number(process.env.IMAGE_GENERATION_TIMEOUT_MS);
-  return Number.isFinite(raw) && raw > 0 ? raw : 45_000;
+  return Number.isFinite(raw) && raw > 0 ? raw : 240_000;
 })();
 
 export type ProductArtworkInput = {
