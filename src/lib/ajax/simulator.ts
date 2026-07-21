@@ -874,7 +874,7 @@ function operatorSeedToEvaluated(row: DbIdea): NovaEvaluatedIdea {
   };
 }
 
-async function fetchTopOperatorSeed(
+export async function fetchTopOperatorSeed(
   supabase: Supabase,
   userId: string,
 ): Promise<DbIdea | null> {

@@ -37,6 +37,7 @@ import {
 } from "@/lib/ajax/pixel-simulator";
 import {
   CycleBlockedError,
+  fetchTopOperatorSeed,
   runForgeStep,
   runNovaStep,
 } from "@/lib/ajax/simulator";
@@ -961,8 +962,19 @@ export async function runShopAutopilot(
     }
   } else if (result.takenDown === 0 && publishedCount < targetListings) {
     try {
-      const nova = await runNovaStep(supabase, userId);
-      const forge = await runForgeStep(supabase, userId, { runId: nova.runId });
+      // Operator seeds are pre-approved work orders — when one is waiting,
+      // skip Nova entirely (no competing fresh batch, no wasted LLM run) and
+      // let Forge's seed-first branch pick it up. Passing Nova's runId here
+      // was exactly what starved the 2026-07-20 bandana launch: every hourly
+      // cycle pinned Forge to the fresh Nova run.
+      const seed = await fetchTopOperatorSeed(supabase, userId);
+      let forge: Awaited<ReturnType<typeof runForgeStep>>;
+      if (seed) {
+        forge = await runForgeStep(supabase, userId, {});
+      } else {
+        const nova = await runNovaStep(supabase, userId);
+        forge = await runForgeStep(supabase, userId, { runId: nova.runId });
+      }
       try {
         await runGenerationPodJob(supabase, userId, forge.generationId);
       } catch (fulfillErr) {
