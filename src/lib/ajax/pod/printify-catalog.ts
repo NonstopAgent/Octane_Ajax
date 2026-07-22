@@ -137,8 +137,11 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     defaultPriceCents: 1499,
     artworkAspectRatio: "16:9", // wide bandana panel (~1.76:1)
     artworkBackground: "transparent",
+    // Rewritten 2026-07-22 after the operator called the first wave's
+    // designs "trash": dense text-heavy panels read as clipart. Boutique
+    // pet-bandana bestsellers are simple: ONE charming motif + the name.
     artworkCompositionHint:
-      "Wide horizontal bandana panel design: a repeating or centered motif with a personalized pet-name lockup, sized so nothing important sits near the edges. Isolated on a transparent background — no background color, box, or scene.",
+      "Boutique-quality wide bandana panel, styled like a hand-lettered pet boutique design: the pet's NAME is the hero in large, warm, professional hand-lettered script, with ONE small charming accent motif (a paw print, tiny florals, or a simple heart) beside or beneath it. Generous empty space; a cohesive 2-3 color palette that reads clearly on fabric; absolutely no dense text blocks, no busy patterns, no clipart look, nothing near the edges. Isolated on a transparent background — no background color, box, or scene.",
     promptHint:
       "Best for personalized pet-name accessories; adoption day, gotcha day, and new-pet gifts.",
   },

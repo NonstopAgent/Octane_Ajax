@@ -110,6 +110,13 @@ export async function enrichEtsyListingAfterPublish(
         const donor = shopProducts.data.find(
           (p) =>
             p.productId !== product.data.productId &&
+            // STRICT blueprint match (2026-07-22): `null === null` passed
+            // here when the list API omitted blueprints, so a POSTER donated
+            // its camera angles to a BANDANA — Printify's CDN then rendered
+            // the bandana design in a picture frame above a couch, and that
+            // shipped as a listing photo. Both ids must be REAL and equal.
+            typeof p.blueprintId === "number" &&
+            typeof product.data.blueprintId === "number" &&
             p.blueprintId === product.data.blueprintId &&
             p.images.filter((i) => i.is_selected_for_publishing).length > 1,
         );
@@ -121,8 +128,29 @@ export async function enrichEtsyListingAfterPublish(
             MAX_PUBLISH_MOCKUPS,
           );
           if (siblingUrls.length > 1) {
-            galleryUrls = siblingUrls;
-            gallerySource = `donor ${donor.productId}`;
+            // Cheap sanity check on ONE harvested angle before trusting the
+            // set: a donor-angle render that shows the wrong PRODUCT TYPE
+            // for this listing title (poster frame for a bandana) fails the
+            // MATCH rule and the whole harvest is skipped.
+            const { visionCheckProductMockup } = await import(
+              "@/lib/review/mockup-vision-qa"
+            );
+            const probe = await visionCheckProductMockup({
+              mockupUrl: siblingUrls[0]!,
+              productTitle: product.data.title,
+            });
+            if (!probe.checked || probe.pass) {
+              galleryUrls = siblingUrls;
+              gallerySource = `donor ${donor.productId}`;
+            } else {
+              await insertGumroadEvent(
+                supabase,
+                userId,
+                "etsy_gallery_skipped",
+                `Donor-angle harvest rejected by vision QA (${probe.issues.join("; ").slice(0, 160)}) — keeping the product's own mockups.`,
+                { listingId, printifyProductId, donor: donor.productId },
+              );
+            }
           }
         }
       } catch {

@@ -210,11 +210,39 @@ export async function runGenerationPodJob(
       .eq("id", generationId)
       .eq("user_id", userId);
 
-    // Surface the artwork on the listing so the Review Gate can render it.
-    if (artworkRef) {
+    // Surface the product on the listing for the Review Gate — the REAL
+    // Printify render when one exists, not the flat artwork. Judging flat
+    // art let a mis-placed bandana sail through review (2026-07-22): the
+    // clipped-panel defect only shows on the actual mockup. Renders are
+    // async on Printify's side, so poll briefly; artwork stays the fallback.
+    let reviewImage = artworkRef;
+    const printifyId = result.fulfillment.printifyProductId;
+    if (printifyId) {
+      try {
+        const { printifyAdapter } = await import("@/lib/ajax/adapters");
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 15_000));
+          try {
+            const fresh = await printifyAdapter.getProduct(printifyId);
+            const first =
+              fresh.data.images.find((i) => i.is_selected_for_publishing) ??
+              fresh.data.images[0];
+            if (first?.src?.startsWith("https://")) {
+              reviewImage = first.src;
+              break;
+            }
+          } catch {
+            // transient — keep polling; artwork remains the fallback
+          }
+        }
+      } catch {
+        // adapter unavailable (demo mode) — artwork fallback is fine
+      }
+    }
+    if (reviewImage) {
       await supabase
         .from(TABLES.LISTINGS)
-        .update({ mockup_url: artworkRef })
+        .update({ mockup_url: reviewImage })
         .eq("id", listingId)
         .eq("user_id", userId);
     }

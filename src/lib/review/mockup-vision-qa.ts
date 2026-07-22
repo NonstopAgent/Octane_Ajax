@@ -44,7 +44,7 @@ IMPORTANT context on personalized products: when the listing title says "Custom"
 Check ONLY these:
 1. SUBJECT: is the artwork clearly UNRELATED to this listing title: "{TITLE}"? (e.g. a car for a dog product, a birthday theme for a memorial). Reasonable interpretations of the theme PASS.
 2. TEXT: every word in the artwork must be correctly spelled, real English, and legible. Garbled, invented, or misspelled words are a FAIL.
-3. QUALITY: obvious rendering artifacts, mangled anatomy, or unfinished areas are a FAIL.
+3. QUALITY: obvious rendering artifacts, mangled anatomy, or unfinished areas are a FAIL. Also FAIL work a buyer would call amateurish: cluttered composition with no focal point, harsh clashing colors, or a generic-clipart look. (A clean, simple design with empty space is GOOD — simplicity is not a defect.)
 
 Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failure, empty if pass"]}`;
 
