@@ -191,6 +191,18 @@ export async function runPodFulfillment(
     "Printify artwork upload",
   );
 
+  // The adapter contain-fits placement from the ART'S aspect ratio. Omitting
+  // it defaulted to 1 (square) — correct for mugs/tees, but 16:9 bandana art
+  // and 4:5 poster art rendered CLIPPED at the panel edges (caught by the
+  // vision gate on every bandana build, 2026-07-22).
+  const aspectParts = (catalogEntry?.artworkAspectRatio ?? "1:1")
+    .split(":")
+    .map(Number);
+  const artworkAspect =
+    aspectParts.length === 2 && aspectParts[0]! > 0 && aspectParts[1]! > 0
+      ? aspectParts[0]! / aspectParts[1]!
+      : 1;
+
   const productResult = await withTimeout(
     printifyAdapter.createProduct({
       title: listingTitle,
@@ -202,6 +214,7 @@ export async function runPodFulfillment(
       tags,
       variantPrices: catalogEntry?.variantPrices,
       priceCents: catalogEntry?.defaultPriceCents,
+      artworkAspect,
     }),
     PRINTIFY_TIMEOUT_MS,
     "create",
