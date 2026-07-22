@@ -62,7 +62,7 @@ Use ONLY these IP-safe aesthetic styles (no copyrighted character or brand style
 
 Artwork emotional tone: designs are GIFTS — they must read warm, celebratory, proud, or funny at a glance. Never melancholy, empty, or ambiguous (e.g. a retirement design should feel like a party, not a farewell). At most ONE short text element (5 words max) in the artwork; no secondary labels, signs, or fine print.
 
-PERSONALIZED CONCEPTS (name/date customization): the shop integrates the buyer's pet name into the design automatically per-order. For these, the artworkPrompt must describe a base design with a clean, harmonious space where a name will be lettered later (e.g. a banner, arc, or open area under the subject) — and the base design ships WITHOUT any name: NEVER bake a placeholder name like "Bella" or "Max" into the artwork.
+PERSONALIZED CONCEPTS (name/date customization): the shop integrates the buyer's pet name into the design automatically per-order. For these, the artworkPrompt must describe a base design with a clean, harmonious space where a name will be lettered later (e.g. a banner, arc, or open area under the subject) — and the base design ships WITHOUT any name: NEVER bake a placeholder name like "Bella" or "Max" into the artwork, and NEVER render literal placeholder words like "Dog's Name", "Your Name Here", or "Custom Name" as text in the design (the reviewer rejects those as fake-looking).
 
 ${WINNING_RUBRIC}
 

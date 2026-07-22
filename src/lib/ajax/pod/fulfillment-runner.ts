@@ -191,17 +191,15 @@ export async function runPodFulfillment(
     "Printify artwork upload",
   );
 
-  // The adapter contain-fits placement from the ART'S aspect ratio. Omitting
-  // it defaulted to 1 (square) — correct for mugs/tees, but 16:9 bandana art
-  // and 4:5 poster art rendered CLIPPED at the panel edges (caught by the
-  // vision gate on every bandana build, 2026-07-22).
-  const aspectParts = (catalogEntry?.artworkAspectRatio ?? "1:1")
-    .split(":")
-    .map(Number);
-  const artworkAspect =
-    aspectParts.length === 2 && aspectParts[0]! > 0 && aspectParts[1]! > 0
-      ? aspectParts[0]! / aspectParts[1]!
-      : 1;
+  // The adapter contain-fits placement from the ART'S aspect ratio — the
+  // TRUE ratio of the generated file, not the catalog's nominal label. The
+  // labels lie ("4:5" renders 2:3; "16:9" renders 3:2), and scaling against
+  // the nominal values overflowed bandana panels and blocked poster
+  // full-bleed even after the per-variant fit fix (2026-07-22).
+  const { generatedAspectNumber } = await import(
+    "@/lib/ajax/adapters/image-generator"
+  );
+  const artworkAspect = generatedAspectNumber(catalogEntry?.artworkAspectRatio);
 
   const productResult = await withTimeout(
     printifyAdapter.createProduct({

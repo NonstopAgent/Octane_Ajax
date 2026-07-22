@@ -180,6 +180,26 @@ function aspectToSize(aspectRatio?: ProductArtworkInput["aspectRatio"]): string 
   }
 }
 
+/**
+ * The TRUE width/height ratio of what aspectToSize actually generates —
+ * placement math must use THIS, not the catalog's nominal label. The labels
+ * lie: "4:5" renders 1024x1536 (= 2:3, 0.667) and "16:9" renders 1536x1024
+ * (= 3:2, 1.5). Scaling prints against the nominal ratios overflowed the
+ * bandana panel and blocked poster full-bleed (2026-07-22).
+ */
+export function generatedAspectNumber(
+  aspectRatio?: ProductArtworkInput["aspectRatio"],
+): number {
+  switch (aspectRatio) {
+    case "4:5":
+      return 1024 / 1536;
+    case "16:9":
+      return 1536 / 1024;
+    default:
+      return 1;
+  }
+}
+
 export function isImageGeneratorConfigured(
   options?: ImageGeneratorAdapterOptions,
 ): boolean {
