@@ -70,7 +70,9 @@ export function heuristicReview(input: HeuristicReviewInput): HeuristicReview {
   if (tags.length < ETSY_PLAYBOOK.tags.count)
     fixes.push(`Fill all ${ETSY_PLAYBOOK.tags.count} tags with multi-word long-tail phrases.`);
   if (title && isGenericProductTitle(title))
-    fixes.push("Make the title specific — name the buyer and occasion.");
+    fixes.push(
+      "Make the title specific — state what the item IS plus its distinctive theme (occasion/gift phrases belong in tags and the description).",
+    );
 
   // Sellability
   let sellability = 40;

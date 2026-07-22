@@ -141,7 +141,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // designs "trash": dense text-heavy panels read as clipart. Boutique
     // pet-bandana bestsellers are simple: ONE charming motif + the name.
     artworkCompositionHint:
-      "Boutique-quality wide bandana panel, styled like a hand-lettered pet boutique design: the pet's NAME is the hero in large, warm, professional hand-lettered script, with ONE small charming accent motif (a paw print, tiny florals, or a simple heart) beside or beneath it. Generous empty space; a cohesive 2-3 color palette that reads clearly on fabric; absolutely no dense text blocks, no busy patterns, no clipart look, nothing near the edges. Isolated on a transparent background — no background color, box, or scene.",
+      "Boutique-quality wide bandana panel, styled like a hand-lettered pet boutique design: ONE charming focal motif (a paw print, tiny florals, or a simple heart) with a short hand-lettered phrase, arranged around a clean open banner/arc space reserved for the pet's name — the name itself is lettered per order, so do NOT render any name or date in the artwork. Generous empty space; a cohesive 2-3 color palette that reads clearly on fabric; absolutely no dense text blocks, no busy patterns, no clipart look, nothing near the edges. Isolated on a transparent background — no background color, box, or scene.",
     promptHint:
       "Best for personalized pet-name accessories; adoption day, gotcha day, and new-pet gifts.",
   },
