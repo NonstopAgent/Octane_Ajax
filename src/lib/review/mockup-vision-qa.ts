@@ -26,10 +26,10 @@ export type VisionQaResult = {
 
 const PROMPT = `You are a strict print-on-demand quality inspector. Look at this product mockup image and answer in JSON only.
 
-IMPORTANT product-type context: on MUGS and APPAREL (shirts, sweatshirts, bandanas), the design is a centered graphic that occupies roughly 30-60% of the product face with clean product-colored margins around it — that is CORRECT professional placement, NOT a fill defect. Only POSTERS and ART PRINTS are full-bleed products where the artwork must fill the printed sheet edge to edge.
+IMPORTANT product-type context: on MUGS and APPAREL (shirts, sweatshirts), the design is a centered graphic that occupies roughly 30-60% of the product face with clean product-colored margins around it — that is CORRECT professional placement, NOT a fill defect. On BANDANAS the printed panel is a triangle or wide strip that is naturally a SMALL part of the product photo — judge the design against the PRINTED PANEL only, never against the whole image; a design covering roughly 25-60% of the panel is CORRECT. Only POSTERS and ART PRINTS are full-bleed products where the artwork must fill the printed sheet edge to edge.
 
 Check for these defects:
-1. FILL: for posters/art prints only — artwork floating small on the sheet with unintended blank bands is a FAIL. For mugs/apparel, do NOT fail for normal centered-graphic margins; fail only if the design is tiny (under ~20% of the face), dramatically off-center, or wrapped so it faces away from the camera.
+1. FILL: for posters/art prints only — artwork floating small on the sheet with unintended blank bands is a FAIL. For mugs/apparel, do NOT fail for normal centered-graphic margins; fail only if the design is tiny (under ~20% of the face), dramatically off-center, or wrapped so it faces away from the camera. For bandanas, do NOT fail because the panel is a small share of the photo; fail only if the design is unreadable, badly off-center ON THE PANEL, or cut off.
 2. CROP: is any text or key design element cut off at an edge of the PRINTED DESIGN?
 3. TEXT: is all text in the design legible (not garbled, warped, or misspelled)?
 4. MATCH: does the product in the image match this listing title: "{TITLE}"? (e.g. a mug mockup for a poster listing is a FAIL)

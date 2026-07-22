@@ -88,6 +88,19 @@ export function postingWindow(): { startHour: number; endHour: number } {
   };
 }
 
+/**
+ * Media freshness epoch (2026-07-21): the poster was attaching videos
+ * rendered 2026-07-14 — BEFORE the store repair and the scene-QA gate — so
+ * TikTok kept showing pre-repair designs a week later. Anything rendered
+ * before this instant is untrusted as social media. Override with
+ * SOCIAL_VIDEO_FRESH_AFTER (ISO timestamp).
+ */
+export function videoFreshEpoch(): string {
+  const raw = process.env.SOCIAL_VIDEO_FRESH_AFTER?.trim();
+  if (raw && !Number.isNaN(Date.parse(raw))) return raw;
+  return "2026-07-17T00:00:00Z";
+}
+
 /** True when `now` falls inside the local posting window (handles windows that wrap midnight). */
 export function isWithinPostingWindow(now: Date = new Date()): boolean {
   const { startHour, endHour } = postingWindow();

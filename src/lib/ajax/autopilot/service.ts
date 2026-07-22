@@ -42,6 +42,8 @@ import {
   runNovaStep,
 } from "@/lib/ajax/simulator";
 import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
+import { enqueueApprovalVideos } from "@/lib/ajax/video/jobs";
+import { videoFreshEpoch } from "@/lib/social/cadence";
 import {
   gatherTakedownCandidates,
   selectTakedownCandidate,
@@ -930,6 +932,73 @@ export async function runShopAutopilot(
   } catch (err) {
     result.errors.push(
       `takedown: ${err instanceof Error ? err.message : "failed"}`,
+    );
+  }
+
+  // ---- Video freshness medic (2026-07-21) ------------------------------------
+  // Social posts were reusing renders from BEFORE the store repair and the
+  // scene-QA gate (the auto-poster now refuses them). Re-render ONE stale
+  // listing per pass — enqueueApprovalVideos' daily cap still governs total
+  // spend, and failed renders retry on later passes.
+  try {
+    const epoch = videoFreshEpoch();
+    const { data: freshRows } = await supabase
+      .from(TABLES.VIDEO_JOBS)
+      .select("etsy_listing_id, status")
+      .eq("user_id", userId)
+      .gte("created_at", epoch)
+      .limit(500);
+    const covered = new Set(
+      (freshRows ?? [])
+        .filter((r) => r.status !== "failed")
+        .map((r) => String(r.etsy_listing_id ?? ""))
+        .filter(Boolean),
+    );
+    const { data: pubRows } = await supabase
+      .from(TABLES.LISTINGS)
+      .select("id, title, mockup_url, gumroad_product_id, gumroad_url")
+      .eq("user_id", userId)
+      .eq("status", "published")
+      .limit(60);
+    const staleTarget = (pubRows ?? []).find((r) => {
+      const etsy = String(r.gumroad_product_id ?? "");
+      return (
+        /^\d+$/.test(etsy) &&
+        !covered.has(etsy) &&
+        (r.mockup_url ?? "").startsWith("https://")
+      );
+    });
+    if (staleTarget) {
+      const res = await fetch(staleTarget.mockup_url as string, {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        const queued = await enqueueApprovalVideos(supabase, {
+          userId,
+          mockupBuffer: buf,
+          title: staleTarget.title ?? "",
+          etsyListingId: String(staleTarget.gumroad_product_id),
+          listingUrl: staleTarget.gumroad_url ?? null,
+        });
+        await logEvent(
+          supabase,
+          userId,
+          "video_refresh_queued",
+          `Re-rendering the video for "${(staleTarget.title ?? "").slice(0, 60)}" — its newest clip predates the store repair, so social posts for it were stale.`,
+          {
+            listingId: staleTarget.id,
+            etsyListingId: String(staleTarget.gumroad_product_id),
+            etsy: queued.etsy,
+            social: queued.social,
+            error: queued.etsyError ?? queued.styleError ?? null,
+          } as Json,
+        );
+      }
+    }
+  } catch (videoErr) {
+    result.errors.push(
+      `video-refresh: ${videoErr instanceof Error ? videoErr.message : "failed"}`,
     );
   }
 

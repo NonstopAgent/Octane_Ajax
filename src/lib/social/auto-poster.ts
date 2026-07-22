@@ -18,7 +18,11 @@ import {
   isSocialConfigured,
   publishPost,
 } from "@/lib/social/ayrshare";
-import { duePlatforms, isWithinPostingWindow } from "@/lib/social/cadence";
+import {
+  duePlatforms,
+  isWithinPostingWindow,
+  videoFreshEpoch,
+} from "@/lib/social/cadence";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
@@ -58,20 +62,41 @@ type StagedJob = {
  * is skipped entirely on a photo-only pass rather than burning retries on a
  * guaranteed rejection.
  */
-async function findPromoVideo(
+/**
+ * The job's listing, resolved LIVE at post time. Jobs sit in the queue for
+ * days — the listing they advertise may have been repaired, renamed,
+ * retired, or rejected since the job was staged. Posting is always judged
+ * against the listing's CURRENT state, never the job's snapshot.
+ */
+async function resolvePromoListing(
   supabase: Supabase,
   userId: string,
   listingId: string | null,
-): Promise<{ url: string; vertical: boolean } | null> {
+): Promise<{ etsyId: string | null; mockupUrl: string | null; status: string | null } | null> {
   if (!listingId) return null;
-  const { data: listingRow } = await supabase
+  const { data: row } = await supabase
     .from(TABLES.LISTINGS)
-    .select("gumroad_product_id")
+    .select("gumroad_product_id, mockup_url, status")
     .eq("id", listingId)
     .eq("user_id", userId)
     .maybeSingle();
-  const etsyId = String(listingRow?.gumroad_product_id ?? "");
-  if (!/^\d+$/.test(etsyId)) return null;
+  if (!row) return null;
+  const etsyId = String(row.gumroad_product_id ?? "");
+  return {
+    etsyId: /^\d+$/.test(etsyId) ? etsyId : null,
+    mockupUrl: row.mockup_url?.trim().startsWith("https://")
+      ? row.mockup_url.trim()
+      : null,
+    status: row.status ?? null,
+  };
+}
+
+async function findPromoVideo(
+  supabase: Supabase,
+  userId: string,
+  etsyId: string | null,
+): Promise<{ url: string; vertical: boolean } | null> {
+  if (!etsyId) return null;
   const { data: vids } = await supabase
     .from(TABLES.VIDEO_JOBS)
     .select("video_url, kind")
@@ -79,6 +104,10 @@ async function findPromoVideo(
     .eq("etsy_listing_id", etsyId)
     .eq("status", "done")
     .not("video_url", "is", null)
+    // FRESHNESS GATE (2026-07-21): renders from before the store repair +
+    // scene-QA gate showed the OLD designs — TikTok was still airing them a
+    // week after the repair. Stale renders are never social material.
+    .gte("updated_at", videoFreshEpoch())
     .order("updated_at", { ascending: false })
     .limit(5);
   const rows = (vids ?? []).filter((v) =>
@@ -138,31 +167,82 @@ export async function runSocialAutoPoster(
     return summary;
   }
 
-  // Oldest staged promo with real content.
+  // Queue hygiene (2026-07-21): jobs older than 7 days advertise week-old
+  // state — captions, titles, and assets from before repairs/renames. They
+  // expire instead of posting. (The queue had a week of backlog flowing out
+  // oldest-first, which is exactly how pre-repair content aired on TikTok.)
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await supabase
+      .from(TABLES.CONTENT_JOBS)
+      .update({ status: "failed" })
+      .eq("user_id", userId)
+      .eq("status", "scheduled")
+      .lt("created_at", weekAgo);
+  } catch {
+    // hygiene is best-effort
+  }
+
+  // NEWEST staged promo first — a fresh listing's launch promo must not sit
+  // behind days of backlog. Older jobs still post when nothing newer is
+  // staged, and the 7-day expiry above reaps whatever never surfaces.
   const { data: jobs } = await supabase
     .from(TABLES.CONTENT_JOBS)
     .select("id, listing_id, caption, asset_url, metadata")
     .eq("user_id", userId)
     .eq("status", "scheduled")
-    .order("created_at", { ascending: true })
-    .limit(5);
+    .order("created_at", { ascending: false })
+    .limit(8);
 
-  const job = ((jobs ?? []) as StagedJob[]).find(
+  const candidates = ((jobs ?? []) as StagedJob[]).filter(
     (j) =>
       j.caption?.trim() &&
       j.asset_url?.trim() &&
       j.asset_url.startsWith("https://") &&
       (j.metadata?.postAttempts ?? 0) < MAX_ATTEMPTS,
   );
-  if (!job) {
+  if (candidates.length === 0) {
     summary.skipped = "nothing_staged";
+    return summary;
+  }
+
+  // LIVE-LISTING GATE: never advertise a listing that is no longer published
+  // (repaired-then-retired, rejected, archived). Stale jobs are failed with
+  // a reason instead of silently rotting in the queue.
+  let job: StagedJob | null = null;
+  let promo: Awaited<ReturnType<typeof resolvePromoListing>> = null;
+  for (const candidate of candidates) {
+    const resolved = await resolvePromoListing(
+      supabase,
+      userId,
+      candidate.listing_id,
+    );
+    if (resolved?.status === "published") {
+      job = candidate;
+      promo = resolved;
+      break;
+    }
+    await supabase
+      .from(TABLES.CONTENT_JOBS)
+      .update({
+        status: "failed",
+        metadata: {
+          ...(candidate.metadata ?? {}),
+          cancelledReason: `listing_not_live (${resolved?.status ?? "missing"})`,
+        } as Json,
+      })
+      .eq("id", candidate.id)
+      .eq("user_id", userId);
+  }
+  if (!job) {
+    summary.skipped = "no_live_listing_staged";
     return summary;
   }
 
   // Video-first: one lifestyle clip to EVERY due platform (Reels/Pins/TikToks
   // with motion get reach; a lone square catalog photo does not). The static
   // mockup is a fallback, not the plan.
-  const promoVideo = await findPromoVideo(supabase, userId, job.listing_id);
+  const promoVideo = await findPromoVideo(supabase, userId, promo?.etsyId ?? null);
   // Video-first platforms never receive photo-only posts. TikTok rejects
   // them outright; Instagram accepts them but the 2026-07-19 rebaseline
   // showed photo posts scoring ZERO engagement across the board while every
@@ -192,14 +272,17 @@ export async function runSocialAutoPoster(
   const attempts: { platform: string; ok: boolean; error?: string }[] = [];
   const sendTargets = promoVideo ? targets : photoTargets;
   const mediaKind: "video" | "photo" = promoVideo ? "video" : "photo";
+  // Photos come from the listing's CURRENT mockup, not the job's snapshot —
+  // a job staged before a gallery rebuild carries the OLD design's image.
+  const photoUrl = promo?.mockupUrl ?? job.asset_url!;
   const result = await publishPost({
     post,
     platforms: sendTargets,
-    mediaUrls: [promoVideo ? promoVideo.url : job.asset_url!],
+    mediaUrls: [promoVideo ? promoVideo.url : photoUrl],
     isVideo: Boolean(promoVideo),
-    // Pinterest hard-requires a thumbnail on video pins — the job's static
-    // mockup is exactly that. Without it Ayrshare rejects the pin outright.
-    pinterestThumbnailUrl: promoVideo ? job.asset_url : null,
+    // Pinterest hard-requires a thumbnail on video pins — the listing's
+    // current mockup is exactly that. Without it Ayrshare rejects the pin.
+    pinterestThumbnailUrl: promoVideo ? photoUrl : null,
     // TikTok publishes DIRECTLY (operator call, 2026-07-15): the draft
     // workflow required a daily manual step in the TikTok app that wasn't
     // happening, so clips sat unpublished. Flip SOCIAL_TIKTOK_DRAFTS=true to

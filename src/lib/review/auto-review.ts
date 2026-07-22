@@ -103,14 +103,42 @@ export async function autoReviewPending(
   let postApproval: PostApproval | null = null;
   if (opts.act && rev.status === "pending") {
     try {
-      if (assessment.verdict === "approve") {
+      if (assessment.verdict === "approve" || assessment.verdict === "revise") {
+        // REVISE ≠ REJECT (2026-07-21): "revise" verdicts are cosmetic
+        // title/tag suggestions on products that already cleared the art
+        // gate and cost real money to build — treating them as rejections
+        // killed 5 finished products in one day. Apply the parseable title
+        // fix, record the rest as notes, and approve; the vision gate inside
+        // approveReview still hard-blocks genuinely bad mockups (422 below).
+        if (assessment.verdict === "revise") {
+          const fixText = assessment.fixes.join(" ");
+          const titleMatch = fixText.match(
+            /title to:?\s*['"‘’“”]([^'"‘’“”]{10,140})['"‘’“”]/i,
+          );
+          if (titleMatch?.[1] && rev.listing_id) {
+            await supabase
+              .from(TABLES.LISTINGS)
+              .update({ title: titleMatch[1].trim() })
+              .eq("id", rev.listing_id)
+              .eq("user_id", userId);
+          }
+          try {
+            await supabase.from(TABLES.EVENTS).insert({
+              user_id: userId,
+              event_type: "review_revised_and_approved",
+              message: `AI reviewer approved with revisions${titleMatch ? " (title applied)" : ""}: ${assessment.fixes.slice(0, 3).join(" ").slice(0, 280)}`,
+              metadata: { reviewId: rev.id, listingId: rev.listing_id },
+            });
+          } catch {
+            // the note is nice-to-have; the approval is not
+          }
+        }
         const r = await approveReview(supabase, userId, rev.id, {
           actor: "ai",
         });
         postApproval = r.postApproval;
         acted = "approved";
       } else {
-        // reject OR revise → send back so nothing jams.
         const reason =
           assessment.fixes.length > 0
             ? `AI reviewer: ${assessment.fixes.slice(0, 3).join(" ")}`
