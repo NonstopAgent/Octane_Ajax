@@ -32,14 +32,14 @@ Check for these defects:
 1. FILL: for posters/art prints only — artwork floating small on the sheet with unintended blank bands is a FAIL. For mugs/apparel, do NOT fail for normal centered-graphic margins; fail only if the design is tiny (under ~20% of the face), dramatically off-center, or wrapped so it faces away from the camera. For bandanas, do NOT fail because the panel is a small share of the photo; fail only if the design is unreadable, badly off-center ON THE PANEL, or cut off.
 2. CROP: is any text or key design element cut off at an edge of the PRINTED DESIGN?
 3. TEXT: is all text in the design legible (not garbled, warped, or misspelled)?
-4. MATCH: does the product in the image match this listing title: "{TITLE}"? (e.g. a mug mockup for a poster listing is a FAIL)
+4. MATCH: does the product in the image match this listing title: "{TITLE}"? Fail ONLY for a genuinely different product (e.g. a mug mockup for an apparel listing). Posters, art prints, and framed prints are the SAME product family — never fail one for another.
 5. QUALITY: any obvious rendering artifacts, distortion, or unfinished-looking areas?
 
 Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failed check, empty if pass"]}`;
 
 const ARTWORK_PROMPT = `You are a print-on-demand quality inspector looking at FLAT ARTWORK that will be printed on a product (not a product photo — margins and transparent backgrounds are expected and fine).
 
-IMPORTANT context on personalized products: when the listing title says "Custom", "Personalized", or "Name", the artwork correctly shows ONE sample pet name (like "Buddy" or "Luna") as a placeholder — that sample name IS the personalization demo. NEVER fail artwork for showing a specific sample name, and NEVER require the literal words "Custom Name" to appear. Likewise, showing a dog when the title says "pet", or a dog AND cat together on a general pet product, is CORRECT — only a clearly WRONG or unrelated subject fails.
+IMPORTANT context on personalized products: when the listing title says "Custom", "Personalized", "Name", or "Date", the artwork correctly shows ONE sample pet name (like "Buddy" or "Luna") and/or a sample date (like "EST. AUGUST 12, 2021") as placeholders — those samples ARE the personalization demo. NEVER fail artwork for showing a specific sample name or date, and NEVER require literal words like "Custom Name" or "Gotcha Date" to appear. Likewise, showing a dog when the title says "pet", or a dog AND cat together on a general pet product, is CORRECT — only a clearly WRONG or unrelated subject fails.
 
 Check ONLY these:
 1. SUBJECT: is the artwork clearly UNRELATED to this listing title: "{TITLE}"? (e.g. a car for a dog product, a birthday theme for a memorial). Reasonable interpretations of the theme PASS.

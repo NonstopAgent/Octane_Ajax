@@ -642,23 +642,39 @@ export function createLivePrintifyAdapter(
                     // (the July 2026 defect wave). Never ship scale 1 unless
                     // the art's aspect actually matches the print area's.
                     ...(await (async () => {
-                      const dims = await getPlaceholderDims({
-                        blueprintId,
-                        printProviderId,
-                        variantId: variantIds[0],
-                        apiToken: token,
-                        fetchImpl,
-                      });
-                      if (!dims) {
+                      // ONE placement serves EVERY enabled variant, but the
+                      // panel aspect differs per size (bp1672 bandana: S is
+                      // 1.76:1, XL is 1.94:1). Fitting only variantIds[0]
+                      // clipped the art on the other sizes — the 2026-07-22
+                      // bandana wave failed vision QA on exactly that. Use
+                      // the TIGHTEST fit across all variants.
+                      const dimsList = await Promise.all(
+                        variantIds.map((variantId) =>
+                          getPlaceholderDims({
+                            blueprintId,
+                            printProviderId,
+                            variantId,
+                            apiToken: token,
+                            fetchImpl,
+                          }),
+                        ),
+                      );
+                      const aspects = dimsList
+                        .filter((d): d is { width: number; height: number } =>
+                          Boolean(d && d.width > 0 && d.height > 0),
+                        )
+                        .map((d) => d.width / d.height);
+                      if (aspects.length === 0) {
                         console.warn(
                           `[printify] no catalog dims for blueprint ${blueprintId} — creating with conservative 0.85 scale.`,
                         );
                         return { x: 0.5, y: 0.5, scale: 0.85, angle: 0 };
                       }
-                      return centeredPlacement(
-                        input.artworkAspect ?? 1,
-                        dims.width / dims.height,
+                      const aspect = input.artworkAspect ?? 1;
+                      const scale = Math.min(
+                        ...aspects.map((a) => fitScale(aspect, a)),
                       );
+                      return { x: 0.5, y: 0.5, scale, angle: 0 };
                     })()),
                   },
                 ],
