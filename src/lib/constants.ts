@@ -40,6 +40,11 @@ export const FACTORY_STATIONS = [
 // routes stay alive but are off the sidebar — Etsy is where products actually sell,
 // and approved listings are visible via the Dashboard funnel.
 export const NAV_ITEMS = [
+  {
+    href: "/mission-control",
+    label: "Mission Control",
+    description: "Heartbeats, pulse & costs",
+  },
   { href: "/factory", label: "Factory", description: "Live AI agent ecosystem" },
   { href: "/dashboard", label: "Dashboard", description: "Command center" },
   { href: "/review", label: "Review", description: "Approve or reject" },
