@@ -172,6 +172,12 @@ export async function runShopAutopilot(
   userId: string,
 ): Promise<AutopilotResult> {
   const result = emptyResult();
+  // Wall-clock budget: the 2026-07-23 01:29Z pass died mid-gallery-sweep
+  // with NO summary event when the widened heal batch outran the 800s
+  // function limit. Long loops check this and stop cleanly — a pass that
+  // ends early with a summary beats a pass killed silently at full depth.
+  const passStartedAt = Date.now();
+  const passExpired = () => Date.now() - passStartedAt > 600_000;
 
   if (process.env.AUTOPILOT_DISABLED === "true") {
     result.skipped = "disabled_via_env";
@@ -583,6 +589,12 @@ export async function runShopAutopilot(
     // the new standard quickly — 34 listings clear in ~2-3 passes instead
     // of a full day, still well inside Etsy rate limits.
     for (const cand of prioritized.slice(0, 4)) {
+      if (passExpired()) {
+        result.errors.push(
+          "medic: pass time budget reached — remaining fixes next pass",
+        );
+        break;
+      }
       try {
         const fix = await generateListingFix({
           title: cand.details.title,
@@ -798,9 +810,10 @@ export async function runShopAutopilot(
       // Etsy's per-second rate limit, stretched the pass past its timeout
       // (Vercel then RETRIED the cron — double passes), and starved the
       // newest listings of enrichment entirely.
-      // 12/pass (was 8): full-store gallery coverage in ~3 passes — the
-      // operator's 2026-07-22 "update all the listings now" directive.
-      const HEAL_BATCH = 12;
+      // Back to 8/pass: 12 with first-sweep top-ups outran the function
+      // budget (killed pass, no summary). The deadline check below is the
+      // real guard; 8 keeps each pass comfortably inside it.
+      const HEAL_BATCH = 8;
       // Rotation must cover EVERY published listing: a fixed `hour % 3`
       // (24 slots) silently excluded rows past #24 once the shop hit 30 —
       // those listings never healed. Derive batch count from the live total.
@@ -824,6 +837,12 @@ export async function runShopAutopilot(
       const printifyAdapterForHeal = createPrintifyAdapter();
       const healNoFulfillment: string[] = [];
       for (const row of (recentRows ?? []) as unknown as InternalListingRow[]) {
+        if (passExpired()) {
+          result.errors.push(
+            "heal: pass time budget reached — remaining listings heal next pass",
+          );
+          break;
+        }
         const generations =
           row.product_generations == null
             ? []
