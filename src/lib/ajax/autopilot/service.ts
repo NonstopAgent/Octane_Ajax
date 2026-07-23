@@ -55,6 +55,7 @@ import {
 import { isVideoRenderConfigured } from "@/lib/ajax/video/fal-render";
 import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
 import { generateListingFix } from "@/lib/ajax/autopilot/listing-medic";
+import { PRODUCT_TYPE_TAG_CONFLICTS } from "@/lib/ajax/store-qa/audit";
 import {
   findBlockedContentViolations,
   titleStyleIssues,
@@ -460,6 +461,20 @@ export async function runShopAutopilot(
           `Copy contains blocked/risky content (${violations.join(", ")}) — remove it.`,
         );
       }
+      // Tags must sell the product this listing IS — the operator caught a
+      // mug tagged 'dog painting'/'animal wall art' (2026-07-22). Wrong-type
+      // tags waste slots on searches the item can never win.
+      const typeConflict = PRODUCT_TYPE_TAG_CONFLICTS.find((c) =>
+        c.type.test(details.title),
+      );
+      const wrongTypeTags = typeConflict
+        ? details.tags.filter((t) => typeConflict.forbidden.test(t))
+        : [];
+      if (typeConflict && wrongTypeTags.length > 0) {
+        issues.push(
+          `This is a ${typeConflict.label} listing but these tags name a DIFFERENT product type: ${wrongTypeTags.join(", ")} — replace them with ${typeConflict.label}-relevant occasion/recipient/niche phrases.`,
+        );
+      }
       // Etsy's search-visibility banner re-flags stuffed titles until fixed —
       // repair them proactively so the operator never sees the banner again.
       issues.push(...titleStyleIssues(details.title));
@@ -469,7 +484,7 @@ export async function runShopAutopilot(
           details,
           internalId: internal?.id ?? null,
           issues,
-          critical: violations.length > 0,
+          critical: violations.length > 0 || wrongTypeTags.length > 2,
         });
       }
     }
@@ -564,7 +579,10 @@ export async function runShopAutopilot(
     const prioritized = [...medicCandidates].sort(
       (a, b) => Number(b.critical) - Number(a.critical),
     );
-    for (const cand of prioritized.slice(0, 2)) {
+    // 4/pass (was 2): the operator asked for the whole store brought up to
+    // the new standard quickly — 34 listings clear in ~2-3 passes instead
+    // of a full day, still well inside Etsy rate limits.
+    for (const cand of prioritized.slice(0, 4)) {
       try {
         const fix = await generateListingFix({
           title: cand.details.title,
@@ -780,7 +798,9 @@ export async function runShopAutopilot(
       // Etsy's per-second rate limit, stretched the pass past its timeout
       // (Vercel then RETRIED the cron — double passes), and starved the
       // newest listings of enrichment entirely.
-      const HEAL_BATCH = 8;
+      // 12/pass (was 8): full-store gallery coverage in ~3 passes — the
+      // operator's 2026-07-22 "update all the listings now" directive.
+      const HEAL_BATCH = 12;
       // Rotation must cover EVERY published listing: a fixed `hour % 3`
       // (24 slots) silently excluded rows past #24 once the shop hit 30 —
       // those listings never healed. Derive batch count from the live total.

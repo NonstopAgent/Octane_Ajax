@@ -61,7 +61,7 @@ const PENALTY: Record<QaSeverity, number> = {
  * different product family. (Design-subject words like "portrait" are fine
  * anywhere — only product nouns conflict.)
  */
-const PRODUCT_TYPE_TAG_CONFLICTS: {
+export const PRODUCT_TYPE_TAG_CONFLICTS: {
   type: RegExp;
   forbidden: RegExp;
   label: string;
