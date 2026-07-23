@@ -1077,22 +1077,33 @@ export async function runShopAutopilot(
       // let Forge's seed-first branch pick it up. Passing Nova's runId here
       // was exactly what starved the 2026-07-20 bandana launch: every hourly
       // cycle pinned Forge to the fresh Nova run.
+      //
+      // SEEDS-ONLY BY DEFAULT (operator decision 2026-07-22: "I thought we
+      // capped it and were only adding the bandanas"): Nova free-running
+      // ideation surprised the operator with products he never green-lit.
+      // New products now come ONLY from the operator's seed queue unless
+      // AUTOPILOT_NOVA_FREE_RUN=true explicitly re-enables autonomous ideas.
       const seed = await fetchTopOperatorSeed(supabase, userId);
-      let forge: Awaited<ReturnType<typeof runForgeStep>>;
+      let forge: Awaited<ReturnType<typeof runForgeStep>> | null = null;
       if (seed) {
         forge = await runForgeStep(supabase, userId, {});
-      } else {
+      } else if (process.env.AUTOPILOT_NOVA_FREE_RUN === "true") {
         const nova = await runNovaStep(supabase, userId);
         forge = await runForgeStep(supabase, userId, { runId: nova.runId });
       }
-      try {
-        await runGenerationPodJob(supabase, userId, forge.generationId);
-      } catch (fulfillErr) {
-        result.errors.push(
-          `fulfillment: ${fulfillErr instanceof Error ? fulfillErr.message : "failed"}`,
-        );
+      if (!forge) {
+        // No seeds queued and free-run disabled — production idles quietly.
+        result.cycleTriggered = false;
+      } else {
+        try {
+          await runGenerationPodJob(supabase, userId, forge.generationId);
+        } catch (fulfillErr) {
+          result.errors.push(
+            `fulfillment: ${fulfillErr instanceof Error ? fulfillErr.message : "failed"}`,
+          );
+        }
+        result.cycleTriggered = true;
       }
-      result.cycleTriggered = true;
     } catch (err) {
       if (err instanceof CycleBlockedError) {
         result.cycleBlocked = true;
