@@ -216,6 +216,25 @@ export async function visionCompareSceneToMockup(input: {
   }
 }
 
+/**
+ * Bandana mockups defeated the general FILL/CROP rules across ~10 runs
+ * (2026-07-22): product photos show the bandana FOLDED or TIED, so the
+ * model kept inventing "cut off" / "too small" / "off-center" defects from
+ * the fold geometry — even when told explicitly not to. Print placement is
+ * now guaranteed by deterministic contain-fit math (tightest fit across all
+ * variant panels), so the vision gate for bandanas checks only what vision
+ * is reliable at: is it the right PRODUCT, and is visible text real English.
+ * This still blocks the catastrophic failures (a framed poster shipped as a
+ * bandana photo; garbled text) without the fold-hallucination loop.
+ */
+const BANDANA_PROMPT = `You are inspecting a product photo for a CLIP-ON PET BANDANA listing titled "{TITLE}". Bandana product photos show the bandana folded, tied, or worn — parts of the printed panel are NATURALLY hidden and the design may sit anywhere in frame. None of that is a defect. Answer in JSON only.
+
+Check ONLY these two things:
+1. PRODUCT: the photo must show a pet bandana or its printed panel. A completely different product (a mug, a framed picture, a shirt) is a FAIL.
+2. TEXT: any VISIBLE design text must be real, correctly spelled English. Text partially hidden by a fold is FINE — only garbled, invented, or misspelled visible text is a FAIL.
+
+Respond with JSON exactly: {"pass": true|false, "issues": ["short description of each failure, empty if pass"]}`;
+
 export async function visionCheckProductMockup(input: {
   mockupUrl: string;
   productTitle: string;
@@ -229,6 +248,9 @@ export async function visionCheckProductMockup(input: {
     };
   }
   const model = process.env.VISION_QA_MODEL?.trim() || "gpt-4o-mini";
+  const promptTemplate = /\bbandanas?\b/i.test(input.productTitle)
+    ? BANDANA_PROMPT
+    : PROMPT;
 
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -245,7 +267,10 @@ export async function visionCheckProductMockup(input: {
             content: [
               {
                 type: "text",
-                text: PROMPT.replace("{TITLE}", input.productTitle.slice(0, 140)),
+                text: promptTemplate.replace(
+                  "{TITLE}",
+                  input.productTitle.slice(0, 140),
+                ),
               },
               { type: "image_url", image_url: { url: input.mockupUrl } },
             ],
