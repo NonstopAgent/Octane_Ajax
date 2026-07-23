@@ -54,6 +54,42 @@ const PENALTY: Record<QaSeverity, number> = {
   warning: 10,
   info: 3,
 };
+
+/**
+ * A listing's tags must sell the product it actually is. The TYPE regex
+ * identifies the product from the title; FORBIDDEN matches tags that name a
+ * different product family. (Design-subject words like "portrait" are fine
+ * anywhere — only product nouns conflict.)
+ */
+const PRODUCT_TYPE_TAG_CONFLICTS: {
+  type: RegExp;
+  forbidden: RegExp;
+  label: string;
+}[] = [
+  {
+    type: /\bmugs?\b/i,
+    forbidden:
+      /\b(wall art|art print|poster|painting|canvas|sweatshirt|t-?shirt|tee|bandana|tote)\b/i,
+    label: "mug",
+  },
+  {
+    type: /\b(t-?shirts?|tees?|sweatshirts?|hoodies?|crewnecks?)\b/i,
+    forbidden:
+      /\b(mug|wall art|art print|poster|painting|canvas|bandana|tote)\b/i,
+    label: "apparel",
+  },
+  {
+    type: /\bbandanas?\b/i,
+    forbidden:
+      /\b(mug|wall art|art print|poster|painting|canvas|sweatshirt|t-?shirt|tee|tote)\b/i,
+    label: "bandana",
+  },
+  {
+    type: /\b(posters?|art prints?|wall art)\b/i,
+    forbidden: /\b(mug|sweatshirt|t-?shirt|tee|bandana|tote)\b/i,
+    label: "wall-art",
+  },
+];
 const PERSONALIZATION =
   /\b(personaliz|personalis|custom|name|monogram|portrait)\b/i;
 
@@ -170,6 +206,23 @@ export function auditListing(input: QaListingInput): ListingAudit {
         message: "Some tags are single broad words.",
         fix: "Make every tag a multi-word buyer phrase (e.g. 'rescue dog mom mug').",
       });
+
+    // Tag ↔ product-type coherence (2026-07-22): the operator found a MUG
+    // listing tagged 'animal wall art', 'dog painting', 'dog art print' —
+    // wrong-product tags waste slots on searches this item can never win
+    // and mislead Etsy's holistic matching. Flag them; the medic rewrites.
+    const conflict = PRODUCT_TYPE_TAG_CONFLICTS.find((c) => c.type.test(title));
+    if (conflict) {
+      const wrongTags = input.tags.filter((t) => conflict.forbidden.test(t));
+      if (wrongTags.length > 0) {
+        issues.push({
+          severity: wrongTags.length > 2 ? "critical" : "warning",
+          code: "tags_wrong_product",
+          message: `This is a ${conflict.label} listing but ${wrongTags.length} tag(s) name a different product type: ${wrongTags.join(", ")}.`,
+          fix: `Replace with ${conflict.label}-relevant buyer phrases (occasion, recipient, niche) — never tags for products this listing is not.`,
+        });
+      }
+    }
   }
 
   if (findBlockedContentViolations(combined).length > 0) {

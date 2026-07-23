@@ -104,7 +104,12 @@ export async function enrichEtsyListingAfterPublish(
     let galleryUrls = ownPicks.map((p) => p.image.src);
     let gallerySource = "own mockups";
 
-    if (galleryUrls.length <= 1 && product.data.blueprintId != null) {
+    // Trigger the donor harvest whenever the OWN set is thin — not only at
+    // ≤1. Printify pre-attaches its design-preview images at publish, so new
+    // listings arrived with 3 images (1 real render + 2 flat-art previews),
+    // which defeated the old ≤1 gate and froze galleries at 3 forever
+    // (operator caught it on the 2026-07-21 mug wave).
+    if (galleryUrls.length < 5 && product.data.blueprintId != null) {
       try {
         const shopProducts = await adapter.listProducts(50);
         const donor = shopProducts.data.find(
@@ -127,7 +132,7 @@ export async function enrichEtsyListingAfterPublish(
             product.data.productId,
             MAX_PUBLISH_MOCKUPS,
           );
-          if (siblingUrls.length > 1) {
+          if (siblingUrls.length > galleryUrls.length) {
             // Cheap sanity check on ONE harvested angle before trusting the
             // set: a donor-angle render that shows the wrong PRODUCT TYPE
             // for this listing title (poster frame for a bandana) fails the
