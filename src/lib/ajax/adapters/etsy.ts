@@ -767,6 +767,49 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         });
     },
 
+    /**
+     * Create a FREE US shipping profile (2026-07-23, operator-approved):
+     * $0.00 primary/secondary, Printify-realistic processing (2-5 business
+     * days from Mankato, MN) and 3-8 day delivery estimate so Etsy still
+     * shows arrival dates. Returns the new profile id.
+     */
+    async createFreeUsShippingProfile(
+      shopId: string,
+      accessToken: string,
+    ): Promise<number> {
+      const body = new URLSearchParams({
+        title: "Free US Shipping",
+        origin_country_iso: "US",
+        origin_postal_code: "56001",
+        primary_cost: "0",
+        secondary_cost: "0",
+        min_processing_time: "2",
+        max_processing_time: "5",
+        processing_time_unit: "business_days",
+        destination_country_iso: "US",
+        min_delivery_days: "3",
+        max_delivery_days: "8",
+      });
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/shipping-profiles`,
+        {
+          method: "POST",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        },
+      );
+      const parsed = await parseEtsyJson<{ shipping_profile_id?: number }>(
+        response,
+      );
+      if (parsed.shipping_profile_id == null) {
+        throw new Error("Etsy createShippingProfile returned no id.");
+      }
+      return parsed.shipping_profile_id;
+    },
+
     /** Patches a live listing (tags / shipping profile / return policy). */
     async updateListing(
       shopId: string,
