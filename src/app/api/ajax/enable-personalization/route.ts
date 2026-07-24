@@ -66,8 +66,11 @@ export async function GET() {
       } catch (err) {
         failed.push({
           etsyId,
-          error: err instanceof Error ? err.message.slice(0, 120) : "unknown",
+          error: err instanceof Error ? err.message.slice(0, 600) : "unknown",
         });
+        // The first full error tells us what Etsy wants instead — no need
+        // to burn 40 more calls repeating it.
+        if (failed.length >= 2) break;
       }
       // Gentle pacing — Etsy rate limits burst PATCHes.
       await new Promise((r) => setTimeout(r, 350));
