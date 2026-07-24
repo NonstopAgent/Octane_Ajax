@@ -50,16 +50,15 @@ export async function GET() {
       const etsyId = String(row.gumroad_product_id ?? "");
       if (!/^\d+$/.test(etsyId)) continue;
       try {
-        await etsy.updateListing(
+        await etsy.setListingPersonalization(
           credentials.shop_id,
           etsyId,
           credentials.access_token,
           {
-            is_personalizable: true,
-            personalization_is_required: true,
-            personalization_char_count_max: 256,
-            personalization_instructions:
-              "Your pet's name (and year/date if the design shows one) EXACTLY as you'd like it. Type NONE to keep the design as pictured. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
+            required: true,
+            maxChars: 256,
+            instructions:
+              "Your pet's name (and year/date if the design shows one) exactly as you'd like it. Type NONE to keep the design as pictured. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
           },
         );
         patched.push(etsyId);

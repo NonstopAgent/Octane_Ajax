@@ -102,15 +102,9 @@ export type EtsyListingPatch = {
   featured_rank?: number;
   /** Listing lifecycle state — deactivate broken listings / reactivate fixed ones. */
   state?: "active" | "inactive";
-  /** Buyer personalization (the moat: name/date/photo-link customization).
-   * is_personalizable is the MASTER SWITCH — without it Etsy hides the
-   * personalization box entirely and silently ignores the other three
-   * fields (discovered 2026-07-23: every "personalized" listing was live
-   * with no way for buyers to enter a name). */
-  is_personalizable?: boolean;
-  personalization_is_required?: boolean;
-  personalization_char_count_max?: number;
-  personalization_instructions?: string;
+  // NOTE: buyer personalization moved to setListingPersonalization — Etsy
+  // deprecated the legacy updateListing personalization fields on
+  // 2026-04-09; sending ANY of them now fails the whole PATCH.
   /** Etsy seller-policy compliance: POD listings must disclose their production partner(s). */
   production_partner_ids?: number[];
 };
@@ -586,6 +580,48 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         }));
     },
 
+    /**
+     * Enable the buyer personalization box (Etsy's 2026 typed-question API).
+     * Fully REPLACES the listing's personalization config. During Etsy's
+     * migration phase question_text must be exactly "Personalization".
+     */
+    async setListingPersonalization(
+      shopId: string,
+      listingId: string,
+      accessToken: string,
+      input: {
+        instructions: string;
+        required: boolean;
+        maxChars?: number;
+      },
+    ): Promise<void> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/personalization`,
+        {
+          method: "POST",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            personalization_questions: [
+              {
+                question_type: "text_input",
+                question_text: "Personalization",
+                instructions: input.instructions.slice(0, 256),
+                required: input.required,
+                max_allowed_characters: Math.min(
+                  1024,
+                  Math.max(1, input.maxChars ?? 256),
+                ),
+              },
+            ],
+          }),
+        },
+      );
+      await parseEtsyJson(response);
+    },
+
     /** Shop-level production partners (e.g. Printify) for listing compliance. */
     async getProductionPartnerIds(
       shopId: string,
@@ -742,27 +778,6 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       if (patch.tags) body.set("tags", patch.tags.join(","));
       if (patch.title) body.set("title", patch.title);
       if (patch.description) body.set("description", patch.description);
-      if (patch.is_personalizable != null) {
-        body.set("is_personalizable", String(patch.is_personalizable));
-      }
-      if (patch.personalization_is_required != null) {
-        body.set(
-          "personalization_is_required",
-          String(patch.personalization_is_required),
-        );
-      }
-      if (patch.personalization_char_count_max != null) {
-        body.set(
-          "personalization_char_count_max",
-          String(patch.personalization_char_count_max),
-        );
-      }
-      if (patch.personalization_instructions) {
-        body.set(
-          "personalization_instructions",
-          patch.personalization_instructions,
-        );
-      }
       if (patch.shipping_profile_id != null) {
         body.set("shipping_profile_id", String(patch.shipping_profile_id));
       }

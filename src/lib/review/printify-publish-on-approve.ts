@@ -305,21 +305,21 @@ export async function enrichEtsyListingAfterPublish(
     // or a photo link on portrait items). Idempotent PATCH; the intake poller
     // + Personalization Bay fulfill these orders automatically.
     try {
-      await etsy.updateListing(
+      // The buyer name box (2026-07-23, operator-caught: every "personalized"
+      // listing was live with NO personalization input — the likely #1
+      // conversion killer). Uses Etsy's 2026 typed-question endpoint; the
+      // legacy updateListing fields now hard-fail. Required: these products
+      // are SOLD as personalized — buyers type NONE to keep the pictured
+      // version.
+      await etsy.setListingPersonalization(
         credentials.shop_id,
         etsyListingId,
         credentials.access_token,
         {
-          // is_personalizable is the MASTER SWITCH — omitting it left every
-          // "personalized" listing with NO name box at checkout (2026-07-23,
-          // operator-caught; the likely #1 conversion killer). Required: the
-          // products are SOLD as personalized, so the buyer must tell us the
-          // name — or explicitly say NONE to keep the pictured version.
-          is_personalizable: true,
-          personalization_is_required: true,
-          personalization_char_count_max: 256,
-          personalization_instructions:
-            "Your pet's name (and year/date if the design shows one) EXACTLY as you'd like it. Type NONE to keep the design as pictured. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
+          required: true,
+          maxChars: 256,
+          instructions:
+            "Your pet's name (and year/date if the design shows one) exactly as you'd like it. Type NONE to keep the design as pictured. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
         },
       );
     } catch {
