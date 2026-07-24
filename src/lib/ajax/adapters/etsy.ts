@@ -102,7 +102,12 @@ export type EtsyListingPatch = {
   featured_rank?: number;
   /** Listing lifecycle state — deactivate broken listings / reactivate fixed ones. */
   state?: "active" | "inactive";
-  /** Buyer personalization (the moat: name/date/photo-link customization). */
+  /** Buyer personalization (the moat: name/date/photo-link customization).
+   * is_personalizable is the MASTER SWITCH — without it Etsy hides the
+   * personalization box entirely and silently ignores the other three
+   * fields (discovered 2026-07-23: every "personalized" listing was live
+   * with no way for buyers to enter a name). */
+  is_personalizable?: boolean;
   personalization_is_required?: boolean;
   personalization_char_count_max?: number;
   personalization_instructions?: string;
@@ -737,6 +742,9 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
       if (patch.tags) body.set("tags", patch.tags.join(","));
       if (patch.title) body.set("title", patch.title);
       if (patch.description) body.set("description", patch.description);
+      if (patch.is_personalizable != null) {
+        body.set("is_personalizable", String(patch.is_personalizable));
+      }
       if (patch.personalization_is_required != null) {
         body.set(
           "personalization_is_required",

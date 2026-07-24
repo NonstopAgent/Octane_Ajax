@@ -310,10 +310,16 @@ export async function enrichEtsyListingAfterPublish(
         etsyListingId,
         credentials.access_token,
         {
-          personalization_is_required: false,
+          // is_personalizable is the MASTER SWITCH — omitting it left every
+          // "personalized" listing with NO name box at checkout (2026-07-23,
+          // operator-caught; the likely #1 conversion killer). Required: the
+          // products are SOLD as personalized, so the buyer must tell us the
+          // name — or explicitly say NONE to keep the pictured version.
+          is_personalizable: true,
+          personalization_is_required: true,
           personalization_char_count_max: 256,
           personalization_instructions:
-            "Optional personalization: your pet's name (and year) exactly as you'd like it on the design. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
+            "Your pet's name (and year/date if the design shows one) EXACTLY as you'd like it. Type NONE to keep the design as pictured. For portrait items, paste a shareable photo link (Google Photos/iCloud/Drive).",
         },
       );
     } catch {
