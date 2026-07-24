@@ -768,6 +768,56 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     },
 
     /**
+     * Ensure the shop has a buyer-friendly return policy and return its id.
+     * "Returns & exchanges not accepted" on every listing was a silent trust
+     * killer (2026-07-24) — 30-day returns + exchanges is the baseline
+     * buyers expect; Etsy exempts personalized items from returns anyway.
+     */
+    async ensureReturnPolicy(
+      shopId: string,
+      accessToken: string,
+    ): Promise<number> {
+      const listRes = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/policies/return`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const listed = await parseEtsyJson<{
+        results?: {
+          return_policy_id?: number;
+          accepts_returns?: boolean;
+        }[];
+      }>(listRes);
+      const existing = (listed.results ?? []).find(
+        (p) => p.accepts_returns && p.return_policy_id != null,
+      );
+      if (existing?.return_policy_id != null) return existing.return_policy_id;
+
+      const body = new URLSearchParams({
+        accepts_returns: "true",
+        accepts_exchanges: "true",
+        return_deadline: "30",
+      });
+      const createRes = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/policies/return`,
+        {
+          method: "POST",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        },
+      );
+      const created = await parseEtsyJson<{ return_policy_id?: number }>(
+        createRes,
+      );
+      if (created.return_policy_id == null) {
+        throw new Error("Etsy createReturnPolicy returned no id.");
+      }
+      return created.return_policy_id;
+    },
+
+    /**
      * Create a FREE US shipping profile (2026-07-23, operator-approved):
      * $0.00 primary/secondary, Printify-realistic processing (2-5 business
      * days from Mankato, MN) and 3-8 day delivery estimate so Etsy still

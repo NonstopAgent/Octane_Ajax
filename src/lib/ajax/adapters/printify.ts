@@ -192,6 +192,22 @@ export interface PrintifyAdapter {
   getProduct(
     productId: string,
   ): Promise<AdapterResult<PrintifyProductDetails>>;
+  /** Raise enabled variants' retail prices by `multiplier` (charm .99
+   * rounding, variants-only publish) and return old/new/cost per variant. */
+  raiseVariantPrices(
+    productId: string,
+    multiplier: number,
+  ): Promise<
+    AdapterResult<{
+      productId: string;
+      variants: {
+        id: number;
+        oldCents: number;
+        newCents: number;
+        costCents: number;
+      }[];
+    }>
+  >;
   /** List shop products (donor discovery for mockup galleries). */
   listProducts(
     limit?: number,
@@ -478,6 +494,13 @@ export function createDemoPrintifyAdapter(
       });
     },
 
+    async raiseVariantPrices(productId, _multiplier) {
+      return demoResult("Demo: variant prices unchanged.", {
+        productId,
+        variants: [],
+      });
+    },
+
     async getProduct(productId) {
       return demoResult("Printify product fetch simulated.", {
         productId,
@@ -704,6 +727,89 @@ export function createLivePrintifyAdapter(
         productId: payload.id,
         title: payload.title ?? input.title,
         status: "unpublished",
+      });
+    },
+
+    async raiseVariantPrices(productId, multiplier) {
+      const res = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        { headers },
+      );
+      if (!res.ok) {
+        throw new Error(`Printify product fetch failed (${res.status}).`);
+      }
+      const product = (await res.json()) as {
+        variants?: {
+          id?: number;
+          price?: number;
+          cost?: number;
+          is_enabled?: boolean;
+        }[];
+      };
+      // Charm rounding UP to .99 so the raise never undershoots the target.
+      const charmUp = (cents: number): number => {
+        const raw = cents * multiplier;
+        const dollars = Math.ceil(raw / 100);
+        const candidate = dollars * 100 - 1;
+        return candidate >= raw ? candidate : (dollars + 1) * 100 - 1;
+      };
+      const changes = (product.variants ?? [])
+        .filter(
+          (v) =>
+            v.is_enabled &&
+            typeof v.id === "number" &&
+            typeof v.price === "number",
+        )
+        .map((v) => ({
+          id: v.id as number,
+          oldCents: v.price as number,
+          newCents: charmUp(v.price as number),
+          costCents: typeof v.cost === "number" ? v.cost : 0,
+        }));
+      if (changes.length === 0) {
+        return liveResult("No enabled variants to reprice.", {
+          productId,
+          variants: [],
+        });
+      }
+      const putRes = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            variants: changes.map((c) => ({ id: c.id, price: c.newCents })),
+          }),
+        },
+      );
+      if (!putRes.ok) {
+        throw new Error(`Printify price update failed (${putRes.status}).`);
+      }
+      // Variants-ONLY publish: sync prices to Etsy without touching the
+      // title/description/tags the listing medic already fixed there.
+      const pubRes = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publish.json`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            title: false,
+            description: false,
+            images: false,
+            variants: true,
+            tags: false,
+          }),
+        },
+      );
+      if (pubRes.ok) {
+        await fetchImpl(
+          `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
+          { method: "POST", headers, body: JSON.stringify({}) },
+        ).catch(() => undefined);
+      }
+      return liveResult("Variant prices raised.", {
+        productId,
+        variants: changes,
       });
     },
 
