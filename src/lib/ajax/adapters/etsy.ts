@@ -79,6 +79,14 @@ export type EtsyListingDetails = {
   shippingProfileId: number | null;
   returnPolicyId: number | null;
   priceCents: number | null;
+  taxonomyId: number | null;
+  isPersonalizable: boolean;
+};
+
+export type EtsyTaxonomyProperty = {
+  propertyId: number;
+  name: string;
+  values: { valueId: number; name: string }[];
 };
 
 /** Shipping profile with its US buyer cost (autopilot free-shipping audit). */
@@ -715,6 +723,8 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         shipping_profile_id?: number | null;
         return_policy_id?: number | null;
         price?: { amount?: number; divisor?: number };
+        taxonomy_id?: number | null;
+        is_personalizable?: boolean;
       }>(response);
       const amount = Number(r.price?.amount ?? 0);
       const divisor = Number(r.price?.divisor ?? 100) || 100;
@@ -727,7 +737,110 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
         shippingProfileId: r.shipping_profile_id ?? null,
         returnPolicyId: r.return_policy_id ?? null,
         priceCents: amount > 0 ? Math.round((amount / divisor) * 100) : null,
+        taxonomyId: r.taxonomy_id ?? null,
+        isPersonalizable: Boolean(r.is_personalizable),
       };
+    },
+
+    /** Taxonomy properties (attributes) with their allowed values. */
+    async getTaxonomyProperties(
+      taxonomyId: number,
+      accessToken: string,
+    ): Promise<EtsyTaxonomyProperty[]> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/seller-taxonomy/nodes/${taxonomyId}/properties`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      const parsed = await parseEtsyJson<{
+        results?: {
+          property_id?: number;
+          name?: string;
+          possible_values?: { value_id?: number; name?: string }[];
+        }[];
+      }>(response);
+      return (parsed.results ?? [])
+        .filter((p) => p.property_id != null)
+        .map((p) => ({
+          propertyId: Number(p.property_id),
+          name: (p.name ?? "").trim(),
+          values: (p.possible_values ?? [])
+            .filter((v) => v.value_id != null)
+            .map((v) => ({
+              valueId: Number(v.value_id),
+              name: (v.name ?? "").trim(),
+            })),
+        }));
+    },
+
+    /** Set one attribute (property) on a listing. */
+    async setListingProperty(
+      shopId: string,
+      listingId: string,
+      accessToken: string,
+      propertyId: number,
+      valueIds: number[],
+      values: string[],
+    ): Promise<void> {
+      const body = new URLSearchParams();
+      for (const id of valueIds) body.append("value_ids", String(id));
+      for (const v of values) body.append("values", v);
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/properties/${propertyId}`,
+        {
+          method: "PUT",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        },
+      );
+      await parseEtsyJson(response);
+    },
+
+    /**
+     * Add paid international destinations (EU + rest of world) to a shipping
+     * profile — US stays free; international buyers pay real freight.
+     */
+    async addInternationalDestinations(
+      shippingProfileId: number,
+      accessToken: string,
+      shopId: string,
+    ): Promise<{ added: string[] }> {
+      const added: string[] = [];
+      for (const region of ["eu", "non_eu"] as const) {
+        const body = new URLSearchParams({
+          destination_region: region,
+          primary_cost: "9.99",
+          secondary_cost: "4.99",
+          min_delivery_days: "7",
+          max_delivery_days: "21",
+        });
+        const response = await fetchImpl(
+          `${ETSY_API_BASE}/shops/${shopId}/shipping-profiles/${shippingProfileId}/destinations`,
+          {
+            method: "POST",
+            headers: {
+              ...authHeaders(apiKeyHeader, accessToken),
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+          },
+        );
+        if (response.ok) {
+          added.push(region);
+          await response.json().catch(() => undefined);
+        } else {
+          const text = await response.text();
+          // Duplicate-destination errors are fine (idempotent reruns).
+          if (!/already|duplicate/i.test(text)) {
+            throw new Error(
+              `Etsy destination create failed for ${region} (${response.status}): ${text.slice(0, 200)}`,
+            );
+          }
+        }
+      }
+      return { added };
     },
 
     /** Shop shipping profiles with their US primary cost (free-shipping audit). */
