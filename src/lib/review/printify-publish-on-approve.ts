@@ -299,6 +299,28 @@ export async function enrichEtsyListingAfterPublish(
       );
     }
 
+    // Shipping re-assert (2026-07-24): Printify's variants-only publish
+    // quietly moved listings back onto its own PAID profile hours after the
+    // operator went free-shipping — the funnel audit caught it. Every heal
+    // pass now re-pins the free profile so no Printify sync can undo it.
+    try {
+      const profiles = await etsy.getShippingProfiles(
+        credentials.shop_id,
+        credentials.access_token,
+      );
+      const freeProfile = profiles.find((p) => p.usPrimaryCostCents === 0);
+      if (freeProfile) {
+        await etsy.updateListing(
+          credentials.shop_id,
+          etsyListingId,
+          credentials.access_token,
+          { shipping_profile_id: freeProfile.profileId },
+        );
+      }
+    } catch {
+      // Best-effort — the next pass retries.
+    }
+
     // --- Photos -------------------------------------------------------------
     let firstImageBuffer: Buffer | null = null;
     // The moat: every listing accepts buyer personalization (pet name/date,

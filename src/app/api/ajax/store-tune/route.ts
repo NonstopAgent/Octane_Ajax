@@ -210,7 +210,32 @@ export async function GET(request: Request) {
         );
         const problems: string[] = [];
         if (details.state !== "active") problems.push(`state:${details.state}`);
-        if (!details.isPersonalizable) problems.push("no personalization box");
+        // The base is_personalizable flag lags Etsy's new typed-question API
+        // (first run flagged listings whose box was VERIFIED live) — the
+        // questions array is the truth.
+        let personalized = details.isPersonalizable;
+        if (!personalized) {
+          try {
+            const pRes = await fetch(
+              `https://api.etsy.com/v3/application/listings/${etsyId}/personalization`,
+              {
+                headers: {
+                  "x-api-key": process.env.ETSY_CLIENT_ID?.trim() ?? "",
+                  Authorization: `Bearer ${credentials.access_token}`,
+                },
+              },
+            );
+            if (pRes.ok) {
+              const pJson = (await pRes.json()) as {
+                personalization_questions?: unknown[];
+              };
+              personalized = (pJson.personalization_questions ?? []).length > 0;
+            }
+          } catch {
+            // fall through with the base flag
+          }
+        }
+        if (!personalized) problems.push("no personalization box");
         if (freeProfileId != null && details.shippingProfileId !== freeProfileId)
           problems.push("not on free-shipping profile");
         if (details.returnPolicyId == null) problems.push("no return policy");
@@ -235,7 +260,9 @@ export async function GET(request: Request) {
           ],
         });
       }
-      await new Promise((r) => setTimeout(r, 250));
+      // 600ms: three Etsy calls per listing at 250ms tripped the per-second
+      // rate limit on the first run and poisoned ~9 checks.
+      await new Promise((r) => setTimeout(r, 600));
     }
 
     try {
