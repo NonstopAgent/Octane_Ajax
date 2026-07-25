@@ -190,9 +190,19 @@ export async function insertOrderFromWebhook(
     extracted.listingId,
   );
 
+  // NEVER fabricate an address in production (2026-07-24 audit): a payload
+  // missing shipping used to fall back to "123 Demo Street" — and a real,
+  // billable product would ship there. Missing shipping now parks the order
+  // for operator attention instead.
+  const extractedShipping = extractShippingFromWebhook(payload);
+  if (!extractedShipping && process.env.NODE_ENV === "production") {
+    throw new OrderProcessorError(
+      `Order ${extracted.etsyOrderId} arrived without a shipping address — parked for review instead of shipping to a placeholder.`,
+      422,
+    );
+  }
   const shipping =
-    extractShippingFromWebhook(payload) ??
-    demoShippingForOrder(extracted.etsyOrderId);
+    extractedShipping ?? demoShippingForOrder(extracted.etsyOrderId);
 
   const listingContext = internalListingId
     ? await resolveListingPodContext(supabase, userId, extracted.listingId)

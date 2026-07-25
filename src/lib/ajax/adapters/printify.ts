@@ -801,12 +801,18 @@ export function createLivePrintifyAdapter(
           }),
         },
       );
-      if (pubRes.ok) {
-        await fetchImpl(
-          `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
-          { method: "POST", headers, body: JSON.stringify({}) },
-        ).catch(() => undefined);
+      if (!pubRes.ok) {
+        // Without this check (2026-07-24 audit) Printify could hold the new
+        // price while Etsy kept the old one — reported as success.
+        const body = await pubRes.text();
+        throw new Error(
+          `Printify variants publish failed (${pubRes.status}): ${body.slice(0, 160)} — Etsy may still show the old price.`,
+        );
       }
+      await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
+        { method: "POST", headers, body: JSON.stringify({}) },
+      ).catch(() => undefined);
       return liveResult("Variant prices raised.", {
         productId,
         variants: changes,

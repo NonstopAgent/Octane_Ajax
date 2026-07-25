@@ -56,8 +56,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // FAIL CLOSED (2026-07-24 security audit): with the secret unset this
+  // route previously accepted ANY unauthenticated POST — under the service
+  // role, spending OpenAI credits and submitting billable Printify
+  // production. Unsigned payloads are now only accepted in local dev.
   const webhookSecret = process.env.ETSY_WEBHOOK_SECRET?.trim();
-  if (webhookSecret) {
+  if (!webhookSecret) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { ok: false, error: "Webhook secret not configured." },
+        { status: 503 },
+      );
+    }
+  } else {
     const signature =
       req.headers.get("x-etsy-signature") ??
       req.headers.get("x-etsy-webhook-signature");
