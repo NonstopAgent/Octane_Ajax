@@ -198,7 +198,7 @@ export async function insertOrderFromWebhook(
   if (!extractedShipping && process.env.NODE_ENV === "production") {
     throw new OrderProcessorError(
       `Order ${extracted.etsyOrderId} arrived without a shipping address — parked for review instead of shipping to a placeholder.`,
-      422,
+      400,
     );
   }
   const shipping =
