@@ -6,6 +6,7 @@ import {
   getEtsyAuthConfig,
   parseEtsyUserIdFromAccessToken,
   refreshEtsyAccessToken,
+  refreshEtsyToken,
 } from "@/lib/ajax/etsy-auth";
 import {
   codeChallengeFromVerifier,
@@ -93,7 +94,7 @@ describe("etsy-auth", () => {
     process.env.ETSY_CLIENT_ID = "test-client";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
 
-    const fetchImpl = async (_url: string | URL, init?: RequestInit) => {
+    const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = String(init?.body ?? "");
       assert.match(body, /grant_type=refresh_token/);
       return new Response(
@@ -119,5 +120,149 @@ describe("etsy-pkce", () => {
       codeChallengeFromVerifier(verifier),
       "DSWlW2Abh-cf8CeLL8-g3hQ2WQyYdKyiu83u_s7nRhI",
     );
+  });
+});
+
+describe("refreshEtsyToken — race safety (H3)", () => {
+  type CredRow = {
+    user_id: string;
+    access_token: string;
+    refresh_token: string;
+    shop_id: string;
+    expires_at: string;
+  };
+
+  function makeSupabase(store: { row: CredRow }) {
+    return {
+      from(table: string) {
+        if (table !== "etsy_credentials") throw new Error(`unexpected ${table}`);
+        const filters: [string, unknown][] = [];
+        let patch: Record<string, unknown> | null = null;
+        const b = {
+          select() {
+            return b;
+          },
+          update(p: Record<string, unknown>) {
+            patch = p;
+            return b;
+          },
+          eq(col: string, val: unknown) {
+            filters.push([col, val]);
+            return b;
+          },
+          maybeSingle() {
+            const match = filters.every(
+              ([c, v]) => store.row[c as keyof CredRow] === v,
+            );
+            return Promise.resolve({
+              data: match ? { ...store.row } : null,
+              error: null,
+            });
+          },
+          then(resolve: (v: { data: unknown[]; error: null }) => unknown) {
+            const match = filters.every(
+              ([c, v]) => store.row[c as keyof CredRow] === v,
+            );
+            if (match && patch) Object.assign(store.row, patch);
+            return Promise.resolve({
+              data: match ? [{ user_id: store.row.user_id }] : [],
+              error: null,
+            }).then(resolve);
+          },
+        };
+        return b;
+      },
+    } as never;
+  }
+
+  function tokenResponse(prefix: string): Response {
+    return new Response(
+      JSON.stringify({
+        access_token: `${prefix}-access`,
+        token_type: "Bearer",
+        expires_in: 3600,
+        refresh_token: `${prefix}-refresh`,
+      }),
+      { status: 200 },
+    );
+  }
+
+  it("reuses a still-valid token without calling Etsy at all", async () => {
+    process.env.ETSY_CLIENT_ID = "test-client";
+    const store = {
+      row: {
+        user_id: "u1",
+        access_token: "live-access",
+        refresh_token: "live-refresh",
+        shop_id: "shop-1",
+        // 50 minutes out — inside a 3600s lifetime, outside the 5-min buffer.
+        expires_at: new Date(Date.now() + 50 * 60_000).toISOString(),
+      },
+    };
+    let fetchCalls = 0;
+    const fetchImpl = (async () => {
+      fetchCalls += 1;
+      return tokenResponse("never");
+    }) as typeof fetch;
+
+    const creds = await refreshEtsyToken("u1", {
+      supabase: makeSupabase(store),
+      fetchImpl,
+    });
+
+    assert.equal(creds?.access_token, "live-access");
+    assert.equal(fetchCalls, 0);
+  });
+
+  it("refreshes an expiring token and persists the rotated pair", async () => {
+    process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+    const store = {
+      row: {
+        user_id: "u1",
+        access_token: "old-access",
+        refresh_token: "old-refresh",
+        shop_id: "shop-1",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+    };
+    const fetchImpl = (async () => tokenResponse("new")) as typeof fetch;
+
+    const creds = await refreshEtsyToken("u1", {
+      supabase: makeSupabase(store),
+      fetchImpl,
+    });
+
+    assert.equal(creds?.access_token, "new-access");
+    assert.equal(store.row.refresh_token, "new-refresh");
+  });
+
+  it("adopts the winner's pair when a concurrent refresher rotated first", async () => {
+    process.env.ETSY_CLIENT_ID = "test-client";
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com";
+    const store = {
+      row: {
+        user_id: "u1",
+        access_token: "old-access",
+        refresh_token: "old-refresh",
+        shop_id: "shop-1",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+    };
+    const supabase = makeSupabase(store);
+    const fetchImpl = (async () => {
+      // Simulate the OTHER refresher landing its rotation while our exchange
+      // is in flight: the stored refresh token no longer matches ours.
+      store.row.access_token = "winner-access";
+      store.row.refresh_token = "winner-refresh";
+      return tokenResponse("loser");
+    }) as typeof fetch;
+
+    const creds = await refreshEtsyToken("u1", { supabase, fetchImpl });
+
+    // Conditional write must MISS (stored token ≠ the one we exchanged) and
+    // the loser must come back holding the winner's live pair.
+    assert.equal(store.row.refresh_token, "winner-refresh");
+    assert.equal(creds?.access_token, "winner-access");
   });
 });

@@ -7,8 +7,10 @@ import {
   type PrintifyShippingAddress,
 } from "@/lib/ajax/adapters/printify";
 import {
+  type BuyerVariation,
   type EtsyOrderShippingInfo,
   type OrderQueueRow,
+  MAX_ORDER_QUANTITY,
   demoShippingForOrder,
 } from "@/lib/ajax/pod/order-types";
 import { parsePodDetails } from "@/lib/product/mappers";
@@ -40,6 +42,10 @@ export type OrderProductionResult = {
   printifyProductId: string;
   printifyOrderId: string;
   variantId: number;
+  /** How the variant was chosen: the buyer's Size/Color match, or default #1. */
+  variantMatch: "buyer" | "default";
+  /** Set when the buyer chose options but no catalog variant matched them. */
+  variantWarning: string | null;
   quantity: number;
   adapterModes: {
     printify: "demo" | "live";
@@ -73,6 +79,7 @@ export function mapEtsyShippingToPrintify(
 
 export function resolveShippingFromOrderMetadata(
   order: Pick<OrderQueueRow, "etsy_order_id" | "metadata">,
+  opts: { allowDemoFallback?: boolean } = {},
 ): EtsyOrderShippingInfo {
   const raw = order.metadata.etsyShipping;
   if (raw && typeof raw === "object" && raw !== null) {
@@ -98,7 +105,81 @@ export function resolveShippingFromOrderMetadata(
     }
   }
 
+  // NEVER at production-submit time (2026-07-25 audit, C3): the insert path
+  // parks address-less orders, but a row whose stored shipping is missing or
+  // partial could still reach THIS second fallback and bill a real Printify
+  // production shipped to "123 Demo Street". Outside production the demo
+  // address remains available for local runs and tests.
+  const allowDemo =
+    opts.allowDemoFallback ?? process.env.NODE_ENV !== "production";
+  if (!allowDemo) {
+    throw new OrderFulfillmentError(
+      `Order ${order.etsy_order_id} has no complete shipping address on file — refusing to submit production to a placeholder address. Fix the address in order metadata and retry.`,
+      "order",
+    );
+  }
+
   return demoShippingForOrder(order.etsy_order_id);
+}
+
+/**
+ * Maps the buyer's Size/Color choices onto one of the listing's enabled
+ * Printify variants (2026-07-25 audit, H6). Before this, EVERY order shipped
+ * `variantIds[0]` — a buyer who paid the 2XL upcharge got Size S.
+ *
+ * Matching is segment-exact against catalog titles ("Aqua / 2XL"), so "XL"
+ * can never match "2XL". Returns matched=false when the buyer chose nothing
+ * or nothing lines up — the caller decides how loudly to fall back.
+ */
+export function pickVariantForBuyer(
+  enabledVariantIds: number[],
+  catalogVariants: { id: number; title: string }[],
+  buyerVariations: BuyerVariation[],
+): { variantId: number | null; matched: boolean } {
+  const fallback = enabledVariantIds[0] ?? null;
+  if (enabledVariantIds.length <= 1 || buyerVariations.length === 0) {
+    return { variantId: fallback, matched: false };
+  }
+
+  // "12x18", "12 x 18", and `12" x 18"` must all agree, while "XL" must never
+  // token-match "2XL" — so: strip punctuation, split digit-x-digit dimension
+  // forms into tokens, and require every token of the buyer's value to appear
+  // in one title segment.
+  const normalize = (s: string): string[] =>
+    s
+      .toLowerCase()
+      .replace(/(\d)\s*[x×]\s*(\d)/g, "$1 x $2")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+
+  const values = buyerVariations
+    .map((v) => normalize(v.value))
+    .filter((tokens) => tokens.length > 0);
+  if (values.length === 0) return { variantId: fallback, matched: false };
+
+  const titleById = new Map(catalogVariants.map((v) => [v.id, v.title]));
+
+  let best: { id: number; score: number } | null = null;
+  for (const id of enabledVariantIds) {
+    const title = titleById.get(id);
+    if (!title) continue;
+    const segments = title
+      .split("/")
+      .map((seg) => new Set(normalize(seg)))
+      .filter((seg) => seg.size > 0);
+    const score = values.filter((tokens) =>
+      segments.some((seg) => tokens.every((t) => seg.has(t))),
+    ).length;
+    if (score > 0 && (best === null || score > best.score)) {
+      best = { id, score };
+    }
+  }
+
+  return best
+    ? { variantId: best.id, matched: true }
+    : { variantId: fallback, matched: false };
 }
 
 /**
@@ -218,15 +299,63 @@ export async function runOrderProductionFulfillment(
       ? parsePodDetails(order.metadata.podDetails)
       : DEFAULT_POD_DETAILS);
 
-  const variantId =
-    podDetails.variantIds[0] ??
-    DEFAULT_POD_DETAILS.variantIds[0]!;
-  const quantity =
+  const enabledVariantIds = podDetails.variantIds.length
+    ? podDetails.variantIds
+    : DEFAULT_POD_DETAILS.variantIds;
+
+  // Honor the buyer's Size/Color choice (2026-07-25 audit, H6). The old
+  // `variantIds[0]` shipped variant #1 to every buyer — wrong garment for
+  // anyone who picked (and often paid extra for) another size.
+  let variantId = enabledVariantIds[0] ?? DEFAULT_POD_DETAILS.variantIds[0]!;
+  let variantMatch: "buyer" | "default" = "default";
+  let variantWarning: string | null = null;
+
+  const buyerVariations: BuyerVariation[] = Array.isArray(
+    order.metadata.buyerVariations,
+  )
+    ? (order.metadata.buyerVariations as unknown[])
+        .filter(
+          (v): v is BuyerVariation =>
+            isRecord(v) &&
+            typeof v.name === "string" &&
+            typeof v.value === "string",
+        )
+        .slice(0, 5)
+    : [];
+
+  if (buyerVariations.length > 0 && enabledVariantIds.length > 1) {
+    try {
+      const catalog = await printify.listCatalogVariants(
+        podDetails.blueprintId,
+        podDetails.printProviderId,
+      );
+      const picked = pickVariantForBuyer(
+        enabledVariantIds,
+        catalog.data,
+        buyerVariations,
+      );
+      if (picked.matched && picked.variantId != null) {
+        variantId = picked.variantId;
+        variantMatch = "buyer";
+      } else {
+        variantWarning = `Buyer chose ${buyerVariations
+          .map((v) => `${v.name}: ${v.value}`)
+          .join(", ")} but no catalog variant matched — submitted default variant ${variantId}. Verify before it ships.`;
+      }
+    } catch (err) {
+      variantWarning = `Variant lookup failed (${err instanceof Error ? err.message : "unknown"}) — submitted default variant ${variantId}. Verify before it ships.`;
+    }
+  }
+
+  const rawQuantity =
     typeof input.quantity === "number" && input.quantity > 0
       ? input.quantity
       : typeof order.metadata.quantity === "number"
         ? order.metadata.quantity
         : 1;
+  // Defense in depth on billable quantity (C2): intake clamps too, but this
+  // is the last line before money moves.
+  const quantity = Math.min(Math.max(1, Math.round(rawQuantity)), MAX_ORDER_QUANTITY);
 
   const title =
     listingContext?.title ?? `Personalized order ${order.etsy_order_id}`;
@@ -259,8 +388,14 @@ export async function runOrderProductionFulfillment(
     resolveShippingFromOrderMetadata(order),
   );
 
+  // Per-line-item external id (H5): with one order row per transaction, two
+  // items on the same receipt must not collide on Printify's external_id.
+  const externalId = order.transaction_id
+    ? `etsy-${order.etsy_order_id}-${order.transaction_id}`
+    : `etsy-${order.etsy_order_id}`;
+
   const orderResult = await printify.submitOrder({
-    externalId: `etsy-${order.etsy_order_id}`,
+    externalId,
     lineItems: [
       {
         productId: printifyProductId,
@@ -275,6 +410,8 @@ export async function runOrderProductionFulfillment(
     printifyProductId,
     printifyOrderId: orderResult.data.orderId,
     variantId,
+    variantMatch,
+    variantWarning,
     quantity,
     adapterModes: {
       printify: orderResult.mode,

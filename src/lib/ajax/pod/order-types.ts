@@ -68,7 +68,11 @@ export const INFRINGING_TERMS = [
 
 const VALID_TRANSITIONS: Record<OrderQueueStatus, readonly OrderQueueStatus[]> = {
   pending_personalization: ["processing_artwork", "failed"],
-  processing_artwork: ["fulfillment_ready", "failed"],
+  // processing_artwork → pending_personalization is the RECLAIM path: a
+  // fire-and-forget personalization frozen mid-flight (lambda suspended after
+  // the response) used to leave the row in processing_artwork forever — the
+  // paid order was never retried (2026-07-25 audit, H4).
+  processing_artwork: ["fulfillment_ready", "pending_personalization", "failed"],
   fulfillment_ready: ["production_submitted", "failed"],
   production_submitted: [],
   failed: [],
@@ -78,6 +82,8 @@ export type OrderQueueRow = {
   id: string;
   user_id: string;
   etsy_order_id: string;
+  /** Etsy transaction_id ('' for legacy/receipt-level rows) — one row per line item (H5). */
+  transaction_id: string;
   listing_id: string | null;
   customer_photo_url: string;
   style_prompt: string;
@@ -309,14 +315,42 @@ function styleFromPersonalization(
   );
 }
 
+/**
+ * Personalization spend is bounded (2026-07-25 audit, C2): `quantity` used to
+ * be copied verbatim into production, so a single crafted payload could
+ * submit a 500-unit billable Printify order. Personalized gifts are 1–2 in
+ * practice; anything above this is parked at the clamp for a human to notice.
+ */
+export const MAX_ORDER_QUANTITY = 10;
+
+/** A buyer-chosen listing option (Size / Color / …) — NOT personalization. */
+export type BuyerVariation = { name: string; value: string };
+
+function isPersonalizationVariationName(name: string): boolean {
+  return (
+    name.includes("photo") ||
+    name.includes("image") ||
+    name.includes("upload") ||
+    name.includes("picture") ||
+    name.includes("style") ||
+    name.includes("aesthetic") ||
+    name.includes("art") ||
+    name.includes("personal")
+  );
+}
+
 export function extractPersonalizationFromWebhook(
   payload: EtsyOrderWebhookPayload,
 ): {
   etsyOrderId: string;
+  /** Etsy transaction_id of the line item this order row represents. */
+  transactionId: string | null;
   listingId: string | null;
   customerPhotoUrl: string | null;
   rawStyle: string | null;
   quantity: number;
+  /** Size/Color-type choices from the same line item (drives variant pick, H6). */
+  buyerVariations: BuyerVariation[];
 } {
   const normalized = normalizeEtsyWebhookPayload(payload);
 
@@ -327,25 +361,27 @@ export function extractPersonalizationFromWebhook(
   let customerPhotoUrl = photoFromPersonalization(normalized.personalization);
   let rawStyle = styleFromPersonalization(normalized.personalization);
 
-  const listingId =
-    normalized.listing_id != null
-      ? String(normalized.listing_id)
-      : normalized.transactions?.[0]?.listing_id != null
-        ? String(normalized.transactions[0].listing_id)
-        : null;
+  const transactions = normalized.transactions ?? [];
 
-  let quantity = 1;
+  // The transaction that CARRIES the personalization is the line item this
+  // order row is about — its id, quantity, listing, and size/color choices
+  // must all come from the same place. Multi-item receipts arrive as one
+  // payload per transaction from the intake poller (H5).
+  let sourceTx: EtsyTransactionPayload | null = null;
 
-  for (const tx of normalized.transactions ?? []) {
-    if (typeof tx.quantity === "number" && tx.quantity > 0) {
-      quantity = tx.quantity;
-    }
+  let listingId =
+    normalized.listing_id != null ? String(normalized.listing_id) : null;
+
+  for (const tx of transactions) {
+    let contributed = false;
 
     if (!customerPhotoUrl) {
       customerPhotoUrl = photoFromPersonalization(tx.personalization);
+      contributed = contributed || Boolean(customerPhotoUrl);
     }
     if (!rawStyle) {
       rawStyle = styleFromPersonalization(tx.personalization);
+      contributed = contributed || Boolean(rawStyle);
     }
 
     for (const variation of tx.variations ?? []) {
@@ -360,17 +396,60 @@ export function extractPersonalizationFromWebhook(
           name.includes("picture"))
       ) {
         customerPhotoUrl = value;
+        contributed = true;
       }
       if (
         !rawStyle &&
         (name.includes("style") || name.includes("aesthetic") || name.includes("art"))
       ) {
         rawStyle = value;
+        contributed = true;
       }
+    }
+
+    if (contributed && !sourceTx) {
+      sourceTx = tx;
     }
   }
 
-  return { etsyOrderId, listingId, customerPhotoUrl, rawStyle, quantity };
+  // Receipt-level personalization (mock/dev payloads): attribute the order to
+  // the first line item so ids and variant choices still line up.
+  if (!sourceTx && transactions.length > 0) {
+    sourceTx = transactions[0]!;
+  }
+
+  if (listingId == null && sourceTx?.listing_id != null) {
+    listingId = String(sourceTx.listing_id);
+  }
+
+  const transactionId =
+    sourceTx?.transaction_id != null ? String(sourceTx.transaction_id) : null;
+
+  const rawQuantity =
+    typeof sourceTx?.quantity === "number" && sourceTx.quantity > 0
+      ? sourceTx.quantity
+      : 1;
+  const quantity = Math.min(rawQuantity, MAX_ORDER_QUANTITY);
+
+  const buyerVariations: BuyerVariation[] = [];
+  for (const variation of sourceTx?.variations ?? []) {
+    const rawName = variation.formatted_name?.trim() ?? "";
+    const value = variation.formatted_value?.trim() ?? "";
+    if (!rawName || !value) continue;
+    if (isPersonalizationVariationName(rawName.toLowerCase())) continue;
+    buyerVariations.push({ name: rawName, value });
+    if (buyerVariations.length >= 5) break;
+  }
+
+  return {
+    etsyOrderId,
+    transactionId,
+    listingId,
+    customerPhotoUrl,
+    rawStyle,
+    quantity,
+    buyerVariations,
+  };
 }
 
 /** Extracts Printify-ready shipping from Etsy receipt / shipping_address fields. */

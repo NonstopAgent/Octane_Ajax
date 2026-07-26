@@ -92,13 +92,19 @@ function createMockSupabase(seed: {
   listings?: MockRow[];
 }) {
   const listings = seed.listings ?? [listingRow()];
+  // Omitted userId means "signed in as the fixture owner"; explicit null means
+  // "signed out". The old `seed.userId ? … : null` treated BOTH as signed out,
+  // so every test except "requires auth" exercised nothing but the 401 branch —
+  // and nothing noticed for months because this file was never in the test
+  // script (2026-07-25 audit, H2).
+  const userId = seed.userId === undefined ? "user-1" : seed.userId;
 
   const supabase = {
     auth: {
       async getUser() {
         return {
           data: {
-            user: seed.userId ? { id: seed.userId } : null,
+            user: userId ? { id: userId } : null,
           },
           error: null,
         };

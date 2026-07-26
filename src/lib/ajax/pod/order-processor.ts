@@ -1,6 +1,7 @@
 /**
  * Room 2 — Order queue orchestration: webhook insert → state transitions → factory events.
  */
+import { after } from "next/server";
 import { AGENT_SLUGS } from "@/lib/ajax/constants";
 import {
   PersonalizationAgentError,
@@ -42,6 +43,8 @@ export class OrderProcessorError extends Error {
 type OrderQueueInsert = {
   user_id: string;
   etsy_order_id: string;
+  /** '' when the payload carries no per-line transaction id (legacy behaviour). */
+  transaction_id: string;
   listing_id?: string | null;
   customer_photo_url: string;
   style_prompt: string;
@@ -135,6 +138,7 @@ function mapOrderRow(row: Record<string, unknown>): OrderQueueRow {
     id: String(row.id),
     user_id: String(row.user_id),
     etsy_order_id: String(row.etsy_order_id),
+    transaction_id: row.transaction_id != null ? String(row.transaction_id) : "",
     listing_id: row.listing_id != null ? String(row.listing_id) : null,
     customer_photo_url: String(row.customer_photo_url),
     style_prompt: String(row.style_prompt),
@@ -208,9 +212,17 @@ export async function insertOrderFromWebhook(
     ? await resolveListingPodContext(supabase, userId, extracted.listingId)
     : null;
 
+  // One row PER LINE ITEM (2026-07-25 audit, H5): dedupe used to key on the
+  // receipt id alone, so a two-item personalized cart produced one row and
+  // the second item could NEVER be queued — every later pass hit the unique
+  // constraint and reported "duplicate". The unique key is now
+  // (user_id, etsy_order_id, transaction_id), '' when no per-line id exists.
+  const transactionId = extracted.transactionId ?? "";
+
   const insert: OrderQueueInsert = {
     user_id: userId,
     etsy_order_id: extracted.etsyOrderId,
+    transaction_id: transactionId,
     listing_id: internalListingId,
     customer_photo_url: extracted.customerPhotoUrl,
     style_prompt: sanitized.prompt,
@@ -220,7 +232,9 @@ export async function insertOrderFromWebhook(
       stylePreset: sanitized.preset,
       webhookSource: "etsy",
       etsyListingId: extracted.listingId,
+      etsyTransactionId: extracted.transactionId,
       quantity: extracted.quantity,
+      buyerVariations: extracted.buyerVariations,
       etsyShipping: shipping,
       podDetails: listingContext?.podDetails ?? null,
     } as Json,
@@ -239,6 +253,7 @@ export async function insertOrderFromWebhook(
         .select("id")
         .eq("user_id", userId)
         .eq("etsy_order_id", extracted.etsyOrderId)
+        .eq("transaction_id", transactionId)
         .maybeSingle();
 
       if (existing?.id) {
@@ -253,10 +268,11 @@ export async function insertOrderFromWebhook(
 
   await insertFactoryEvent(supabase, userId, {
     event_type: "order_webhook_received",
-    message: `Etsy order ${extracted.etsyOrderId} queued for personalization.`,
+    message: `Etsy order ${extracted.etsyOrderId}${transactionId ? ` (item ${transactionId})` : ""} queued for personalization.`,
     metadata: {
       orderId: data.id,
       etsyOrderId: extracted.etsyOrderId,
+      transactionId: extracted.transactionId,
       listingId: extracted.listingId,
     },
   });
@@ -518,10 +534,24 @@ async function submitProductionForOrder(
           productionSubmittedAt: new Date().toISOString(),
           productionAdapterModes: production.adapterModes,
           productionVariantId: production.variantId,
+          productionVariantMatch: production.variantMatch,
           productionQuantity: production.quantity,
         },
       },
     );
+
+    if (production.variantWarning) {
+      await insertFactoryEvent(supabase, userId, {
+        event_type: "order_variant_needs_attention",
+        message: `Etsy order ${order.etsy_order_id}: ${production.variantWarning}`,
+        metadata: {
+          orderId,
+          etsyOrderId: order.etsy_order_id,
+          printifyOrderId: production.printifyOrderId,
+          variantId: production.variantId,
+        },
+      });
+    }
 
     await insertFactoryEvent(supabase, userId, {
       event_type: "order_production_submitted",
@@ -581,14 +611,24 @@ async function submitProductionForOrder(
 }
 
 /**
- * Fire-and-forget order processing after webhook capture.
+ * Detached order processing after webhook / intake capture.
+ *
+ * Uses Next's `after()` so the 60–240s personalization survives on Vercel
+ * serverless once the response is sent — this was the LAST plain
+ * fire-and-forget in the repo, on the one path where a buyer had already
+ * paid: the lambda froze mid-`await`, the row sat in `processing_artwork`
+ * forever, and the dedupe made sure it was never retried (2026-07-25 audit,
+ * H4; same fix generation-pod-runner.ts applied everywhere else). Falls back
+ * to a detached promise outside a request scope (tests, scripts), and
+ * `reclaimStaleOrders` is the backstop when even `after()` is cut short by
+ * the function's time budget.
  */
 export function scheduleOrderProcessing(
   supabase: Supabase,
   userId: string,
   orderId: string,
 ): void {
-  void (async () => {
+  const job = async () => {
     try {
       const result = await processOrderQueueEntry(supabase, userId, orderId);
       if (!result.ok) {
@@ -604,5 +644,119 @@ export function scheduleOrderProcessing(
         metadata: { orderId, error: message },
       });
     }
-  })();
+  };
+
+  try {
+    after(job);
+  } catch {
+    // Outside a request scope (tests, local scripts) — run detached.
+    void job();
+  }
+}
+
+/** Non-terminal orders older than this are surfaced to the operator. */
+const STALLED_ORDER_ALERT_MINUTES = 60;
+
+export type StaleOrderReclaimResult = {
+  /** Orders reset from a stuck `processing_artwork` back to the queue. */
+  reclaimed: { orderId: string; etsyOrderId: string; stuckMinutes: number }[];
+  /** Any non-terminal order older than the alert window (visibility only). */
+  stalled: { orderId: string; etsyOrderId: string; status: OrderQueueStatus; ageMinutes: number }[];
+};
+
+/**
+ * Backstop for H4: a personalization that died mid-flight (frozen lambda,
+ * crash, deploy) leaves `processing_artwork` behind with no owner. Nothing
+ * anywhere reset those rows, so a PAID order could silently never ship.
+ *
+ * Resets stuck `processing_artwork` rows to `pending_personalization` (the
+ * caller decides whether to reprocess immediately) and reports every
+ * non-terminal order older than an hour so the autopilot pass can surface it
+ * instead of logging "shop is healthy".
+ *
+ * The reset is claim-safe: the UPDATE re-checks status AND staleness, so a
+ * personalization that legitimately finished (or another reclaimer) in the
+ * meantime wins and the row is skipped.
+ */
+export async function reclaimStaleOrders(
+  supabase: Supabase,
+  userId: string,
+  opts: { staleMinutes?: number; limit?: number } = {},
+): Promise<StaleOrderReclaimResult> {
+  // Worst-case legitimate personalization ≈ 4 min image edit + uploads;
+  // 20 min means a healthy run is never stolen, a dead one loses ≤1 cycle.
+  const staleMinutes = opts.staleMinutes ?? 20;
+  const limit = opts.limit ?? 5;
+  const now = Date.now();
+  const staleCutoff = new Date(now - staleMinutes * 60_000).toISOString();
+  const alertCutoff = new Date(
+    now - STALLED_ORDER_ALERT_MINUTES * 60_000,
+  ).toISOString();
+
+  const result: StaleOrderReclaimResult = { reclaimed: [], stalled: [] };
+
+  const { data: nonTerminal, error } = await supabase
+    .from(TABLES.ORDER_QUEUE)
+    .select("id, etsy_order_id, status, updated_at")
+    .eq("user_id", userId)
+    .in("status", [
+      "pending_personalization",
+      "processing_artwork",
+      "fulfillment_ready",
+    ])
+    .lt("updated_at", staleCutoff)
+    .order("updated_at", { ascending: true })
+    .limit(50);
+
+  if (error) {
+    throw new OrderProcessorError(
+      `Failed to scan order queue for stale orders: ${error.message}`,
+      500,
+    );
+  }
+
+  for (const row of nonTerminal ?? []) {
+    const status = row.status as OrderQueueStatus;
+    const updatedAtMs = new Date(String(row.updated_at)).getTime();
+    const ageMinutes = Math.round((now - updatedAtMs) / 60_000);
+
+    if (status === "processing_artwork" && result.reclaimed.length < limit) {
+      const { data: claimed, error: claimError } = await supabase
+        .from(TABLES.ORDER_QUEUE)
+        .update({
+          status: "pending_personalization",
+          error_message: `Reclaimed after ${ageMinutes} min stuck in processing_artwork.`,
+        })
+        .eq("id", row.id)
+        .eq("user_id", userId)
+        .eq("status", "processing_artwork")
+        .lt("updated_at", staleCutoff)
+        .select("id");
+
+      if (!claimError && (claimed?.length ?? 0) > 0) {
+        result.reclaimed.push({
+          orderId: String(row.id),
+          etsyOrderId: String(row.etsy_order_id),
+          stuckMinutes: ageMinutes,
+        });
+        await insertFactoryEvent(supabase, userId, {
+          event_type: "order_processing_reclaimed",
+          message: `Etsy order ${row.etsy_order_id} was stuck in personalization for ${ageMinutes} min — re-queued for retry.`,
+          metadata: { orderId: row.id, etsyOrderId: row.etsy_order_id, stuckMinutes: ageMinutes },
+        });
+        continue;
+      }
+    }
+
+    if (String(row.updated_at) < alertCutoff) {
+      result.stalled.push({
+        orderId: String(row.id),
+        etsyOrderId: String(row.etsy_order_id),
+        status,
+        ageMinutes,
+      });
+    }
+  }
+
+  return result;
 }

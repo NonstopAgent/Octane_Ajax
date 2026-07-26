@@ -125,6 +125,7 @@ export function MissionControlDashboard() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount + 60s poll; matches tiktok-queue-panel / event-feed. Server-side initialSnapshot is the real fix (audit L1).
     void load();
     const timer = setInterval(() => void load(), 60_000);
     return () => clearInterval(timer);

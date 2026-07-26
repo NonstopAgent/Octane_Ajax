@@ -18,6 +18,7 @@ function mapOrderQueueRow(row: OrderQueue): OrderQueueRow {
     id: row.id,
     user_id: row.user_id,
     etsy_order_id: row.etsy_order_id,
+    transaction_id: row.transaction_id ?? "",
     listing_id: row.listing_id,
     customer_photo_url: row.customer_photo_url,
     style_prompt: row.style_prompt,

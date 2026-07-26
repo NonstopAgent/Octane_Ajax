@@ -409,3 +409,113 @@ describe("printify adapter — publishProduct mockup gallery", () => {
     assert.ok(calls.some((c) => /publishing_succeeded\.json$/.test(c.url)));
   });
 });
+
+describe("printify adapter — fixPrintPlacement (H9: fits EVERY variant)", () => {
+  // bp1672-style bandana: per-size panels 1.758:1 (S), 1.682:1 (M), 1.936:1 (XL);
+  // art 1.5:1. Tightest contain-fit = 0.85 * (1.5 / 1.936) ≈ 0.6586. The old
+  // repair fit only variant_ids[0] (S) → 0.7252, clipping the XL panel — and
+  // "repairing" an already-correct product RAISED its scale back to the bug.
+  const VARIANT_DIMS: Record<number, { width: number; height: number }> = {
+    101: { width: 1758, height: 1000 },
+    102: { width: 1682, height: 1000 },
+    103: { width: 1936, height: 1000 },
+  };
+  const TIGHTEST_SCALE = Number((0.85 * (1.5 / 1.936)).toFixed(4));
+
+  function placementFetch(currentScale: number) {
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      const method = init?.method ?? "GET";
+      calls.push({
+        method,
+        url: u,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if (u.includes("/catalog/blueprints/1672/print_providers/77/variants.json")) {
+        return jsonResponse({
+          variants: Object.entries(VARIANT_DIMS).map(([id, dims]) => ({
+            id: Number(id),
+            placeholders: [{ position: "front", ...dims }],
+          })),
+        });
+      }
+      if (u.endsWith("/products/prod-h9.json") && method === "GET") {
+        return jsonResponse({
+          blueprint_id: 1672,
+          print_provider_id: 77,
+          print_areas: [
+            {
+              variant_ids: [101, 102, 103],
+              placeholders: [
+                {
+                  position: "front",
+                  images: [
+                    {
+                      id: "art-1",
+                      x: 0.5,
+                      y: 0.5,
+                      scale: currentScale,
+                      angle: 0,
+                      width: 1500,
+                      height: 1000,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      }
+      if (method === "PUT") {
+        return jsonResponse({ ok: true });
+      }
+      throw new Error(`unexpected fetch ${method} ${u}`);
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  }
+
+  it("repairs a too-large placement to the TIGHTEST fit across all variants", async () => {
+    const { calls, fetchImpl } = placementFetch(1);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.fixPrintPlacement("prod-h9");
+
+    assert.equal(result.data.changed, true);
+    const put = calls.find((c) => c.method === "PUT");
+    assert.ok(put, "expected a PUT to persist the repaired placement");
+    const body = put!.body as {
+      print_areas: {
+        variant_ids: number[];
+        placeholders: { images: { scale: number }[] }[];
+      }[];
+    };
+    const scale = body.print_areas[0]!.placeholders[0]!.images[0]!.scale;
+    assert.ok(
+      Math.abs(scale - TIGHTEST_SCALE) < 0.001,
+      `expected tightest-fit scale ~${TIGHTEST_SCALE}, got ${scale}`,
+    );
+  });
+
+  it("leaves an already-tightest-fit product alone (no regression PUT)", async () => {
+    const { calls, fetchImpl } = placementFetch(TIGHTEST_SCALE);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.fixPrintPlacement("prod-h9");
+
+    assert.equal(result.data.changed, false);
+    assert.equal(
+      calls.some((c) => c.method === "PUT"),
+      false,
+      "repair must never PUT a looser placement onto a correct product",
+    );
+  });
+});

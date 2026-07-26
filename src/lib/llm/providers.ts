@@ -101,6 +101,37 @@ async function fetchWithTimeout(
   }
 }
 
+/**
+ * Parse a provider response with the status check FIRST. `.json()` before
+ * `.ok` meant a provider's HTML 502 threw `SyntaxError: Unexpected token '<'`
+ * instead of the status-carrying error (2026-07-25 audit, M13). Returns the
+ * parsed body when it IS JSON so error messages can still surface
+ * `error.message` from structured provider errors.
+ */
+async function parseProviderJson<T>(
+  res: Response,
+  provider: string,
+  extractError: (json: T) => string | undefined,
+): Promise<T> {
+  const raw = await res.text();
+  let json: T | null = null;
+  try {
+    json = JSON.parse(raw) as T;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    const detail =
+      (json ? extractError(json) : undefined) ??
+      (raw.trim() ? raw.slice(0, 160) : "unknown");
+    throw new Error(`${provider} error (${res.status}): ${detail}`);
+  }
+  if (json === null) {
+    throw new Error(`${provider} returned non-JSON (${res.status}).`);
+  }
+  return json;
+}
+
 function splitMessages(messages: LlmMessage[]): {
   system: string;
   user: string;
@@ -153,16 +184,11 @@ async function callAnthropic(
     },
     timeoutMs,
   );
-  const json = (await res.json()) as {
+  const json = await parseProviderJson<{
     content?: { text?: string }[];
     usage?: { input_tokens?: number; output_tokens?: number };
     error?: { message?: string };
-  };
-  if (!res.ok) {
-    throw new Error(
-      `Anthropic error (${res.status}): ${json.error?.message ?? "unknown"}`,
-    );
-  }
+  }>(res, "Anthropic", (j) => j.error?.message);
   const text = json.content?.map((c) => c.text ?? "").join("") ?? "";
   const inputTokens = json.usage?.input_tokens ?? 0;
   const outputTokens = json.usage?.output_tokens ?? 0;
@@ -201,7 +227,7 @@ async function callGoogle(
     },
     timeoutMs,
   );
-  const json = (await res.json()) as {
+  const json = await parseProviderJson<{
     candidates?: { content?: { parts?: { text?: string }[] } }[];
     usageMetadata?: {
       promptTokenCount?: number;
@@ -209,12 +235,7 @@ async function callGoogle(
       totalTokenCount?: number;
     };
     error?: { message?: string };
-  };
-  if (!res.ok) {
-    throw new Error(
-      `Gemini error (${res.status}): ${json.error?.message ?? "unknown"}`,
-    );
-  }
+  }>(res, "Gemini", (j) => j.error?.message);
   const text =
     json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ??
     "";

@@ -110,11 +110,11 @@ async function completeEtsy(
   videoUrl: string,
   deps: DrainDeps,
   doFetch: typeof fetch,
+  getCreds: () => Promise<Awaited<ReturnType<typeof refreshEtsyToken>>>,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!job.etsy_listing_id) return { ok: false, error: "missing etsy_listing_id" };
-  const refreshTokenFn = deps.refreshTokenFn ?? refreshEtsyToken;
   const createAdapter = deps.createAdapter ?? createEtsyAdapter;
-  const creds = await refreshTokenFn(userId, { supabase });
+  const creds = await getCreds();
   if (!creds) return { ok: false, error: "etsy not connected" };
   const vidRes = await doFetch(videoUrl);
   if (!vidRes.ok) return { ok: false, error: `download ${vidRes.status}` };
@@ -167,6 +167,22 @@ export async function drainVideoJobs(
     stillPending: 0,
   };
 
+  // ONE credential resolution per drain, not one per job (2026-07-25 audit,
+  // H3): the batch of 10 used to fire 10 token refreshes, and with Etsy
+  // rotating the refresh token on every exchange that was the easiest way to
+  // race two refreshers into a dead stored token. Lazy so a drain with no
+  // Etsy jobs never touches credentials at all.
+  const refreshTokenFn = deps.refreshTokenFn ?? refreshEtsyToken;
+  let cachedCreds:
+    | Awaited<ReturnType<typeof refreshEtsyToken>>
+    | undefined;
+  const getCreds = async () => {
+    if (cachedCreds === undefined) {
+      cachedCreds = await refreshTokenFn(userId, { supabase });
+    }
+    return cachedCreds;
+  };
+
   const { data: jobs } = await supabase
     .from(TABLES.VIDEO_JOBS)
     .select(
@@ -203,7 +219,15 @@ export async function drainVideoJobs(
       const outcome =
         raw.kind === "social"
           ? await completeSocial(raw, r.videoUrl, deps)
-          : await completeEtsy(supabase, userId, raw, r.videoUrl, deps, doFetch);
+          : await completeEtsy(
+              supabase,
+              userId,
+              raw,
+              r.videoUrl,
+              deps,
+              doFetch,
+              getCreds,
+            );
       if (outcome.ok) {
         await markJob(supabase, raw.id, "done", null, r.videoUrl);
         summary.done += 1;

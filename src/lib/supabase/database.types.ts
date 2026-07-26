@@ -713,6 +713,7 @@ export interface Database {
           id: string;
           user_id: string;
           etsy_order_id: string;
+          transaction_id: string;
           listing_id: string | null;
           customer_photo_url: string;
           style_prompt: string;
@@ -729,6 +730,7 @@ export interface Database {
           id?: string;
           user_id: string;
           etsy_order_id: string;
+          transaction_id?: string;
           listing_id?: string | null;
           customer_photo_url: string;
           style_prompt: string;
@@ -745,6 +747,7 @@ export interface Database {
           id?: string;
           user_id?: string;
           etsy_order_id?: string;
+          transaction_id?: string;
           listing_id?: string | null;
           customer_photo_url?: string;
           style_prompt?: string;

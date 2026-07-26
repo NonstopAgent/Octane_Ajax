@@ -128,7 +128,7 @@ describe("product mappers — Product Brain on product_ideas", () => {
       targetBuyer: "Parents of children with PDA who struggle with morning transitions",
       problemSolved:
         "Reduce overwhelming morning meltdowns with a visual step-by-step routine planner",
-      format: "planner",
+      format: "planner" as never, // legacy format — retired from ProductFormat; kept to pin defensive handling
       category: "parenting_support",
       description:
         "Printable visual morning routine planner with icons, checkboxes, and transition cues for PDA-friendly mornings.",
@@ -208,7 +208,11 @@ describe("product mappers — product_generations", () => {
 
     const update = mapGenerationToDbUpdate({
       generationStatus: "generating",
-      pdf: { publicUrl: "https://cdn.example.com/sample.pdf" },
+      // Deliberately partial: the mapper must leave pdf_storage_path untouched
+      // (undefined) when the patch omits it — null would clobber the column.
+      pdf: {
+        publicUrl: "https://cdn.example.com/sample.pdf",
+      } as unknown as import("@/lib/product/domain").PdfAssetPlaceholders,
     });
 
     assert.equal(update.generation_status, "generating");

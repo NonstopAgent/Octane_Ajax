@@ -1,0 +1,17 @@
+{
+  // Type-checks the test files that tsconfig.json deliberately excludes from
+  // the Next build. Between `node --test` silently skipping missing paths and
+  // this exclusion, four test files were invisible to BOTH gates for months
+  // (2026-07-25 audit, H2). Run via `npm run check:types`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": ["node_modules"]
+}

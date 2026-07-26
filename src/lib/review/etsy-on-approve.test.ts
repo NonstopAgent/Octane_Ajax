@@ -26,7 +26,7 @@ const generation: ProductGeneration = {
   productListingId: "listing-1",
   productIdeaId: "idea-1",
   generationStatus: "ready",
-  structure: {
+  podDetails: {
     blueprintId: 68,
     printProviderId: 1,
     variantIds: [33719],

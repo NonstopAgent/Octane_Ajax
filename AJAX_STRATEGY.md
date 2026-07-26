@@ -157,6 +157,22 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 (hourly once the `CRON_SECRET` repo secret is added — Agent 2 task).
 
 ## 11. Change log (recent)
+- **2026-07-25 — audit remediation, correctness block:** Worked the 2026-07-25 engineering
+  audit's "this week" slate on top of the prior session's C2/C3/H1/H7c fixes. Orders: one
+  `order_queue` row per personalized line item (H5 — multi-item carts no longer drop items;
+  DB re-keyed on user/order/transaction, applied to prod), buyer's Size/Color now maps to the
+  real Printify variant with a loud fallback warning (H6), personalization survives serverless
+  via `after()` + a stale-order reclaim pass in the autopilot (H4), demo-address fallback now
+  refused at production submit (C3 finish), quantity clamped at 10 (C2 finish). Etsy auth:
+  token refresh buffer fixed 60min→5min so tokens are actually reused, refresh writes are
+  race-safe, video drain fetches credentials once per batch (H3). Money-path `.ok` checks
+  before `.json()` in Printify upload/create/submit + LLM providers (M13); `fixPrintPlacement`
+  now fits EVERY variant like createProduct (H9 — repair no longer regresses correct products).
+  Test suite is real again: 426/426 green (was 403/407 with 4 failures nobody could see), test
+  files type-checked via `npm run check:types`, eslint 0 errors. Hot-path DB indexes + bounded
+  storefront query + Mission Control LLM cost no longer $0 (M12). New env switches documented:
+  `AUTOPILOT_AUTONOMOUS_REVIEW=false` restores a hard human Review Gate; `AUTOPILOT_DISABLED`
+  is the autopilot kill switch (default behavior unchanged: autonomous review stays ON).
 - **2026-07-03:** Shop Autopilot shipped + first live pass clean. Product-art quality fix:
   apparel/mugs now generate ISOLATED transparent-background designs (no more art-with-background
   pasted as a box on shirts); per-product composition rules; posters stay full-bleed. Overnight

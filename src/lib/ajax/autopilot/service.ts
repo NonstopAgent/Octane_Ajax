@@ -756,6 +756,54 @@ export async function runShopAutopilot(
     );
   }
 
+  // ---- Room 2 rescue: reclaim orders that died mid-personalization -----------
+  // A frozen lambda used to leave paid orders in `processing_artwork` forever
+  // (2026-07-25 audit, H4) — the dedupe then guaranteed they were NEVER
+  // retried while the Personalization Bay showed "Rendering" indefinitely.
+  // Reclaim resets them; anything non-terminal for >1h is surfaced as an
+  // error so this pass can't report "shop is healthy" over a stuck order.
+  try {
+    const { reclaimStaleOrders, processOrderQueueEntry } = await import(
+      "@/lib/ajax/pod/order-processor"
+    );
+    const rescue = await reclaimStaleOrders(supabase, userId);
+    if (rescue.reclaimed.length > 0 && isPrintifyConfigured()) {
+      // Retry inline (budget-capped at 2/pass): the cron has time, and a
+      // detached retry here would just recreate the original failure mode.
+      for (const claim of rescue.reclaimed.slice(0, 2)) {
+        const retry = await processOrderQueueEntry(
+          supabase,
+          userId,
+          claim.orderId,
+        );
+        if (!retry.ok) {
+          result.errors.push(
+            `order-rescue: ${claim.etsyOrderId} retry failed — ${retry.error}`,
+          );
+        }
+      }
+    }
+    if (rescue.stalled.length > 0) {
+      const detail = rescue.stalled
+        .map((s) => `${s.etsyOrderId} (${s.status}, ${s.ageMinutes}m)`)
+        .join(", ");
+      result.errors.push(
+        `order-rescue: ${rescue.stalled.length} order(s) non-terminal >1h — ${detail}`,
+      );
+      await logEvent(
+        supabase,
+        userId,
+        "order_stalled_alert",
+        `${rescue.stalled.length} order(s) stuck in the Personalization Bay for over an hour — needs operator attention.`,
+        { runId, stalled: rescue.stalled } as unknown as Json,
+      );
+    }
+  } catch (err) {
+    result.errors.push(
+      `order-rescue: ${err instanceof Error ? err.message : "failed"}`,
+    );
+  }
+
   // ---- Room 2 intake: personalized orders (Etsy has no order webhooks) ------
   // Scans recent receipts for buyer personalization (pet name / photo link)
   // and feeds the Personalization Bay queue. Fixed orders are ignored —
@@ -1091,11 +1139,21 @@ export async function runShopAutopilot(
     }
     // Self-clear the gate: autonomously review the oldest pending item so the
     // factory never freezes waiting on a human. Approve → downstream Etsy draft +
-    // video + marketing via runPostApproval; autonomous "revise" counts as reject.
+    // video + marketing via runPostApproval. NOTE: autonomous "revise" APPROVES
+    // with the parseable fixes applied (see auto-review.ts, operator decision
+    // 2026-07-21) — an earlier version of this comment said the opposite.
+    //
+    // AUTOPILOT_AUTONOMOUS_REVIEW=false restores a hard human Review Gate:
+    // the AI still grades, but nothing publishes until you click Approve
+    // (2026-07-25 audit, C1 — this hourly self-clear is what makes the
+    // "mandatory human review" in AGENTS.md §3 aspirational; the env switch
+    // makes that trade-off explicit and reversible instead of hardcoded).
     try {
+      const autonomousReview =
+        process.env.AUTOPILOT_AUTONOMOUS_REVIEW !== "false";
       const cleared = await autoReviewPending(supabase, userId, {
         reviewId: null,
-        act: true,
+        act: autonomousReview,
       });
       if (cleared?.acted) {
         result.reviewsCleared += 1;

@@ -10,7 +10,11 @@
  * HMAC-SHA256 via `x-etsy-signature` when ETSY_WEBHOOK_SECRET is set; mock payloads
  * accepted without verification for local dev.
  */
-export const maxDuration = 60;
+// 300s: order processing now runs via after() past the response, and the
+// gpt-image personalization edit alone can take 240s — at the old 60s the
+// platform cut the detached job mid-flight and the order stalled until the
+// autopilot's reclaim pass picked it up (2026-07-25 audit, H4).
+export const maxDuration = 300;
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";

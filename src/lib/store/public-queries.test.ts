@@ -9,7 +9,8 @@ type QueryResult = {
 };
 
 function createMockSupabase() {
-  const calls: { table: string; filters: string[] }[] = [];
+  const calls: { table: string; filters: string[]; limit: number | null }[] =
+    [];
 
   const listingRow = {
     id: "listing-pub-1",
@@ -36,7 +37,11 @@ function createMockSupabase() {
 
   const supabase = {
     from(table: string) {
-      const record = { table, filters: [] as string[] };
+      const record = {
+        table,
+        filters: [] as string[],
+        limit: null as number | null,
+      };
       calls.push(record);
 
       const builder = {
@@ -46,6 +51,10 @@ function createMockSupabase() {
           return builder;
         },
         order: () => builder,
+        limit: (n: number) => {
+          record.limit = n;
+          return builder;
+        },
         then(
           onFulfilled: (value: QueryResult) => unknown,
           onRejected?: (reason: unknown) => unknown,
@@ -87,5 +96,10 @@ describe("fetchPublicStoreListings", () => {
     assert.ok(listingQuery);
     assert.ok(listingQuery.filters.some((f) => f === "status=published"));
     assert.ok(!listingQuery.filters.some((f) => f.startsWith("user_id=")));
+    // The one public, uncached, force-dynamic query must stay bounded (M12).
+    assert.ok(
+      typeof listingQuery.limit === "number" && listingQuery.limit > 0,
+      "public storefront query must carry a .limit()",
+    );
   });
 });

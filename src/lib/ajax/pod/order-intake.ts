@@ -129,69 +129,88 @@ export async function pollPersonalizedOrders(
       }));
       const personalized = perTx.filter((p) => p.text);
       if (personalized.length === 0) continue;
-      summary.personalized += 1;
 
-      const first = personalized[0]!;
-      const { photoUrl, nameText } = parsePersonalization(first.text!);
+      // EVERY personalized line item gets its own order row (2026-07-25
+      // audit, H5). Taking only personalized[0] silently dropped the mug for
+      // "Rocky" when the buyer also ordered one for "Luna" in the same
+      // checkout — the receipt-keyed dedupe then blocked it forever, while
+      // the per-receipt counter made the summary look complete.
+      summary.personalized += personalized.length;
 
-      let baseImageUrl = photoUrl;
-      let style: string;
-      if (photoUrl) {
-        style = nameText
-          ? `${nameText} — soft, warm pet-portrait illustration`
-          : "soft, warm pet-portrait illustration";
-      } else {
-        // NAME-ONLY: the base is the listing's own artwork (via its Printify
-        // product's default mockup/artwork), and the edit integrates the name.
-        if (first.tx.listingId) {
-          baseImageUrl = await baseArtworkFor(first.tx.listingId);
+      for (const item of personalized) {
+        const { photoUrl, nameText } = parsePersonalization(item.text!);
+
+        let baseImageUrl = photoUrl;
+        let style: string;
+        if (photoUrl) {
+          style = nameText
+            ? `${nameText} — soft, warm pet-portrait illustration`
+            : "soft, warm pet-portrait illustration";
+        } else {
+          // NAME-ONLY: the base is the listing's own artwork (via its Printify
+          // product's default mockup/artwork), and the edit integrates the name.
+          if (item.tx.listingId) {
+            baseImageUrl = await baseArtworkFor(item.tx.listingId);
+          }
+          style = `hand-lettered addition of the pet name "${nameText ?? ""}" integrated elegantly into the existing design, keeping the artwork otherwise identical`;
         }
-        style = `hand-lettered addition of the pet name "${nameText ?? ""}" integrated elegantly into the existing design, keeping the artwork otherwise identical`;
-      }
 
-      if (!baseImageUrl) {
-        summary.errors.push(
-          `receipt ${receipt.receiptId}: personalization found but no usable base image — needs operator attention`,
+        if (!baseImageUrl) {
+          summary.errors.push(
+            `receipt ${receipt.receiptId}${item.tx.transactionId ? ` item ${item.tx.transactionId}` : ""}: personalization found but no usable base image — needs operator attention`,
+          );
+          await supabase.from(TABLES.EVENTS).insert({
+            user_id: userId,
+            event_type: "personalized_order_needs_attention",
+            message: `Personalized order ${receipt.receiptId} ("${(item.text ?? "").slice(0, 60)}") could not be auto-processed — open it in Etsy and handle manually.`,
+            agent_slug: "forge",
+            room: "personalization_bay",
+            metadata: {
+              receiptId: receipt.receiptId,
+              transactionId: item.tx.transactionId,
+            } as Json,
+          });
+          continue;
+        }
+
+        const payload: EtsyOrderWebhookPayload = {
+          receipt_id: receipt.receiptId,
+          ...receipt.shipping,
+          transactions: [
+            {
+              transaction_id: item.tx.transactionId ?? undefined,
+              listing_id: item.tx.listingId ?? undefined,
+              quantity: item.tx.quantity,
+              // Size/Color choices ride along so fulfillment can pick the
+              // buyer's actual variant (H6) — the personalization text was
+              // already parsed out above.
+              variations: item.tx.variations,
+              personalization: { photo_url: baseImageUrl, style },
+            },
+          ],
+        } as EtsyOrderWebhookPayload;
+
+        const { orderId, duplicate } = await insertOrderFromWebhook(
+          supabase,
+          userId,
+          payload,
         );
-        await supabase.from(TABLES.EVENTS).insert({
-          user_id: userId,
-          event_type: "personalized_order_needs_attention",
-          message: `Personalized order ${receipt.receiptId} ("${(first.text ?? "").slice(0, 60)}") could not be auto-processed — open it in Etsy and handle manually.`,
-          agent_slug: "forge",
-          room: "personalization_bay",
-          metadata: { receiptId: receipt.receiptId } as Json,
-        });
-        continue;
-      }
-
-      const payload: EtsyOrderWebhookPayload = {
-        receipt_id: receipt.receiptId,
-        ...receipt.shipping,
-        transactions: [
-          {
-            listing_id: first.tx.listingId ?? undefined,
-            quantity: first.tx.quantity,
-            personalization: { photo_url: baseImageUrl, style },
-          },
-        ],
-      } as EtsyOrderWebhookPayload;
-
-      const { orderId, duplicate } = await insertOrderFromWebhook(
-        supabase,
-        userId,
-        payload,
-      );
-      if (!duplicate) {
-        summary.queued += 1;
-        scheduleOrderProcessing(supabase, userId, orderId);
-        await supabase.from(TABLES.EVENTS).insert({
-          user_id: userId,
-          event_type: "personalized_order_queued",
-          message: `Personalized order ${receipt.receiptId} queued (${photoUrl ? "photo portrait" : `name: "${nameText ?? ""}"`}) — Room 2 is processing it.`,
-          agent_slug: "forge",
-          room: "personalization_bay",
-          metadata: { receiptId: receipt.receiptId, orderId } as Json,
-        });
+        if (!duplicate) {
+          summary.queued += 1;
+          scheduleOrderProcessing(supabase, userId, orderId);
+          await supabase.from(TABLES.EVENTS).insert({
+            user_id: userId,
+            event_type: "personalized_order_queued",
+            message: `Personalized order ${receipt.receiptId}${personalized.length > 1 ? ` (item ${item.tx.transactionId ?? "?"} of ${personalized.length})` : ""} queued (${photoUrl ? "photo portrait" : `name: "${nameText ?? ""}"`}) — Room 2 is processing it.`,
+            agent_slug: "forge",
+            room: "personalization_bay",
+            metadata: {
+              receiptId: receipt.receiptId,
+              transactionId: item.tx.transactionId,
+              orderId,
+            } as Json,
+          });
+        }
       }
     } catch (err) {
       summary.errors.push(

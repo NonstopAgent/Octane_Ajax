@@ -11,7 +11,6 @@ import {
   liveResult,
 } from "@/lib/ajax/adapters/types";
 import {
-  centeredPlacement,
   fitScale,
   getPlaceholderDims,
   type Placement,
@@ -242,6 +241,12 @@ export interface PrintifyAdapter {
   submitOrder(
     input: PrintifyOrderInput,
   ): Promise<AdapterResult<PrintifyOrder>>;
+  /** Catalog variant id → human title ("Aqua / 2XL") for a blueprint+provider.
+   * Lets fulfillment map the buyer's Size/Color choice to the right variant. */
+  listCatalogVariants(
+    blueprintId: number,
+    printProviderId: number,
+  ): Promise<AdapterResult<{ id: number; title: string }[]>>;
 }
 
 export type PrintifyAdapterOptions = AdapterConfig & {
@@ -443,6 +448,32 @@ type PrintifyOrderResponse = {
   status?: string;
 };
 
+/**
+ * Read a Printify response as JSON with the status check FIRST.
+ *
+ * `.json()` before `.ok` meant an HTML 502/503 threw an opaque
+ * `SyntaxError: Unexpected token '<'` before the status-carrying error could
+ * fire (2026-07-25 audit, M13) — and the three places that had it were
+ * exactly the money path: upload, create product, submit order. Mirrors
+ * `parseEtsyJson` in etsy.ts, which got this right from day one.
+ */
+async function parsePrintifyJson<T>(
+  response: Response,
+  label: string,
+): Promise<T> {
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`${label} failed (${response.status}): ${raw.slice(0, 300)}`);
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(
+      `${label} returned non-JSON (${response.status}): ${raw.slice(0, 160)}`,
+    );
+  }
+}
+
 function mapShippingAddress(
   address: PrintifyShippingAddress,
 ): Record<string, string> {
@@ -579,6 +610,11 @@ export function createDemoPrintifyAdapter(
         status: "pending",
       });
     },
+
+    async listCatalogVariants() {
+      // No catalog in demo mode — fulfillment falls back to variantIds[0].
+      return demoResult("Printify catalog variants simulated.", []);
+    },
   };
 }
 
@@ -619,8 +655,11 @@ export function createLivePrintifyAdapter(
         body: JSON.stringify(body),
       });
 
-      const payload = (await response.json()) as PrintifyUploadResponse;
-      if (!response.ok || !payload.id) {
+      const payload = await parsePrintifyJson<PrintifyUploadResponse>(
+        response,
+        "Printify upload",
+      );
+      if (!payload.id) {
         throw new Error(
           `Printify upload failed (${response.status}): ${JSON.stringify(payload)}`,
         );
@@ -716,8 +755,11 @@ export function createLivePrintifyAdapter(
         },
       );
 
-      const payload = (await response.json()) as PrintifyProductResponse;
-      if (!response.ok || !payload.id) {
+      const payload = await parsePrintifyJson<PrintifyProductResponse>(
+        response,
+        "Printify create product",
+      );
+      if (!payload.id) {
         throw new Error(
           `Printify create product failed (${response.status}): ${JSON.stringify(payload)}`,
         );
@@ -1073,21 +1115,41 @@ export function createLivePrintifyAdapter(
         const placeholders = [];
         for (const { ph } of area.placeholders) {
           const position = ph.position ?? "front";
-          const dims = await getPlaceholderDims({
-            blueprintId,
-            printProviderId: providerId,
-            variantId: area.variant_ids[0],
-            position,
-            apiToken: token,
-            fetchImpl,
-          });
-          if (!dims) {
+          // EVERY variant, not just variant_ids[0] (2026-07-25 audit, H9).
+          // ONE placement serves all enabled variants and the panel aspect
+          // differs per size — createProduct learned this on the 2026-07-22
+          // bandana wave (S 1.76:1 vs XL 1.94:1) and takes the TIGHTEST fit.
+          // This repair fitting only the FIRST variant re-introduced the
+          // defect it exists to remove — and running it on an already-correct
+          // product RAISED the scale past the change threshold, so it would
+          // PUT the worse placement back.
+          const areaVariantIds: (number | undefined)[] =
+            area.variant_ids.length > 0 ? area.variant_ids : [undefined];
+          const dimsList = await Promise.all(
+            areaVariantIds.map((variantId) =>
+              getPlaceholderDims({
+                blueprintId,
+                printProviderId: providerId,
+                variantId,
+                position,
+                apiToken: token,
+                fetchImpl,
+              }),
+            ),
+          );
+          const dimsOk = dimsList.filter(
+            (d): d is { width: number; height: number } =>
+              Boolean(d && d.width > 0 && d.height > 0),
+          );
+          if (dimsOk.length === 0) {
             throw new Error(
               `No print-area dimensions for blueprint ${blueprintId}/${position} — refusing to guess placement.`,
             );
           }
-          areaDims = dims;
-          const areaAspect = dims.width / dims.height;
+          const aspects = dimsOk.map((d) => d.width / d.height);
+          // Report the widest panel — for art narrower than the panel it is
+          // the one that binds the contain-fit.
+          areaDims = dimsOk[aspects.indexOf(Math.max(...aspects))]!;
           const images = (ph.images ?? []).map((img) => {
             const before: Placement = {
               x: typeof img.x === "number" ? img.x : 0.5,
@@ -1099,7 +1161,12 @@ export function createLivePrintifyAdapter(
               img.width && img.height && img.height > 0
                 ? img.width / img.height
                 : 1;
-            const after = centeredPlacement(imgAspect, areaAspect);
+            const after: Placement = {
+              x: 0.5,
+              y: 0.5,
+              scale: Math.min(...aspects.map((a) => fitScale(imgAspect, a))),
+              angle: 0,
+            };
             const id = typeof img.id === "string" ? img.id : "";
             fixes.push({ id, before, after });
             if (
@@ -1246,8 +1313,11 @@ export function createLivePrintifyAdapter(
         },
       );
 
-      const payload = (await response.json()) as PrintifyOrderResponse;
-      if (!response.ok || !payload.id) {
+      const payload = await parsePrintifyJson<PrintifyOrderResponse>(
+        response,
+        "Printify submit order",
+      );
+      if (!payload.id) {
         throw new Error(
           `Printify submit order failed (${response.status}): ${JSON.stringify(payload)}`,
         );
@@ -1258,6 +1328,20 @@ export function createLivePrintifyAdapter(
         externalId: payload.external_id ?? input.externalId,
         status: payload.status ?? "pending",
       });
+    },
+
+    async listCatalogVariants(blueprintId, printProviderId) {
+      const response = await fetchImpl(
+        `${PRINTIFY_API_BASE}/catalog/blueprints/${blueprintId}/print_providers/${printProviderId}/variants.json`,
+        { headers },
+      );
+      const payload = await parsePrintifyJson<{
+        variants?: { id?: number; title?: string }[];
+      }>(response, "Printify catalog variants");
+      const rows = (payload.variants ?? [])
+        .filter((v) => typeof v.id === "number")
+        .map((v) => ({ id: v.id as number, title: v.title ?? "" }));
+      return liveResult("Printify catalog variants fetched.", rows);
     },
   };
 }

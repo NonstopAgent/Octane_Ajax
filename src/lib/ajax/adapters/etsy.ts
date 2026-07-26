@@ -132,6 +132,8 @@ export type EtsyReceiptRaw = {
     country_iso?: string;
   };
   transactions: {
+    /** Etsy transaction_id — one per line item; keys per-item order rows. */
+    transactionId: string | null;
     listingId: string | null;
     quantity: number;
     variations: { formatted_name?: string; formatted_value?: string }[];
@@ -1091,6 +1093,7 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
           zip?: string;
           country_iso?: string;
           transactions?: {
+            transaction_id?: number;
             listing_id?: number;
             quantity?: number;
             variations?: {
@@ -1117,6 +1120,8 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
             country_iso: r.country_iso,
           },
           transactions: (r.transactions ?? []).map((t) => ({
+            transactionId:
+              t.transaction_id != null ? String(t.transaction_id) : null,
             listingId: t.listing_id != null ? String(t.listing_id) : null,
             quantity: Number(t.quantity ?? 1) || 1,
             variations: t.variations ?? [],

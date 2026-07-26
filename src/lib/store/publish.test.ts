@@ -104,7 +104,7 @@ describe("saveManualListingCheckoutUrl", () => {
       result.listing.gumroadUrl,
       "https://store.lemonsqueezy.com/checkout/buy/abc",
     );
-    assert.equal(updatePayload?.status, "published");
+    assert.equal((updatePayload as Record<string, unknown> | null)?.status, "published");
   });
 
   it("does not change status when already published", async () => {
@@ -166,9 +166,9 @@ describe("saveManualListingCheckoutUrl", () => {
       "https://creator.gumroad.com/l/new",
     );
 
-    assert.equal(updatePayload?.status, undefined);
+    assert.equal((updatePayload as Record<string, unknown> | null)?.status, undefined);
     assert.equal(
-      updatePayload?.gumroad_url,
+      (updatePayload as Record<string, unknown> | null)?.gumroad_url,
       "https://creator.gumroad.com/l/new",
     );
   });
@@ -238,9 +238,9 @@ describe("publishListingWithGumroad", () => {
       result.listing.gumroadUrl,
       "https://shop.gumroad.com/l/planner",
     );
-    assert.equal(updatePayload?.status, "published");
+    assert.equal((updatePayload as Record<string, unknown> | null)?.status, "published");
     assert.equal(
-      updatePayload?.gumroad_url,
+      (updatePayload as Record<string, unknown> | null)?.gumroad_url,
       "https://shop.gumroad.com/l/planner",
     );
   });

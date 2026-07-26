@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  MAX_ORDER_QUANTITY,
   ORDER_QUEUE_STATUSES,
   assertOrderStatusTransition,
   blockInfringingTerms,
@@ -232,5 +233,70 @@ describe("order-types webhook extraction", () => {
     assert.equal(shipping!.address1, "10 Main St");
     assert.equal(shipping!.city, "Austin");
     assert.equal(shipping!.country, "US");
+  });
+});
+
+describe("extractPersonalizationFromWebhook — per-line-item identity (H5/H6)", () => {
+  it("attributes the order to the transaction that carries the personalization", () => {
+    const extracted = extractPersonalizationFromWebhook({
+      receipt_id: 555,
+      transactions: [
+        {
+          transaction_id: 9001,
+          listing_id: 111,
+          quantity: 1,
+          variations: [{ formatted_name: "Size", formatted_value: "S" }],
+        },
+        {
+          transaction_id: 9002,
+          listing_id: 222,
+          quantity: 2,
+          variations: [
+            { formatted_name: "Size", formatted_value: "2XL" },
+            { formatted_name: "Photo upload", formatted_value: "https://cdn.example.com/rocky.png" },
+            { formatted_name: "Art style", formatted_value: "watercolor" },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(extracted.etsyOrderId, "555");
+    assert.equal(extracted.transactionId, "9002");
+    assert.equal(extracted.listingId, "222");
+    assert.equal(extracted.quantity, 2);
+    assert.equal(extracted.customerPhotoUrl, "https://cdn.example.com/rocky.png");
+    assert.equal(extracted.rawStyle, "watercolor");
+    // Size/Color survive as buyer choices; photo/style/personalization do not.
+    assert.deepEqual(extracted.buyerVariations, [
+      { name: "Size", value: "2XL" },
+    ]);
+  });
+
+  it("clamps runaway quantities at MAX_ORDER_QUANTITY (C2)", () => {
+    const extracted = extractPersonalizationFromWebhook({
+      receipt_id: 556,
+      personalization: { photo_url: "https://cdn.example.com/a.png", style: "sketch" },
+      transactions: [
+        { transaction_id: 1, listing_id: 111, quantity: 500 },
+      ],
+    });
+    assert.equal(extracted.quantity, MAX_ORDER_QUANTITY);
+  });
+
+  it("falls back to the first transaction for receipt-level personalization", () => {
+    const extracted = extractPersonalizationFromWebhook({
+      receipt_id: 557,
+      personalization: { photo_url: "https://cdn.example.com/b.png", style: "line art" },
+      transactions: [
+        {
+          transaction_id: 77,
+          listing_id: 333,
+          quantity: 1,
+          variations: [{ formatted_name: "Color", formatted_value: "Sage" }],
+        },
+      ],
+    });
+    assert.equal(extracted.transactionId, "77");
+    assert.deepEqual(extracted.buyerVariations, [{ name: "Color", value: "Sage" }]);
   });
 });

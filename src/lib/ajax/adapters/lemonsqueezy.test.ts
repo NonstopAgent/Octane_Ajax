@@ -185,7 +185,7 @@ describe("lemonsqueezy adapter", () => {
   });
 
   it("throws LemonSqueezyAdapterError on API failure", async () => {
-    const fetchImpl = async (url: string | URL) => {
+    const fetchImpl = async (url: RequestInfo | URL) => {
       if (String(url).endsWith("/v1/stores")) {
         return storesResponse("7");
       }

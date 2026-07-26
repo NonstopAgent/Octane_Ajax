@@ -99,9 +99,12 @@ export async function GET() {
         .eq("status", "idea")
         .eq("raw_payload->>operatorSeed", "true"),
       supabase
+        // No user_id filter: usage-logger never sets user_id on insert, so
+        // `user_id = <uuid>` matched nothing and the dashboard showed $0.00
+        // forever (2026-07-25 audit, M12). Single-operator system; matches
+        // getWeeklyLlmCostUsd in revenue-queries, which got this right.
         .from(TABLES.LLM_USAGE)
         .select("cost_usd, created_at")
-        .eq("user_id", userId)
         .gte("created_at", weekAgo)
         .limit(2000),
       supabase

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test \"tests/*.test.mjs\" \"src/**/*.test.ts\"",
+    "check:types": "tsc --noEmit && tsc -p tsconfig.test.json",
     "check:security": "node --test tests/security.test.mjs",
     "check:demo": "node scripts/demo-readiness.mjs"
   },

@@ -78,7 +78,11 @@ export async function fetchPublicStoreListings(
     .from(TABLES.LISTINGS)
     .select(PUBLIC_LISTING_SELECT)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    // Unauthenticated, uncached, force-dynamic page on the table that grows
+    // every day — this was the one unbounded public query in the repo
+    // (2026-07-25 audit, M12). 60 covers the storefront grid with headroom.
+    .limit(60);
 
   if (error) throw error;
 

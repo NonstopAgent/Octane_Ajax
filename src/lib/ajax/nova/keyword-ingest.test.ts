@@ -99,7 +99,11 @@ describe("refreshEtsyKeywordCounts", () => {
 
 describe("saveManualKeywords", () => {
   it("saves operator demand numbers as source 'manual'", async () => {
-    const state = { existing: [], inserts: [], updates: [] };
+    const state = {
+      existing: [] as { id: string; term: string }[],
+      inserts: [] as Record<string, unknown>[],
+      updates: [] as Record<string, unknown>[],
+    };
     const result = await saveManualKeywords(makeSupabase(state), "u1", [
       { term: "personalized dog mom gift", searchesPerMonth: 1300, competingListings: 900 },
     ]);

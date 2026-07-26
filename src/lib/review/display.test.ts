@@ -24,7 +24,7 @@ const sampleIdea: NovaEvaluatedIdea = {
   targetBuyer: "Busy parents",
   problemSolved: "Plan weekly meals",
   productConcept: "Weekly Meal Prep Planner",
-  format: "planner",
+  format: "planner" as never, // legacy format — retired from ProductFormat; kept to pin defensive handling
   category: "productivity",
   suggestedPrice: 19.99,
   keywords: ["meal prep"],

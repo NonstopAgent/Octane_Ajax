@@ -338,7 +338,13 @@ export async function consumeEtsyOAuthSession(
   return { userId: data.user_id, codeVerifier: data.code_verifier };
 }
 
-const REFRESH_BUFFER_MS = 60 * 60 * 1000;
+// 5 minutes — NOT an hour. Etsy tokens live exactly 3600s, so a 60-minute
+// buffer made the "still valid, reuse it" early-return unreachable: every one
+// of the 17 call sites did a full OAuth refresh, and because Etsy ROTATES the
+// refresh token on each exchange, two overlapping refreshers could exchange
+// the same stored token and permanently desync us from Etsy (2026-07-25
+// audit, H3). With 5 minutes a fresh token is reused for ~55 min.
+const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export async function loadEtsyCredentials(
   supabase: Supabase,
@@ -358,8 +364,17 @@ export async function loadEtsyCredentials(
 }
 
 /**
- * Returns valid Etsy credentials, refreshing the access token when expiring
- * within one hour. Updates `etsy_credentials` when refreshed.
+ * Returns valid Etsy credentials, refreshing the access token when it expires
+ * within REFRESH_BUFFER_MS. Updates `etsy_credentials` when refreshed.
+ *
+ * Concurrency-safe (2026-07-25 audit, H3): Etsy rotates the refresh token on
+ * every exchange, so two concurrent refreshers exchanging the same stored
+ * token used to leave the DB holding a dead token — every Etsy operation then
+ * failed until a manual reconnect. Now (a) the UPDATE is conditional on the
+ * refresh token we actually exchanged, and the loser adopts the winner's
+ * stored pair instead of clobbering it; (b) an `invalid_grant` from the
+ * exchange re-reads the row and, if another refresher already rotated it,
+ * uses that instead of surfacing an error.
  */
 export async function refreshEtsyToken(
   userId: string,
@@ -377,20 +392,42 @@ export async function refreshEtsyToken(
     return row;
   }
 
-  const token = await refreshEtsyAccessToken(row.refresh_token, options.fetchImpl);
+  let token: EtsyTokenResponse;
+  try {
+    token = await refreshEtsyAccessToken(row.refresh_token, options.fetchImpl);
+  } catch (err) {
+    // Likely a concurrent refresher already exchanged (and thereby burned)
+    // the token we read. If the stored pair has rotated since, it's theirs —
+    // use it. Only surface the failure when nothing changed.
+    const latest = await loadEtsyCredentials(supabase, userId);
+    if (latest && latest.refresh_token !== row.refresh_token) {
+      return latest;
+    }
+    throw err;
+  }
   const expiresAt = expiresAtFromTokenResponse(token);
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("etsy_credentials")
     .update({
       access_token: token.access_token,
       refresh_token: token.refresh_token,
       expires_at: expiresAt,
     })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("refresh_token", row.refresh_token)
+    .select("user_id");
 
   if (error) {
     throw new EtsyAuthError("Failed to update Etsy credentials.", undefined, error);
+  }
+
+  if ((updated?.length ?? 0) === 0) {
+    // Lost the write race: another refresher rotated the stored pair while
+    // our exchange was in flight. Adopt theirs — writing ours would desync
+    // the DB from Etsy's latest rotation.
+    const latest = await loadEtsyCredentials(supabase, userId);
+    if (latest) return latest;
   }
 
   return {
