@@ -14,6 +14,7 @@ import { mapGenerationFromDb } from "@/lib/product/mappers";
 import { publishListingViaPrintify } from "@/lib/review/printify-publish-on-approve";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
+import { requireOperator } from "@/lib/auth/operator";
 
 export async function POST(
   _req: Request,
@@ -27,6 +28,16 @@ export async function POST(
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+  // this surface mutates the ONE live shop on process-wide credentials.
+  const operatorCheck = requireOperator(user);
+  if (!operatorCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: operatorCheck.error },
+      { status: operatorCheck.status },
+    );
   }
 
   const { data: listingRow, error: listingError } = await supabase

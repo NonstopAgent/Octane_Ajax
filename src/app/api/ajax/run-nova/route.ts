@@ -10,6 +10,7 @@ import {
 } from "@/lib/ajax/simulator";
 import { getActiveBusinessId } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 /** POST /api/ajax/run-nova — Nova ideation step (Vercel-safe, no Forge LLM). */
 export async function POST() {
@@ -35,6 +36,16 @@ export async function POST() {
           error: "Unauthorized. Sign in with Supabase Auth to run Nova.",
         },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
 

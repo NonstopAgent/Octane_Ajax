@@ -28,7 +28,13 @@ export type FalInput = {
   cfg_scale: number;
 };
 
-export type RenderStatus = "pending" | "completed" | "failed";
+/**
+ * "unknown" (2026-07-25 audit, H14): fal was unreachable or rate-limited us —
+ * the render itself may be FINE. Treating that as "failed" permanently
+ * discarded paid renders (~$0.35 each) over a single 429, and the freshness
+ * medic then paid AGAIN to re-render. Callers treat unknown like pending.
+ */
+export type RenderStatus = "pending" | "completed" | "failed" | "unknown";
 
 export type RenderResult = {
   ok: boolean;
@@ -205,26 +211,44 @@ export async function pollVideoRender(
     };
     const s = (statusJson.status ?? "").toUpperCase();
     if (s !== "COMPLETED") {
-      // Only the two documented in-flight states count as pending. Anything
-      // else (FAILED, a 4xx, an unknown shape) is terminal — never let a bad
-      // response masquerade as "still rendering" again.
+      // Only the two documented in-flight states count as pending; a real
+      // FAILED (or any other 2xx state we don't recognize) is terminal.
+      // But "fal said FAILED" and "we couldn't reach fal" are different
+      // things (H14): a 429/5xx means WE got throttled while the render may
+      // be fine — that's "unknown", retried next drain, never terminal.
       const stillRunning =
         statusRes.ok && (s === "IN_QUEUE" || s === "IN_PROGRESS");
+      if (stillRunning) {
+        return { ok: true, status: "pending", requestId, model };
+      }
+      const transient =
+        !statusRes.ok && (statusRes.status === 429 || statusRes.status >= 500);
       return {
-        ok: stillRunning,
-        status: stillRunning ? "pending" : "failed",
+        ok: false,
+        status: transient ? "unknown" : "failed",
         requestId,
         model,
-        error: stillRunning
-          ? undefined
-          : statusJson.detail ||
-            `fal status ${statusRes.status}${s ? ` (${s})` : ""}`,
+        error:
+          statusJson.detail ||
+          `fal status ${statusRes.status}${s ? ` (${s})` : ""}`,
       };
     }
     const resultRes = await doFetch(
       `${FAL_QUEUE_BASE}/${requestBase}/requests/${requestId}`,
       { headers: authHeaders(), signal: AbortSignal.timeout(15000) },
     );
+    if (!resultRes.ok) {
+      // COMPLETED but the result fetch bounced — the MP4 exists and is paid
+      // for; a throttled result fetch must not discard it (H14).
+      const transient = resultRes.status === 429 || resultRes.status >= 500;
+      return {
+        ok: false,
+        status: transient ? "unknown" : "failed",
+        requestId,
+        model,
+        error: `fal result fetch ${resultRes.status}`,
+      };
+    }
     const resultJson = (await resultRes.json().catch(() => ({}))) as {
       video?: { url?: string };
     };
@@ -238,9 +262,10 @@ export async function pollVideoRender(
       error: videoUrl ? undefined : "fal completed without a video URL.",
     };
   } catch (err) {
+    // Network error / our own 15s timeout — we know nothing about the render.
     return {
       ok: false,
-      status: "failed",
+      status: "unknown",
       requestId,
       model,
       error: err instanceof Error ? err.message : "fal poll error",

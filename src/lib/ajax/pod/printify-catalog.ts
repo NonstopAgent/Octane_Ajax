@@ -40,6 +40,14 @@ export type PrintifyCatalogEntry = {
   variantPrices: Record<number, number>;
   /** Default retail price in cents when Forge's price is missing/invalid. */
   defaultPriceCents: number;
+  /**
+   * Conservative blank-cost estimate (cents, worst enabled variant) for the
+   * margin guardrail — real per-variant cost from Printify wins when
+   * available (setVariantPrices fetches it live).
+   */
+  estimatedBlankCostCents: number;
+  /** Absorbed US shipping estimate (cents) — the shop ships free to the US. */
+  estimatedUsShippingCents: number;
   /** Artwork aspect ratio that fills this product's print area (avoids cropping). */
   artworkAspectRatio: "1:1" | "4:5" | "16:9";
   /**
@@ -68,6 +76,8 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // Prices bake in US shipping (shop ships free to the US — Etsy ranking boost).
     variantPrices: { 67624: 2499 },
     defaultPriceCents: 2499,
+    estimatedBlankCostCents: 850, // Colorway 11oz blank
+    estimatedUsShippingCents: 600,
     artworkAspectRatio: "1:1",
     artworkBackground: "transparent",
     artworkCompositionHint:
@@ -84,6 +94,8 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // Size-tiered; prices bake in US shipping (free-shipping listings rank higher).
     variantPrices: { 43135: 2799, 43138: 3299, 43144: 3999 },
     defaultPriceCents: 3299,
+    estimatedBlankCostCents: 1500, // 18x24 matte, worst of the three sizes
+    estimatedUsShippingCents: 600,
     artworkAspectRatio: "4:5", // vertical poster → portrait artwork
     artworkBackground: "opaque",
     artworkCompositionHint:
@@ -100,6 +112,8 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // 2XL upcharge; prices bake in US shipping (free-shipping listings rank higher).
     variantPrices: { 18052: 2999, 18053: 2999, 18054: 2999, 18055: 2999, 18056: 3199 },
     defaultPriceCents: 2999,
+    estimatedBlankCostCents: 1300, // 2XL DTG, worst size
+    estimatedUsShippingCents: 500,
     artworkAspectRatio: "1:1", // centered chest print
     artworkBackground: "transparent",
     artworkCompositionHint:
@@ -116,6 +130,8 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // Prices bake in US shipping (free-shipping listings rank higher).
     variantPrices: { 25377: 3999, 25381: 3999, 25385: 3999 },
     defaultPriceCents: 3699,
+    estimatedBlankCostCents: 1900, // Gildan crewneck DTG
+    estimatedUsShippingCents: 650,
     artworkAspectRatio: "1:1", // centered chest print
     artworkBackground: "transparent",
     artworkCompositionHint:
@@ -135,6 +151,8 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     // Operator-approved price point ($14.99; XL carries a higher base cost).
     variantPrices: { 115222: 1499, 115223: 1499, 115225: 1799 },
     defaultPriceCents: 1499,
+    estimatedBlankCostCents: 900, // XL bandana, worst size
+    estimatedUsShippingCents: 450,
     artworkAspectRatio: "16:9", // wide bandana panel (~1.76:1)
     artworkBackground: "transparent",
     // Rewritten 2026-07-22 after the operator called the first wave's
@@ -182,3 +200,85 @@ export function formatCatalogForPrompt(): string {
     return `- "${key}" (${entry.label}): ${entry.promptHint}`;
   }).join("\n");
 }
+
+/** Reverse lookup: catalog entry by the blueprint+provider actually on a product. */
+export function catalogEntryForProduct(
+  blueprintId: number | null | undefined,
+  printProviderId: number | null | undefined,
+): PrintifyCatalogEntry | null {
+  if (blueprintId == null) return null;
+  for (const key of PRINTIFY_CATALOG_KEYS) {
+    const entry = PRINTIFY_CATALOG[key];
+    if (
+      entry.blueprintId === blueprintId &&
+      (printProviderId == null || entry.printProviderId === printProviderId)
+    ) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+export type CatalogPricingViolation = {
+  variantId: number;
+  expectedCents: number | null;
+  actualCents: number | null;
+  reason: string;
+};
+
+/**
+ * The catalog is the ONLY pricing authority (2026-07-25 audit, H7a). Forge
+ * used to freelance per-listing prices — the $39.99/$42.99/$44.99 sweatshirt
+ * spread — and any one-time cleanup re-opened on the next run. This check
+ * runs at creation time so a drifted price can never reach Printify.
+ */
+export function findCatalogPricingViolations(
+  entry: PrintifyCatalogEntry,
+  variantIds: number[],
+  variantPrices: Record<number, number> | undefined,
+  fallbackPriceCents: number | undefined,
+): CatalogPricingViolation[] {
+  const violations: CatalogPricingViolation[] = [];
+  for (const id of variantIds) {
+    const expected = entry.variantPrices[id];
+    if (expected == null) {
+      violations.push({
+        variantId: id,
+        expectedCents: null,
+        actualCents: variantPrices?.[id] ?? fallbackPriceCents ?? null,
+        reason: `variant ${id} is not an enabled ${entry.key} variant`,
+      });
+      continue;
+    }
+    const actual = variantPrices?.[id] ?? fallbackPriceCents ?? null;
+    if (actual !== expected) {
+      violations.push({
+        variantId: id,
+        expectedCents: expected,
+        actualCents: actual,
+        reason: `variant ${id} priced ${actual == null ? "(none)" : `$${(actual / 100).toFixed(2)}`}, catalog says $${(expected / 100).toFixed(2)}`,
+      });
+    }
+  }
+  return violations;
+}
+
+/**
+ * Margin guardrail (H8): the 25%-off sale price must still clear blank cost
+ * + absorbed US shipping + Etsy fees (6.5% + 3% + $0.25 + $0.20). Returns
+ * the deficit in cents when a price is underwater at sale time, else null.
+ * costCents defaults to the catalog estimate; pass Printify's real per-variant
+ * cost when you have it.
+ */
+export function salePriceDeficitCents(
+  priceCents: number,
+  entry: Pick<PrintifyCatalogEntry, "estimatedBlankCostCents" | "estimatedUsShippingCents">,
+  costCents?: number | null,
+): number | null {
+  const sale = priceCents * 0.75;
+  const fees = sale * 0.065 + sale * 0.03 + 25 + 20;
+  const blank = costCents != null && costCents > 0 ? costCents : entry.estimatedBlankCostCents;
+  const net = sale - blank - entry.estimatedUsShippingCents - fees;
+  return net < 0 ? Math.round(-net) : null;
+}
+

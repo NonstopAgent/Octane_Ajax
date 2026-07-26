@@ -137,3 +137,46 @@ describe("fal-render (not configured)", () => {
     assert.match(out.error ?? "", /FAL_KEY/);
   });
 });
+
+describe("pollVideoRender — transient vs terminal (H14)", () => {
+  beforeEach(() => {
+    process.env.FAL_KEY = "test-key";
+  });
+  afterEach(() => {
+    delete process.env.FAL_KEY;
+  });
+
+  it("returns 'unknown' (retryable) when fal rate-limits the status poll", async () => {
+    const fetchImpl = (async () =>
+      res({ detail: "rate limited" }, false, 429)) as unknown as typeof fetch;
+    const r = await pollVideoRender("req-1", { fetchImpl });
+    assert.equal(r.status, "unknown");
+  });
+
+  it("returns 'unknown' when the poll itself throws (timeout/network)", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("socket hang up");
+    }) as unknown as typeof fetch;
+    const r = await pollVideoRender("req-2", { fetchImpl });
+    assert.equal(r.status, "unknown");
+  });
+
+  it("still returns 'failed' when fal itself says FAILED", async () => {
+    const fetchImpl = (async () =>
+      res({ status: "FAILED", detail: "nsfw filter" })) as unknown as typeof fetch;
+    const r = await pollVideoRender("req-3", { fetchImpl });
+    assert.equal(r.status, "failed");
+  });
+
+  it("keeps a COMPLETED render alive when the result fetch is throttled", async () => {
+    let call = 0;
+    const fetchImpl = (async () => {
+      call += 1;
+      return call === 1
+        ? res({ status: "COMPLETED" })
+        : res({ detail: "slow down" }, false, 503);
+    }) as unknown as typeof fetch;
+    const r = await pollVideoRender("req-4", { fetchImpl });
+    assert.equal(r.status, "unknown");
+  });
+});

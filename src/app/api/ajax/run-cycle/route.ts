@@ -2,6 +2,7 @@ export const maxDuration = 10;
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 /**
  * POST /api/ajax/run-cycle
@@ -21,6 +22,16 @@ export async function POST() {
         error: "Unauthorized. Sign in to run the Ajax pipeline.",
       },
       { status: 401 },
+    );
+  }
+
+  // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+  // this surface mutates the ONE live shop on process-wide credentials.
+  const operatorCheck = requireOperator(user);
+  if (!operatorCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: operatorCheck.error },
+      { status: operatorCheck.status },
     );
   }
 

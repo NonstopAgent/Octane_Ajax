@@ -157,6 +157,22 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 (hourly once the `CRON_SECRET` repo secret is added — Agent 2 task).
 
 ## 11. Change log (recent)
+- **2026-07-25 — audit remediation, pricing + security block:** Pricing is now
+  catalog-authoritative end to end (H7a): `printify-catalog.ts` carries per-entry economics,
+  product creation hard-fails on any price that deviates from catalog targets, and
+  `reprice-and-returns` is POST-only with ABSOLUTE targets (idempotent — the old GET compounded
+  1.33× per re-fire) plus a `dryRun` audit mode; `setVariantPrices` refuses any target whose
+  25%-off sale price loses money against Printify's REAL per-variant cost (H8 guardrail), and
+  the Product Brain now scores TRUE net margin (blank + absorbed US shipping + Etsy fees) with
+  an explicit UNDERWATER flag. Security: 36 `/api/ajax/*` shop-mutating routes now require the
+  OPERATOR (signed-in ≠ authorized; any self-registered account could previously run paid
+  repairs and republish to Etsy — H10), and the 7th fail-open cron guard (`ajax/etsy-attributes`,
+  missed by the 07-24 sweep) now fails closed. Reliability: review approve/reject writes are
+  the lock (`status='pending'` conditional; losers 409 instead of double-publishing — H12);
+  fal 429/5xx/timeouts are a retryable "unknown" state so paid renders are never discarded over
+  a throttle (H14); the daily attributes cron finally writes attributes — Etsy v3 wants bare
+  `value_ids`/`values` keys, the bracket form was silently ignored for weeks (M1). 436/436
+  tests, tsc + eslint clean.
 - **2026-07-25 — audit remediation, correctness block:** Worked the 2026-07-25 engineering
   audit's "this week" slate on top of the prior session's C2/C3/H1/H7c fixes. Orders: one
   `order_queue` row per personalized line item (H5 — multi-item carts no longer drop items;

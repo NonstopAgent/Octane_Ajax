@@ -83,13 +83,16 @@ describe("etsy attributes", () => {
       (c) => c.method === "PUT" && /\/properties\/10$/.test(c.url),
     );
     assert.ok(put10, "PUT graphic property");
-    assert.match(put10!.body, /value_ids%5B%5D=100/);
-    assert.match(put10!.body, /values%5B%5D=Animal/);
+    // Bare keys — the bracket form (`value_ids[]`) is silently ignored by
+    // Etsy v3 and this assertion used to lock that bug in (M1).
+    assert.match(put10!.body, /(^|&)value_ids=100(&|$)/);
+    assert.match(put10!.body, /(^|&)values=Animal(&|$)/);
+    assert.doesNotMatch(put10!.body, /%5B%5D/);
 
     const patch = calls.find(
       (c) => c.method === "PATCH" && /\/listings\/555$/.test(c.url),
     );
     assert.ok(patch, "PATCH materials");
-    assert.match(patch!.body, /materials%5B%5D=Ceramic/);
+    assert.match(patch!.body, /(^|&)materials=Ceramic(&|$)/);
   });
 });

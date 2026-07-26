@@ -15,6 +15,7 @@ import { createPrintifyAdapter } from "@/lib/ajax/adapters/printify";
 import { enrichEtsyListingAfterPublish } from "@/lib/review/printify-publish-on-approve";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
+import { requireOperator } from "@/lib/auth/operator";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +28,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { ok: false, error: "Unauthorized. Sign in first." },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
 

@@ -197,7 +197,11 @@ export async function drainVideoJobs(
     summary.processed += 1;
     try {
       const r = await poll(raw.request_id);
-      if (r.status === "pending") {
+      // "unknown" = WE couldn't reach fal (429/5xx/timeout), not "the render
+      // failed" — treat it exactly like pending so a throttled poll can never
+      // permanently discard a paid render (2026-07-25 audit, H14). The
+      // MAX_ATTEMPTS ceiling still bounds it.
+      if (r.status === "pending" || r.status === "unknown") {
         const attempts = (raw.attempts ?? 0) + 1;
         if (attempts >= MAX_ATTEMPTS) {
           await markJob(supabase, raw.id, "failed", "render timed out");
@@ -236,13 +240,25 @@ export async function drainVideoJobs(
         summary.failed += 1;
       }
     } catch (err) {
-      await markJob(
-        supabase,
-        raw.id,
-        "failed",
-        err instanceof Error ? err.message : "drain error",
-      );
-      summary.failed += 1;
+      // A crash mid-attach (download hiccup, Etsy 5xx) is retryable — the
+      // render is done and PAID; only repeated failures (attempts cap) or a
+      // real fal FAILED verdict should ever bury it (H14).
+      const attempts = (raw.attempts ?? 0) + 1;
+      const message = err instanceof Error ? err.message : "drain error";
+      if (attempts >= MAX_ATTEMPTS) {
+        await markJob(supabase, raw.id, "failed", message);
+        summary.failed += 1;
+      } else {
+        await supabase
+          .from(TABLES.VIDEO_JOBS)
+          .update({
+            attempts,
+            last_error: message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", raw.id);
+        summary.stillPending += 1;
+      }
     }
   }
   return summary;

@@ -8,6 +8,7 @@ export const maxDuration = 800;
 import { NextResponse } from "next/server";
 import { runShopAutopilot } from "@/lib/ajax/autopilot/service";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 export async function GET() {
   try {
@@ -20,6 +21,16 @@ export async function GET() {
       return NextResponse.json(
         { ok: false, error: "Unauthorized." },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
     const summary = await runShopAutopilot(supabase, user.id);

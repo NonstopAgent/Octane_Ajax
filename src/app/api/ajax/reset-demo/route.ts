@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resetDemoData, SimulatorError } from "@/lib/ajax/simulator";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 /**
  * POST /api/ajax/reset-demo
@@ -29,6 +30,16 @@ export async function POST() {
           error: "Unauthorized. Sign in with Supabase Auth to reset demo data.",
         },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
 

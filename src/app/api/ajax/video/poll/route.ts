@@ -3,6 +3,7 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { drainVideoJobs } from "@/lib/ajax/video/jobs";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 /** POST /api/ajax/video/poll — finish any renders that are ready (called by the
  * client while the operator is active). Attaches Etsy videos + posts social. */
@@ -16,6 +17,16 @@ export async function POST() {
       return NextResponse.json(
         { ok: false, error: "Unauthorized" },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
     const summary = await drainVideoJobs(supabase, user.id);

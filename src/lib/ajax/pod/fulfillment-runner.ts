@@ -16,8 +16,11 @@ import {
   printifyAdapter,
 } from "@/lib/ajax/adapters";
 import {
+  catalogEntryForProduct,
+  findCatalogPricingViolations,
   getPrintifyCatalogEntry,
   isPrintifyCatalogKey,
+  salePriceDeficitCents,
 } from "@/lib/ajax/pod/printify-catalog";
 import type { ForgeGenerationResult } from "@/lib/ajax/forge/types";
 import type { PodFulfillmentSnapshot } from "@/lib/product/domain";
@@ -201,6 +204,48 @@ export async function runPodFulfillment(
   );
   const artworkAspect = generatedAspectNumber(catalogEntry?.artworkAspectRatio);
 
+  // PRICING GATE (2026-07-25 audit, H7a): the catalog is the ONLY pricing
+  // authority. Forge freelancing per-listing prices produced the
+  // $39.99/$42.99/$44.99 sweatshirt spread, and any one-time cleanup
+  // re-opened on the next run — so the assertion lives HERE, at creation.
+  // Resolve the entry from the catalogKey, else from the blueprint itself;
+  // no entry at all means an unpriceable product, and we refuse to create it.
+  const pricingEntry =
+    catalogEntry ??
+    catalogEntryForProduct(podDetails.blueprintId, podDetails.printProviderId);
+  if (!pricingEntry) {
+    throw new PodFulfillmentError(
+      `No Printify catalog entry for blueprint ${podDetails.blueprintId}/provider ${podDetails.printProviderId} — refusing to create a product the catalog can't price.`,
+      "create",
+    );
+  }
+  const priceViolations = findCatalogPricingViolations(
+    pricingEntry,
+    podDetails.variantIds,
+    pricingEntry.variantPrices,
+    pricingEntry.defaultPriceCents,
+  );
+  if (priceViolations.length > 0) {
+    throw new PodFulfillmentError(
+      `Catalog pricing violation for ${pricingEntry.key}: ${priceViolations
+        .map((v) => v.reason)
+        .join("; ")}. Fix podDetails/catalog before creating.`,
+      "create",
+    );
+  }
+  // Margin guardrail (H8) on catalog ESTIMATES — warn loudly, don't block:
+  // the operator owns price points (the $14.99 bandana is a deliberate call),
+  // and the reprice route re-checks against Printify's REAL per-variant cost.
+  for (const id of podDetails.variantIds) {
+    const target = pricingEntry.variantPrices[id]!;
+    const deficit = salePriceDeficitCents(target, pricingEntry);
+    if (deficit != null) {
+      console.warn(
+        `[pod-fulfillment] ${pricingEntry.key} variant ${id} at $${(target / 100).toFixed(2)}: 25%-off sale runs ~$${(deficit / 100).toFixed(2)} below cost+shipping+fees (estimates) — review pricing.`,
+      );
+    }
+  }
+
   const productResult = await withTimeout(
     printifyAdapter.createProduct({
       title: listingTitle,
@@ -210,8 +255,8 @@ export async function runPodFulfillment(
       variantIds: podDetails.variantIds,
       artworkUploadId: uploadResult.data.uploadId,
       tags,
-      variantPrices: catalogEntry?.variantPrices,
-      priceCents: catalogEntry?.defaultPriceCents,
+      variantPrices: pricingEntry.variantPrices,
+      priceCents: pricingEntry.defaultPriceCents,
       artworkAspect,
     }),
     PRINTIFY_TIMEOUT_MS,

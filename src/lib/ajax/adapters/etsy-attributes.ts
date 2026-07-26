@@ -189,8 +189,13 @@ export async function setListingProperty(
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   const body = new URLSearchParams();
-  for (const v of opts.valueIds ?? []) body.append("value_ids[]", String(v));
-  for (const v of opts.values ?? []) body.append("values[]", v);
+  // BARE repeated keys, not PHP-style brackets (2026-07-25 audit, M1): Etsy's
+  // v3 API reads `value_ids` / `values`; the bracket form was silently
+  // ignored, so this daily cron reported success for weeks while writing
+  // ZERO attributes — the repo's own spec doc and etsy.ts:787 both had the
+  // correct form the whole time, and the old test asserted the broken one.
+  for (const v of opts.valueIds ?? []) body.append("value_ids", String(v));
+  for (const v of opts.values ?? []) body.append("values", v);
   if (opts.scaleId != null) body.set("scale_id", String(opts.scaleId));
   const res = await fetchImpl(
     `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}/properties/${propertyId}`,
@@ -220,7 +225,8 @@ export async function setListingMaterials(
     .slice(0, 13);
   if (!clean.length) return;
   const body = new URLSearchParams();
-  for (const m of clean) body.append("materials[]", m);
+  // Same bare-key form as value_ids/values above (M1).
+  for (const m of clean) body.append("materials", m);
   const res = await fetchImpl(
     `${ETSY_API_BASE}/shops/${shopId}/listings/${listingId}`,
     {

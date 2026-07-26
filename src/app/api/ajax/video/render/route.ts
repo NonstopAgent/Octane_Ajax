@@ -10,6 +10,7 @@ import {
 import { buildVideoSpec, type VideoSpec } from "@/lib/ajax/pixel/video-spec";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
+import { requireOperator } from "@/lib/auth/operator";
 
 /**
  * POST /api/ajax/video/render
@@ -28,6 +29,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: "Unauthorized" },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
 

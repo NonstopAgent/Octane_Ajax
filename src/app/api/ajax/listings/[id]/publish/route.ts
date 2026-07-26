@@ -4,6 +4,7 @@ import {
   StorePublishError,
 } from "@/lib/store/publish";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,6 +20,16 @@ export async function POST(request: Request, context: RouteContext) {
 
     if (authError || !user) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
+      );
     }
 
     const body = (await request.json()) as { gumroadUrl?: string };

@@ -12,6 +12,7 @@ import {
 } from "@/lib/ajax/simulator";
 import { getActiveBusinessId } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 type ForgeBody = {
   runId?: string;
@@ -33,6 +34,16 @@ export async function GET() {
       return NextResponse.json(
         { ok: false, error: "Unauthorized." },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
     const businessId = await getActiveBusinessId(supabase, user.id);

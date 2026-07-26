@@ -207,6 +207,32 @@ export interface PrintifyAdapter {
       }[];
     }>
   >;
+  /**
+   * Set ABSOLUTE per-variant retail prices (catalog targets). Idempotent by
+   * construction — re-running is a no-op, unlike the compounding
+   * multiplier path (2026-07-25 audit, H7a). Skips any variant whose
+   * 25%-off sale price wouldn't clear Printify's REAL cost + `shippingCents`
+   * + Etsy fees (H8 guardrail) and reports it instead of writing a
+   * money-losing price.
+   */
+  setVariantPrices(
+    productId: string,
+    targetsByVariantId: Record<number, number>,
+    opts?: { shippingCents?: number; dryRun?: boolean },
+  ): Promise<
+    AdapterResult<{
+      productId: string;
+      changes: {
+        id: number;
+        oldCents: number;
+        newCents: number;
+        costCents: number;
+      }[];
+      skipped: { id: number; reason: string }[];
+      unchanged: number;
+      dryRun: boolean;
+    }>
+  >;
   /** List shop products (donor discovery for mockup galleries). */
   listProducts(
     limit?: number,
@@ -529,6 +555,23 @@ export function createDemoPrintifyAdapter(
       return demoResult("Demo: variant prices unchanged.", {
         productId,
         variants: [],
+      });
+    },
+
+    async setVariantPrices(productId, targetsByVariantId, opts) {
+      // Demo: echo the targets as applied changes so callers can be tested.
+      const changes = Object.entries(targetsByVariantId).map(([id, cents]) => ({
+        id: Number(id),
+        oldCents: cents,
+        newCents: cents,
+        costCents: 0,
+      }));
+      return demoResult("Demo: variant price targets accepted.", {
+        productId,
+        changes,
+        skipped: [],
+        unchanged: changes.length,
+        dryRun: opts?.dryRun ?? false,
       });
     },
 
@@ -858,6 +901,120 @@ export function createLivePrintifyAdapter(
       return liveResult("Variant prices raised.", {
         productId,
         variants: changes,
+      });
+    },
+
+    async setVariantPrices(productId, targetsByVariantId, opts) {
+      const dryRun = opts?.dryRun ?? false;
+      const shippingCents = opts?.shippingCents ?? 0;
+      const res = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        { headers },
+      );
+      const product = await parsePrintifyJson<{
+        variants?: {
+          id?: number;
+          price?: number;
+          cost?: number;
+          is_enabled?: boolean;
+        }[];
+      }>(res, "Printify product fetch");
+
+      const changes: {
+        id: number;
+        oldCents: number;
+        newCents: number;
+        costCents: number;
+      }[] = [];
+      const skipped: { id: number; reason: string }[] = [];
+      let unchanged = 0;
+
+      for (const v of product.variants ?? []) {
+        if (!v.is_enabled || typeof v.id !== "number") continue;
+        const target = targetsByVariantId[v.id];
+        if (target == null) continue;
+        const current = typeof v.price === "number" ? v.price : 0;
+        if (current === target) {
+          unchanged += 1;
+          continue;
+        }
+        // H8 guardrail against REAL cost: the 25%-off sale price must clear
+        // cost + absorbed shipping + Etsy fees (6.5% + 3% + $0.25 + $0.20).
+        // A target that loses money is never written — it's reported.
+        const cost = typeof v.cost === "number" ? v.cost : 0;
+        const sale = target * 0.75;
+        const fees = sale * 0.065 + sale * 0.03 + 25 + 20;
+        const net = sale - cost - shippingCents - fees;
+        if (cost > 0 && net < 0) {
+          skipped.push({
+            id: v.id,
+            reason: `target $${(target / 100).toFixed(2)} nets -$${(Math.abs(net) / 100).toFixed(2)} at 25%-off vs cost $${(cost / 100).toFixed(2)} + shipping $${(shippingCents / 100).toFixed(2)} + fees — refusing a money-losing price`,
+          });
+          continue;
+        }
+        changes.push({
+          id: v.id,
+          oldCents: current,
+          newCents: target,
+          costCents: cost,
+        });
+      }
+
+      if (changes.length === 0 || dryRun) {
+        return liveResult(
+          dryRun
+            ? "Dry run — no prices written."
+            : "Variant prices already at catalog targets.",
+          { productId, changes, skipped, unchanged, dryRun },
+        );
+      }
+
+      const putRes = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            variants: changes.map((c) => ({ id: c.id, price: c.newCents })),
+          }),
+        },
+      );
+      if (!putRes.ok) {
+        throw new Error(`Printify price update failed (${putRes.status}).`);
+      }
+      // Variants-ONLY publish, checked — a swallowed failure here is how
+      // Printify and Etsy silently disagree on price (H7c).
+      const pubRes = await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publish.json`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            title: false,
+            description: false,
+            images: false,
+            variants: true,
+            tags: false,
+          }),
+        },
+      );
+      if (!pubRes.ok) {
+        const body = await pubRes.text();
+        throw new Error(
+          `Printify variants publish failed (${pubRes.status}): ${body.slice(0, 160)} — Etsy may still show the old price.`,
+        );
+      }
+      await fetchImpl(
+        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
+        { method: "POST", headers, body: JSON.stringify({}) },
+      ).catch(() => undefined);
+
+      return liveResult("Variant prices set to catalog targets.", {
+        productId,
+        changes,
+        skipped,
+        unchanged,
+        dryRun,
       });
     },
 

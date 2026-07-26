@@ -7,6 +7,7 @@ import {
   runPixelMarketing,
 } from "@/lib/ajax/pixel-simulator";
 import { createClient } from "@/lib/supabase/server";
+import { requireOperator } from "@/lib/auth/operator";
 
 /** POST /api/ajax/run-pixel — demo marketing pass for queued content_jobs. */
 export async function POST() {
@@ -21,6 +22,16 @@ export async function POST() {
       return NextResponse.json(
         { ok: false, error: "Unauthorized. Sign in to run Pixel." },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
 

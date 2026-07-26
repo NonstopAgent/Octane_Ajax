@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { socialApiKey } from "@/lib/social/ayrshare";
 import { extractMetrics, scoreEngagement } from "@/lib/social/performance";
+import { requireOperator } from "@/lib/auth/operator";
 
 const HISTORY_URL = "https://api.ayrshare.com/api/history";
 const ANALYTICS_URL =
@@ -30,6 +31,16 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { ok: false, error: "Unauthorized." },
         { status: 401 },
+      );
+    }
+
+    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+    // this surface mutates the ONE live shop on process-wide credentials.
+    const operatorCheck = requireOperator(user);
+    if (!operatorCheck.ok) {
+      return NextResponse.json(
+        { ok: false, error: operatorCheck.error },
+        { status: operatorCheck.status },
       );
     }
     const key = socialApiKey();

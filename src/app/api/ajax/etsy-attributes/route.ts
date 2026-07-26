@@ -22,9 +22,13 @@ import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 
 async function run(req: NextRequest) {
+  // FAIL CLOSED (2026-07-25): this was the seventh copy of the cron guard —
+  // the 2026-07-24 sweep fixed the six under /api/cron/* and this one,
+  // living under /api/ajax/, kept the old fail-open shape (unset CRON_SECRET
+  // meant NO auth at all on a route that writes to Etsy under your token).
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("authorization");
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json(
       { ok: false, error: "Unauthorized" },
       { status: 401 },

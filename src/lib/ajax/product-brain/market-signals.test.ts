@@ -4,6 +4,7 @@ import {
   evaluateMarketOpportunity,
   matchMarketSignals,
   estimatePodCost,
+  estimateNetMargin,
   type MarketIdeaInput,
   type MarketKeywordRow,
 } from "@/lib/ajax/product-brain/market-signals";
@@ -110,5 +111,21 @@ describe("evaluateMarketOpportunity", () => {
   it("estimates POD cost by format", () => {
     assert.ok(estimatePodCost("sweatshirt") > estimatePodCost("sticker"));
     assert.equal(estimatePodCost(null), estimatePodCost("unknown_format"));
+  });
+});
+
+describe("estimateNetMargin (H8 — true margin, not gross)", () => {
+  it("deducts blank + absorbed shipping + Etsy fees", () => {
+    const m = estimateNetMargin(24.99, "mug");
+    // 24.99 − $8 blank − $6 shipping − (6.5% + 3% + $0.25 + $0.20) fees ≈ $8.17
+    assert.ok(Math.abs(m.netUsd - 8.17) < 0.02, `net was ${m.netUsd}`);
+    assert.ok(m.margin > 0.3 && m.margin < 0.35, `margin was ${m.margin}`);
+  });
+
+  it("flags an underwater price that gross margin used to grade as fine", () => {
+    // $12.99 mug with free shipping: gross said (12.99-8)/12.99 = 38% "ok";
+    // net is ~-$2.69 — every sale loses money.
+    const m = estimateNetMargin(12.99, "mug");
+    assert.ok(m.netUsd < 0, `expected underwater, net was ${m.netUsd}`);
   });
 });

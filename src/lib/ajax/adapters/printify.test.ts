@@ -519,3 +519,139 @@ describe("printify adapter — fixPrintPlacement (H9: fits EVERY variant)", () =
     );
   });
 });
+
+describe("printify adapter — setVariantPrices (H7a absolute targets)", () => {
+  function pricesFetch(state: {
+    prices: Record<number, number>;
+    costs: Record<number, number>;
+    failPublish?: boolean;
+  }) {
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ method, url: u, body });
+      if (u.endsWith("/products/prod-price.json") && method === "GET") {
+        return jsonResponse({
+          variants: Object.entries(state.prices).map(([id, price]) => ({
+            id: Number(id),
+            price,
+            cost: state.costs[Number(id)] ?? 0,
+            is_enabled: true,
+          })),
+        });
+      }
+      if (method === "PUT") {
+        for (const v of (body as { variants: { id: number; price: number }[] })
+          .variants) {
+          state.prices[v.id] = v.price;
+        }
+        return jsonResponse({ ok: true });
+      }
+      if (u.includes("/publish.json")) {
+        return state.failPublish
+          ? new Response("rate limited", { status: 429 })
+          : jsonResponse({ ok: true });
+      }
+      return jsonResponse({ ok: true });
+    }) as typeof fetch;
+    return { calls, fetchImpl };
+  }
+
+  const TARGETS = { 18052: 2999, 18056: 3199 };
+
+  it("writes absolute targets and is a no-op when re-run", async () => {
+    const state = {
+      prices: { 18052: 4599, 18056: 6199 }, // compounded by the old 1.33x bug
+      costs: { 18052: 1100, 18056: 1300 },
+    };
+    const { fetchImpl } = pricesFetch(state);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const first = await adapter.setVariantPrices("prod-price", TARGETS, {
+      shippingCents: 500,
+    });
+    assert.equal(first.data.changes.length, 2);
+    assert.equal(state.prices[18052], 2999);
+    assert.equal(state.prices[18056], 3199);
+
+    const second = await adapter.setVariantPrices("prod-price", TARGETS, {
+      shippingCents: 500,
+    });
+    assert.equal(second.data.changes.length, 0);
+    assert.equal(second.data.unchanged, 2);
+  });
+
+  it("refuses a target whose sale price loses money against REAL cost", async () => {
+    const state = {
+      prices: { 18052: 3499 }, // differs from target, so the write is attempted
+      costs: { 18052: 2400 }, // sale 0.75*2999=2249 < 2400 + shipping + fees
+    };
+    const { calls, fetchImpl } = pricesFetch(state);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.setVariantPrices(
+      "prod-price",
+      { 18052: 2999 },
+      { shippingCents: 500 },
+    );
+
+    assert.equal(result.data.changes.length, 0);
+    assert.equal(result.data.skipped.length, 1);
+    assert.match(result.data.skipped[0]!.reason, /money-losing/);
+    assert.equal(state.prices[18052], 3499, "price must not be written");
+    assert.equal(calls.some((c) => c.method === "PUT"), false);
+  });
+
+  it("dry run reports drift without writing", async () => {
+    const state = {
+      prices: { 18052: 4599 },
+      costs: { 18052: 1100 },
+    };
+    const { calls, fetchImpl } = pricesFetch(state);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    const result = await adapter.setVariantPrices(
+      "prod-price",
+      { 18052: 2999 },
+      { shippingCents: 500, dryRun: true },
+    );
+
+    assert.equal(result.data.dryRun, true);
+    assert.equal(result.data.changes.length, 1);
+    assert.equal(state.prices[18052], 4599, "dry run must not write");
+    assert.equal(calls.some((c) => c.method === "PUT"), false);
+  });
+
+  it("throws when the variants-only publish fails (price desync guard)", async () => {
+    const state = {
+      prices: { 18052: 4599 },
+      costs: { 18052: 1100 },
+      failPublish: true,
+    };
+    const { fetchImpl } = pricesFetch(state);
+    const adapter = createLivePrintifyAdapter({
+      apiToken: "token",
+      shopId: "shop-42",
+      fetchImpl,
+    });
+
+    await assert.rejects(
+      adapter.setVariantPrices("prod-price", { 18052: 2999 }, { shippingCents: 500 }),
+      /variants publish failed \(429\)/,
+    );
+  });
+});

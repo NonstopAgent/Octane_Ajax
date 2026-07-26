@@ -87,6 +87,58 @@ export function estimatePodCost(format?: string | null): number {
   return POD_BASE_COST[format] ?? DEFAULT_POD_COST;
 }
 
+/**
+ * Absorbed US shipping by format (USD). The shop ships FREE to the US per
+ * the canonical pricing strategy (§3) — so shipping comes out of margin on
+ * every sale and pretending otherwise overstated margins by ~20-30 points
+ * (2026-07-25 audit, H8).
+ */
+const POD_SHIPPING_COST: Record<string, number> = {
+  tshirt: 5,
+  sweatshirt: 6,
+  mug: 6,
+  poster: 6,
+  art_print: 6,
+  tote_bag: 5,
+  phone_case: 5,
+  sticker: 1,
+};
+const DEFAULT_POD_SHIPPING = 5;
+
+export function estimatePodShipping(format?: string | null): number {
+  if (!format) return DEFAULT_POD_SHIPPING;
+  return POD_SHIPPING_COST[format] ?? DEFAULT_POD_SHIPPING;
+}
+
+/** Etsy's cut of a sale: 6.5% transaction + 3% + $0.25 processing + $0.20 listing. */
+export function etsyFeesUsd(priceUsd: number): number {
+  return priceUsd * 0.065 + priceUsd * 0.03 + 0.25 + 0.2;
+}
+
+/**
+ * TRUE net margin (2026-07-25 audit, H8): retail − blank cost − absorbed US
+ * shipping − Etsy fees. The old formula was `(price − blank) / price`, which
+ * rated a mug "68% margin, excellent" when the real number was ~33% — a
+ * ~30-point overstatement feeding both idea selection and the rationale text
+ * the operator reads.
+ */
+export function estimateNetMargin(
+  priceUsd: number,
+  format?: string | null,
+): { netUsd: number; margin: number; blankUsd: number; shippingUsd: number; feesUsd: number } {
+  const blankUsd = estimatePodCost(format);
+  const shippingUsd = estimatePodShipping(format);
+  const feesUsd = etsyFeesUsd(priceUsd);
+  const netUsd = priceUsd - blankUsd - shippingUsd - feesUsd;
+  return {
+    netUsd,
+    margin: priceUsd > 0 ? netUsd / priceUsd : 0,
+    blankUsd,
+    shippingUsd,
+    feesUsd,
+  };
+}
+
 const STOPWORDS = new Set([
   "the", "a", "an", "for", "and", "or", "to", "of", "with", "gift", "gifts",
   "custom", "personalized", "personalised",
@@ -171,19 +223,25 @@ function scoreCompetition(
   return 25;
 }
 
-/** Margin from retail price vs estimated POD cost (POD winners keep >50%). */
+/**
+ * Margin score from TRUE net margin (blank + absorbed shipping + Etsy fees
+ * all deducted). Net bands, not gross: with free US shipping baked into the
+ * price, a healthy POD product nets 25-40% — the old gross bands graded
+ * everything "excellent" while some SKUs were underwater (H8).
+ */
 function scoreMargin(
   priceUsd: number | null | undefined,
-  podCost: number,
+  format?: string | null,
 ): number | null {
   if (priceUsd == null || priceUsd <= 0) return null;
-  const gross = (priceUsd - podCost) / priceUsd;
+  const { margin } = estimateNetMargin(priceUsd, format);
   let score: number;
-  if (gross >= 0.6) score = 95;
-  else if (gross >= 0.5) score = 80;
-  else if (gross >= 0.4) score = 60;
-  else if (gross >= 0.3) score = 40;
-  else score = 20;
+  if (margin >= 0.35) score = 95;
+  else if (margin >= 0.25) score = 80;
+  else if (margin >= 0.15) score = 60;
+  else if (margin >= 0.08) score = 40;
+  else if (margin > 0) score = 25;
+  else score = 5;
   // Mild penalty for prices outside the proven ~$12–60 band.
   if (priceUsd < 12 || priceUsd > 60) score -= 12;
   return clamp(score);
@@ -252,8 +310,7 @@ export function evaluateMarketOpportunity(
     signals.searchesPerMonth,
     signals.competingListings,
   );
-  const podCost = estimatePodCost(idea.format);
-  const marginScore = scoreMargin(idea.priceUsd, podCost);
+  const marginScore = scoreMargin(idea.priceUsd, idea.format);
   const pattern = scorePatternFit(idea);
   const hasData = demandScore != null || competitionScore != null;
 
@@ -284,11 +341,16 @@ export function evaluateMarketOpportunity(
   } else {
     reasons.push("No matched search-volume data — demand unproven, treat as a bet.");
   }
-  if (marginScore != null && idea.priceUsd != null) {
-    const gross = Math.round(((idea.priceUsd - podCost) / idea.priceUsd) * 100);
+  if (marginScore != null && idea.priceUsd != null && idea.priceUsd > 0) {
+    const m = estimateNetMargin(idea.priceUsd, idea.format);
     reasons.push(
-      `Retail $${idea.priceUsd.toFixed(2)} vs ~$${podCost} POD cost → ${gross}% margin.`,
+      `Retail $${idea.priceUsd.toFixed(2)} − ~$${m.blankUsd} blank − ~$${m.shippingUsd} US shipping − $${m.feesUsd.toFixed(2)} Etsy fees → $${m.netUsd.toFixed(2)} net (${Math.round(m.margin * 100)}% true margin).`,
     );
+    if (m.netUsd <= 0) {
+      reasons.push(
+        "UNDERWATER at this price once shipping and fees are real — reprice or drop.",
+      );
+    }
   }
   if (pattern.hits.length > 0) {
     reasons.push(`Matches proven bestseller patterns: ${pattern.hits.join(", ")}.`);

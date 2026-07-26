@@ -308,7 +308,14 @@ export async function approveReview(
   }
   const now = new Date().toISOString();
 
-  const { data: reviewRow, error: reviewError } = await supabase
+  // THE WRITE IS THE LOCK (2026-07-25 audit, H12). The pending-check at the
+  // top races: the vision gate above holds this section open for 5-30s, and
+  // three actors can hit the same review (hourly cron, the browser's 18s
+  // auto-review poll, the manual Approve button). Without the status
+  // condition BOTH writers passed and runPostApproval ran twice — two
+  // Printify publishes, two enrich runs, two paid video renders. Zero rows
+  // updated now means someone else won: back off with a 409.
+  const { data: reviewRows, error: reviewError } = await supabase
     .from(TABLES.REVIEW_QUEUE)
     .update({
       status: "approved",
@@ -316,11 +323,18 @@ export async function approveReview(
     })
     .eq("id", reviewId)
     .eq("user_id", userId)
-    .select()
-    .single();
+    .eq("status", "pending")
+    .select();
 
-  if (reviewError || !reviewRow) {
+  if (reviewError) {
     throw new ReviewError("Failed to approve review.", 500, reviewError);
+  }
+  const reviewRow = reviewRows?.[0];
+  if (!reviewRow) {
+    throw new ReviewError(
+      "Review is no longer pending — another reviewer (cron, auto-review poll, or you in another tab) already handled it.",
+      409,
+    );
   }
 
   const { data: listingRow, error: listingError } = await supabase
@@ -470,7 +484,9 @@ export async function rejectReview(
   const listingId = pending.listing_id;
   const now = new Date().toISOString();
 
-  const { data: reviewRow, error: reviewError } = await supabase
+  // Same conditional-write lock as approveReview (H12): only a still-pending
+  // review can be rejected; a lost race is a 409, not a double write.
+  const { data: reviewRows, error: reviewError } = await supabase
     .from(TABLES.REVIEW_QUEUE)
     .update({
       status: "rejected",
@@ -479,11 +495,18 @@ export async function rejectReview(
     })
     .eq("id", reviewId)
     .eq("user_id", userId)
-    .select()
-    .single();
+    .eq("status", "pending")
+    .select();
 
-  if (reviewError || !reviewRow) {
+  if (reviewError) {
     throw new ReviewError("Failed to reject review.", 500, reviewError);
+  }
+  const reviewRow = reviewRows?.[0];
+  if (!reviewRow) {
+    throw new ReviewError(
+      "Review is no longer pending — another reviewer already handled it.",
+      409,
+    );
   }
 
   const { data: listingRow, error: listingError } = await supabase
