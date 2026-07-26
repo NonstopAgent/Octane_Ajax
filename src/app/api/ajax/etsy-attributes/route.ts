@@ -35,6 +35,19 @@ async function run(req: NextRequest) {
     );
   }
 
+  // QUIET WINDOW (2026-07-26): attribute writes are listing edits — skip the
+  // daily pass while the freeze holds so Etsy can re-index undisturbed.
+  const { listingWritesFrozenUntil } = await import(
+    "@/lib/ajax/listing-freeze"
+  );
+  const freezeUntil = listingWritesFrozenUntil();
+  if (freezeUntil) {
+    return NextResponse.json({
+      ok: true,
+      skipped: `listing freeze until ${freezeUntil.toISOString()}`,
+    });
+  }
+
   const operatorEmail = process.env.OPERATOR_EMAIL;
   if (!operatorEmail) {
     return NextResponse.json(

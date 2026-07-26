@@ -40,8 +40,17 @@ export async function POST(req: Request) {
       reviewId?: string;
       autonomous?: boolean;
     };
+    // QUIET WINDOW (2026-07-26): an autonomous approve publishes a new
+    // listing — during the freeze this route grades only, never acts. The
+    // browser's 18s auto-review poll hits this hourly-equivalent, so gating
+    // here (not just in the cron) matters.
+    const { areListingWritesFrozen } = await import(
+      "@/lib/ajax/listing-freeze"
+    );
     const autonomous =
-      process.env.AI_REVIEWER_AUTONOMOUS === "true" || body.autonomous === true;
+      !areListingWritesFrozen() &&
+      (process.env.AI_REVIEWER_AUTONOMOUS === "true" ||
+        body.autonomous === true);
 
     const out = await autoReviewPending(supabase, user.id, {
       reviewId: body.reviewId ?? null,

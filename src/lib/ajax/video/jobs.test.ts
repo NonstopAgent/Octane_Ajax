@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import { drainVideoJobs, enqueueVideoJob } from "@/lib/ajax/video/jobs";
 import type { Supabase } from "@/lib/supabase/helpers";
 
@@ -72,6 +72,53 @@ describe("enqueueVideoJob", () => {
 });
 
 describe("drainVideoJobs", () => {
+  // The quiet-window freeze (listing-freeze.ts) short-circuits the drain and
+  // has a DATE-BASED default — lift it here so these tests exercise the
+  // drain itself regardless of when they run.
+  const originalFreeze = process.env.AUTOPILOT_LISTING_FREEZE_UNTIL;
+  beforeEach(() => {
+    process.env.AUTOPILOT_LISTING_FREEZE_UNTIL = "";
+  });
+  afterEach(() => {
+    if (originalFreeze === undefined) {
+      delete process.env.AUTOPILOT_LISTING_FREEZE_UNTIL;
+    } else {
+      process.env.AUTOPILOT_LISTING_FREEZE_UNTIL = originalFreeze;
+    }
+  });
+
+  it("skips the whole drain while listing writes are frozen (quiet window)", async () => {
+    process.env.AUTOPILOT_LISTING_FREEZE_UNTIL = new Date(
+      Date.now() + 60 * 60 * 1000,
+    ).toISOString();
+    const state: State = {
+      jobs: [
+        {
+          id: "j-frozen",
+          kind: "etsy_listing",
+          request_id: "req-frozen",
+          etsy_listing_id: "L-etsy",
+          post_text: null,
+          platforms: null,
+          attempts: 0,
+        },
+      ],
+      inserts: [],
+      updates: [],
+    };
+    let polled = 0;
+    const summary = await drainVideoJobs(makeSupabase(state), "u1", {
+      poll: (async () => {
+        polled += 1;
+        return completedPoll();
+      }) as never,
+    });
+    assert.equal(summary.processed, 0);
+    assert.equal(polled, 0, "frozen drain must not poll fal at all");
+    // Attempts untouched — the backlog drains normally after the freeze lifts.
+    assert.equal(state.updates.length, 0);
+  });
+
   it("attaches a completed etsy_listing render to the listing", async () => {
     const state: State = {
       jobs: [

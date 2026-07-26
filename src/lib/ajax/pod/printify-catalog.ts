@@ -74,8 +74,11 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 48, // Colorway
     variantIds: [67624], // 11oz
     // Prices bake in US shipping (shop ships free to the US — Etsy ranking boost).
-    variantPrices: { 67624: 2499 },
-    defaultPriceCents: 2499,
+    // 2026-07-26 traction reset: FLAT price, no stacked sale. Views collapsed
+    // when buyer-facing price jumped $18.74 → $25.49 on a zero-review shop;
+    // at this stage first sales/reviews are worth more than margin.
+    variantPrices: { 67624: 1999 },
+    defaultPriceCents: 1999,
     estimatedBlankCostCents: 850, // Colorway 11oz blank
     estimatedUsShippingCents: 600,
     artworkAspectRatio: "1:1",
@@ -92,6 +95,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 2, // Sensaria
     variantIds: [43135, 43138, 43144], // 11x14, 12x18, 18x24 Matte
     // Size-tiered; prices bake in US shipping (free-shipping listings rank higher).
+    // 2026-07-26 traction reset: original bands, FLAT, no stacked sale.
     variantPrices: { 43135: 2799, 43138: 3299, 43144: 3999 },
     defaultPriceCents: 3299,
     estimatedBlankCostCents: 1500, // 18x24 matte, worst of the three sizes
@@ -110,6 +114,7 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 29, // Monster Digital
     variantIds: [18052, 18053, 18054, 18055, 18056], // Aqua S–2XL
     // 2XL upcharge; prices bake in US shipping (free-shipping listings rank higher).
+    // 2026-07-26 traction reset: FLAT $29.99 (2XL $31.99), no stacked sale.
     variantPrices: { 18052: 2999, 18053: 2999, 18054: 2999, 18055: 2999, 18056: 3199 },
     defaultPriceCents: 2999,
     estimatedBlankCostCents: 1300, // 2XL DTG, worst size
@@ -128,8 +133,9 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     printProviderId: 29, // Monster Digital
     variantIds: [25377, 25381, 25385], // S Ash, S Dark Heather, S Light Blue
     // Prices bake in US shipping (free-shipping listings rank higher).
+    // 2026-07-26 traction reset: FLAT $39.99, no stacked sale.
     variantPrices: { 25377: 3999, 25381: 3999, 25385: 3999 },
-    defaultPriceCents: 3699,
+    defaultPriceCents: 3999,
     estimatedBlankCostCents: 1900, // Gildan crewneck DTG
     estimatedUsShippingCents: 650,
     artworkAspectRatio: "1:1", // centered chest print
@@ -148,9 +154,11 @@ export const PRINTIFY_CATALOG: Record<PrintifyCatalogKey, PrintifyCatalogEntry> 
     blueprintId: 1672,
     printProviderId: 228,
     variantIds: [115222, 115223, 115225], // S, M, XL
-    // Operator-approved price point ($14.99; XL carries a higher base cost).
-    variantPrices: { 115222: 1499, 115223: 1499, 115225: 1799 },
-    defaultPriceCents: 1499,
+    // 2026-07-26 traction reset: $17.99 FLAT (XL $20.99, higher base cost),
+    // no stacked sale — up from the $14.99 launch point, well under the
+    // 1.33x-inflated $19.99/$23.99 the sale strategy pushed them to.
+    variantPrices: { 115222: 1799, 115223: 1799, 115225: 2099 },
+    defaultPriceCents: 1799,
     estimatedBlankCostCents: 900, // XL bandana, worst size
     estimatedUsShippingCents: 450,
     artworkAspectRatio: "16:9", // wide bandana panel (~1.76:1)
@@ -264,21 +272,29 @@ export function findCatalogPricingViolations(
 }
 
 /**
- * Margin guardrail (H8): the 25%-off sale price must still clear blank cost
+ * Margin guardrail (H8): what the buyer actually pays must clear blank cost
  * + absorbed US shipping + Etsy fees (6.5% + 3% + $0.25 + $0.20). Returns
- * the deficit in cents when a price is underwater at sale time, else null.
- * costCents defaults to the catalog estimate; pass Printify's real per-variant
- * cost when you have it.
+ * the deficit in cents when a price is underwater, else null.
+ *
+ * saleMultiplier defaults to 1 — FLAT pricing, no stacked sale (strategy
+ * since the 2026-07-26 traction reset; the 25% sale is retired because sale
+ * stacking is what made prices thin AND what inflated bases 1.33x). If a
+ * store-wide sale is ever re-enabled, pass its multiplier (e.g. 0.75) so the
+ * guardrail checks the price buyers really pay.
+ *
+ * costCents defaults to the catalog estimate; pass Printify's real
+ * per-variant cost when you have it.
  */
 export function salePriceDeficitCents(
   priceCents: number,
   entry: Pick<PrintifyCatalogEntry, "estimatedBlankCostCents" | "estimatedUsShippingCents">,
   costCents?: number | null,
+  saleMultiplier = 1,
 ): number | null {
-  const sale = priceCents * 0.75;
-  const fees = sale * 0.065 + sale * 0.03 + 25 + 20;
+  const paid = priceCents * saleMultiplier;
+  const fees = paid * 0.065 + paid * 0.03 + 25 + 20;
   const blank = costCents != null && costCents > 0 ? costCents : entry.estimatedBlankCostCents;
-  const net = sale - blank - entry.estimatedUsShippingCents - fees;
+  const net = paid - blank - entry.estimatedUsShippingCents - fees;
   return net < 0 ? Math.round(-net) : null;
 }
 

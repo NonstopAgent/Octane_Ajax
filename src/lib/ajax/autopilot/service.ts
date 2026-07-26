@@ -61,6 +61,7 @@ import {
   titleStyleIssues,
 } from "@/lib/ajax/product-brain/rules";
 import { pollPersonalizedOrders } from "@/lib/ajax/pod/order-intake";
+import { listingWritesFrozenUntil } from "@/lib/ajax/listing-freeze";
 import { autoReviewPending } from "@/lib/review/auto-review";
 import { runPostApproval } from "@/lib/review/service";
 import type { Json } from "@/lib/supabase/database.types";
@@ -182,6 +183,17 @@ export async function runShopAutopilot(
   if (process.env.AUTOPILOT_DISABLED === "true") {
     result.skipped = "disabled_via_env";
     return result;
+  }
+
+  // QUIET WINDOW (2026-07-26 view collapse — see lib/ajax/listing-freeze.ts):
+  // while frozen this pass runs READ-ONLY against listings. Orders, social,
+  // and analytics continue; audit/medic/heal/galleries/videos/attributes/
+  // production/self-approval all stand down so Etsy can re-index in peace.
+  const listingFreeze = listingWritesFrozenUntil();
+  if (listingFreeze) {
+    result.errors.push(
+      `listing-freeze: automated listing writes paused until ${listingFreeze.toISOString().slice(0, 16)}Z (quiet window — set AUTOPILOT_LISTING_FREEZE_UNTIL="" to lift)`,
+    );
   }
 
   // ---- Overlap lock ----------------------------------------------------------
@@ -399,7 +411,13 @@ export async function runShopAutopilot(
     }
   }
 
-  for (const live of liveListings.slice(0, MAX_LISTINGS_PER_PASS)) {
+  // Frozen → audit nothing: every branch of this loop can WRITE (tags,
+  // shipping profile, attributes, personalization) and each write restarts
+  // Etsy's re-index clock on that listing.
+  const auditBatch = listingFreeze
+    ? []
+    : liveListings.slice(0, MAX_LISTINGS_PER_PASS);
+  for (const live of auditBatch) {
     if (!credentials) break;
     // Pace the detail sweep — bursts of getListingDetails tripped Etsy's
     // per-second limit (passes were erroring on 11-13 of 25 listings).
@@ -840,8 +858,9 @@ export async function runShopAutopilot(
   // binding. Re-running it here is idempotent (photos top up only when
   // missing, video renders enqueue at most once per listing, and it NEVER
   // changes a listing's active/inactive state) — so anything missed at
-  // publish time heals within an hour.
-  if (isPrintifyConfigured()) {
+  // publish time heals within an hour. Frozen → stand down: photo replace
+  // and video attach are exactly the churn the quiet window exists to stop.
+  if (!listingFreeze && isPrintifyConfigured()) {
     if (isVideoRenderConfigured()) {
       try {
         const { drainVideoJobs } = await import("@/lib/ajax/video/jobs");
@@ -962,7 +981,7 @@ export async function runShopAutopilot(
   // Sections + featured row re-applied once a day so the shop page never
   // drifts back into a flat unsorted wall (Etsy's own sections UI silently
   // drops saves; the operator found the raw layout "horrible" — never again).
-  if (new Date().getUTCHours() === 5) {
+  if (!listingFreeze && new Date().getUTCHours() === 5) {
     try {
       const { organizeStore } = await import("@/lib/etsy/organize-store");
       const org = await organizeStore(supabase, userId);
@@ -1026,8 +1045,9 @@ export async function runShopAutopilot(
   // Social posts were reusing renders from BEFORE the store repair and the
   // scene-QA gate (the auto-poster now refuses them). Re-render ONE stale
   // listing per pass — enqueueApprovalVideos' daily cap still governs total
-  // spend, and failed renders retry on later passes.
-  try {
+  // spend, and failed renders retry on later passes. Frozen → no new renders
+  // (they end in a listing video attach).
+  if (!listingFreeze) try {
     const epoch = videoFreshEpoch();
     const { data: freshRows } = await supabase
       .from(TABLES.VIDEO_JOBS)
@@ -1148,26 +1168,32 @@ export async function runShopAutopilot(
     // (2026-07-25 audit, C1 — this hourly self-clear is what makes the
     // "mandatory human review" in AGENTS.md §3 aspirational; the env switch
     // makes that trade-off explicit and reversible instead of hardcoded).
-    try {
-      const autonomousReview =
-        process.env.AUTOPILOT_AUTONOMOUS_REVIEW !== "false";
-      const cleared = await autoReviewPending(supabase, userId, {
-        reviewId: null,
-        act: autonomousReview,
-      });
-      if (cleared?.acted) {
-        result.reviewsCleared += 1;
-        if (cleared.postApproval) await runPostApproval(cleared.postApproval);
-      } else if (cleared) {
+    if (!listingFreeze) {
+      try {
+        const autonomousReview =
+          process.env.AUTOPILOT_AUTONOMOUS_REVIEW !== "false";
+        const cleared = await autoReviewPending(supabase, userId, {
+          reviewId: null,
+          act: autonomousReview,
+        });
+        if (cleared?.acted) {
+          result.reviewsCleared += 1;
+          if (cleared.postApproval) await runPostApproval(cleared.postApproval);
+        } else if (cleared) {
+          result.cycleBlocked = true;
+        }
+      } catch (err) {
         result.cycleBlocked = true;
+        result.errors.push(
+          `review: ${err instanceof Error ? err.message : "failed"}`,
+        );
       }
-    } catch (err) {
-      result.cycleBlocked = true;
-      result.errors.push(
-        `review: ${err instanceof Error ? err.message : "failed"}`,
-      );
     }
-  } else if (result.takenDown === 0 && publishedCount < targetListings) {
+  } else if (
+    !listingFreeze &&
+    result.takenDown === 0 &&
+    publishedCount < targetListings
+  ) {
     try {
       // Operator seeds are pre-approved work orders — when one is waiting,
       // skip Nova entirely (no competing fresh batch, no wasted LLM run) and

@@ -62,23 +62,28 @@ Two systems can overwrite each other. Rules so agents don't fight:
 ---
 
 ## 3. Pricing strategy — CANONICAL, do not undo
-**Shipping is baked into the retail price and US shipping is FREE.** The buyer pays about the same
-total as before, but we get the free-shipping ranking boost and a cleaner sticker price for AI
-shopping surfaces.
+**Shipping is baked into the retail price and US shipping is FREE.** We get the free-shipping
+ranking boost and a clean sticker price for AI shopping surfaces.
 
-Bands (shipping included):
-- **Mug** — $24.99
+**FLAT PRICES, NO STACKED SALE (reset 2026-07-26).** The July "raise bases 1.33× so the 25%-off
+sale lands at old full price" play backfired on a zero-review shop: buyer-facing prices jumped
+~36% (mug $18.74 → $25.49), Etsy Ads impressions collapsed with predicted conversion, and daily
+views fell 53 → 1. At zero reviews, first sales are worth more than margin — reviews and
+conversion history are what unlock ranking. The sale is retired; these are the real prices:
+
+Bands (shipping included, `printify-catalog.ts` is the enforcement authority):
+- **Mug** — $19.99
 - **Poster** — $27.99 (11×14) / $32.99 (12×18) / $39.99 (18×24)
-- **Tee** — $29.99
+- **Tee** — $29.99 ($31.99 2XL)
 - **Sweatshirt** — $39.99
+- **Bandana** — $17.99 (S/M) / $20.99 (XL)
 
-Nova/Forge already price new products to these bands (deployed by the other agent).
-
-> ⚠️ **Do NOT re-sync old Printify prices.** The old flat $19.99 (and an abandoned interim edit of
-> $20.99 / $26.99 / $32.99) would clobber the free-shipping pricing and re-introduce the >$6
-> shipping penalty. If Printify prices are ever edited, they must match the bands above **and** the
-> Etsy shipping profile must stay free. New Printify listings arrive with paid shipping until the
-> store default is set to free in Printify once.
+> ⚠️ **If a store-wide sale is ever re-enabled**, prices must be re-derived so the SALE price
+> clears cost+shipping+fees — pass the sale multiplier (e.g. 0.75) to `setVariantPrices` and the
+> creation guardrail so the margin check tests what buyers actually pay. Do not stack a sale on
+> the flat bands above.
+> The Etsy shipping profile must stay FREE (US) regardless; new Printify listings arrive with
+> paid shipping until the store default is set to free in Printify once.
 
 ---
 
@@ -157,6 +162,20 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 (hourly once the `CRON_SECRET` repo secret is added — Agent 2 task).
 
 ## 11. Change log (recent)
+- **2026-07-26 — view-collapse response (quiet window + traction price reset):** Daily views
+  fell 53 → 1/3/5 starting Jul 23, the day the heavy edit wave landed. Diagnosis: (1)
+  deactivate/reactivate cycles dropped listings out of search and Etsy Ads; (2) buyer price
+  jumped ~36% on a zero-review shop, cratering ads impression allocation; (3) every listing was
+  edited 5-6× in 48h (prices, shipping, returns, personalization, attributes, tags, full photo
+  replacement on 23), forcing whole-shop re-indexing. Response: ALL automated listing writes
+  frozen until 2026-07-31 (`lib/ajax/listing-freeze.ts`; override AUTOPILOT_LISTING_FREEZE_UNTIL)
+  — orders/personalization, social posting, analytics, and read-only audits keep running;
+  audit-act/medic/heal/galleries/video-attach/attributes/production/self-approval stand down.
+  §3 pricing rewritten: flat traction prices, sale retired (mug $19.99, tee $29.99/$31.99,
+  sweatshirt $39.99, bandana $17.99/$20.99, posters back to original bands); one price reset
+  executed against live Printify, then nothing for a week. NOTE: the 25% Etsy sale itself must
+  be ended in Etsy's UI (Marketing → Sales & Discounts) — the API can't do it, and until it's
+  off buyers see ~25% under the new flat prices.
 - **2026-07-25 — audit remediation, pricing + security block:** Pricing is now
   catalog-authoritative end to end (H7a): `printify-catalog.ts` carries per-entry economics,
   product creation hard-fails on any price that deviates from catalog targets, and

@@ -211,14 +211,14 @@ export interface PrintifyAdapter {
    * Set ABSOLUTE per-variant retail prices (catalog targets). Idempotent by
    * construction — re-running is a no-op, unlike the compounding
    * multiplier path (2026-07-25 audit, H7a). Skips any variant whose
-   * 25%-off sale price wouldn't clear Printify's REAL cost + `shippingCents`
-   * + Etsy fees (H8 guardrail) and reports it instead of writing a
-   * money-losing price.
+   * buyer-paid price (target × saleMultiplier, default 1 = flat pricing)
+   * wouldn't clear Printify's REAL cost + `shippingCents` + Etsy fees (H8
+   * guardrail) and reports it instead of writing a money-losing price.
    */
   setVariantPrices(
     productId: string,
     targetsByVariantId: Record<number, number>,
-    opts?: { shippingCents?: number; dryRun?: boolean },
+    opts?: { shippingCents?: number; dryRun?: boolean; saleMultiplier?: number },
   ): Promise<
     AdapterResult<{
       productId: string;
@@ -907,6 +907,9 @@ export function createLivePrintifyAdapter(
     async setVariantPrices(productId, targetsByVariantId, opts) {
       const dryRun = opts?.dryRun ?? false;
       const shippingCents = opts?.shippingCents ?? 0;
+      // 1 = flat pricing (no stacked sale — strategy since 2026-07-26).
+      // Pass 0.75 if a store-wide 25% sale is ever re-enabled.
+      const saleMultiplier = opts?.saleMultiplier ?? 1;
       const res = await fetchImpl(
         `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}.json`,
         { headers },
@@ -938,17 +941,18 @@ export function createLivePrintifyAdapter(
           unchanged += 1;
           continue;
         }
-        // H8 guardrail against REAL cost: the 25%-off sale price must clear
-        // cost + absorbed shipping + Etsy fees (6.5% + 3% + $0.25 + $0.20).
-        // A target that loses money is never written — it's reported.
+        // H8 guardrail against REAL cost: what the buyer actually pays
+        // (target x saleMultiplier) must clear cost + absorbed shipping +
+        // Etsy fees (6.5% + 3% + $0.25 + $0.20). A target that loses money
+        // is never written — it's reported.
         const cost = typeof v.cost === "number" ? v.cost : 0;
-        const sale = target * 0.75;
-        const fees = sale * 0.065 + sale * 0.03 + 25 + 20;
-        const net = sale - cost - shippingCents - fees;
+        const paid = target * saleMultiplier;
+        const fees = paid * 0.065 + paid * 0.03 + 25 + 20;
+        const net = paid - cost - shippingCents - fees;
         if (cost > 0 && net < 0) {
           skipped.push({
             id: v.id,
-            reason: `target $${(target / 100).toFixed(2)} nets -$${(Math.abs(net) / 100).toFixed(2)} at 25%-off vs cost $${(cost / 100).toFixed(2)} + shipping $${(shippingCents / 100).toFixed(2)} + fees — refusing a money-losing price`,
+            reason: `target $${(target / 100).toFixed(2)} nets -$${(Math.abs(net) / 100).toFixed(2)} at buyer price $${(paid / 100).toFixed(2)} vs cost $${(cost / 100).toFixed(2)} + shipping $${(shippingCents / 100).toFixed(2)} + fees — refusing a money-losing price`,
           });
           continue;
         }

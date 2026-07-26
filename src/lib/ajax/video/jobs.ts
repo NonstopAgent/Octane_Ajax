@@ -156,16 +156,28 @@ export async function drainVideoJobs(
   userId: string,
   deps: DrainDeps = {},
 ): Promise<DrainSummary> {
-  const poll =
-    deps.poll ??
-    ((id: string) => pollVideoRender(id, { fetchImpl: deps.fetchImpl }));
-  const doFetch = deps.fetchImpl ?? fetch;
   const summary: DrainSummary = {
     processed: 0,
     done: 0,
     failed: 0,
     stillPending: 0,
   };
+
+  // QUIET WINDOW: attaching a video is a listing edit, and every edit
+  // restarts Etsy's re-index clock (2026-07-26 view collapse). Skip the whole
+  // drain while frozen — jobs stay pending WITHOUT burning attempts, and the
+  // backlog drains normally once the freeze lifts.
+  const { listingWritesFrozenUntil } = await import(
+    "@/lib/ajax/listing-freeze"
+  );
+  if (listingWritesFrozenUntil()) {
+    return summary;
+  }
+
+  const poll =
+    deps.poll ??
+    ((id: string) => pollVideoRender(id, { fetchImpl: deps.fetchImpl }));
+  const doFetch = deps.fetchImpl ?? fetch;
 
   // ONE credential resolution per drain, not one per job (2026-07-25 audit,
   // H3): the batch of 10 used to fire 10 token refreshes, and with Etsy
