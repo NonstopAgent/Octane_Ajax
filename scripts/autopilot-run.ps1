@@ -3,7 +3,7 @@
 #
 # Same endpoint Vercel's hourly cron hits, same auth (CRON_SECRET bearer, read
 # locally from .env.local and never printed). Useful when you want a pass
-# immediately rather than at the top of the hour — and it prints the honest
+# immediately rather than at the top of the hour, and it prints the honest
 # result rather than the green check the Vercel dashboard used to show for a
 # pass that errored (2026-07-25 audit, M10c).
 #
@@ -25,9 +25,9 @@ try {
     -Headers @{ Authorization = "Bearer $secret" } -TimeoutSec 850
 } catch {
   # A 500 here is the intended signal for a BROKEN loop (no Etsy connection, or
-  # errors with nothing accomplished) — read the body, it carries the reason.
+  # errors with nothing accomplished). Read the body; it carries the reason.
   $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
-  Write-Output ("HTTP " + $code + " — the pass reported a broken loop")
+  Write-Output ("HTTP " + $code + ": the pass reported a broken loop")
   try {
     $sr = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
     Write-Output $sr.ReadToEnd()
