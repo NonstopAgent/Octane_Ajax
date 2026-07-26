@@ -22,7 +22,7 @@ import { createPrintifyAdapter } from "@/lib/ajax/adapters/printify";
 import { createEtsyAdapter } from "@/lib/ajax/adapters/etsy";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { catalogEntryForProduct } from "@/lib/ajax/pod/printify-catalog";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 import { requireOperator } from "@/lib/auth/operator";
 
@@ -45,37 +45,83 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized." },
-        { status: 401 },
+    // Two auth paths (2026-07-26): the operator's browser session, OR the
+    // CRON_SECRET bearer (fail-closed, same shape as /api/cron/*) so the
+    // reset can be driven from operator tooling without a browser session.
+    let userId: string | null = null;
+    const sessionClient = await createClient();
+    // Bearer path has no session, so RLS would hide every row from the
+    // anon client — DB work rides the service client there instead.
+    let db = sessionClient;
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers.get("authorization");
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      const service = createServiceClient();
+      db = service;
+      const operatorEmail = process.env.OPERATOR_EMAIL?.trim().toLowerCase();
+      if (!operatorEmail) {
+        return NextResponse.json(
+          { ok: false, error: "OPERATOR_EMAIL env var not set." },
+          { status: 500 },
+        );
+      }
+      const { data: userList, error: listError } =
+        await service.auth.admin.listUsers();
+      if (listError) {
+        return NextResponse.json(
+          { ok: false, error: `Failed to list users: ${listError.message}` },
+          { status: 500 },
+        );
+      }
+      const operator = userList.users.find(
+        (u) => u.email?.toLowerCase() === operatorEmail,
       );
-    }
+      if (!operator) {
+        return NextResponse.json(
+          { ok: false, error: `No user found with email ${operatorEmail}.` },
+          { status: 404 },
+        );
+      }
+      userId = operator.id;
+    } else {
+      const {
+        data: { user },
+        error: authError,
+      } = await sessionClient.auth.getUser();
+      if (authError || !user) {
+        return NextResponse.json(
+          { ok: false, error: "Unauthorized." },
+          { status: 401 },
+        );
+      }
 
-    // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
-    // this surface mutates the ONE live shop on process-wide credentials.
-    const operatorCheck = requireOperator(user);
-    if (!operatorCheck.ok) {
-      return NextResponse.json(
-        { ok: false, error: operatorCheck.error },
-        { status: operatorCheck.status },
-      );
+      // Operator-only (2026-07-25 audit, H10): signed-in is not authorized —
+      // this surface mutates the ONE live shop on process-wide credentials.
+      const operatorCheck = requireOperator(user);
+      if (!operatorCheck.ok) {
+        return NextResponse.json(
+          { ok: false, error: operatorCheck.error },
+          { status: operatorCheck.status },
+        );
+      }
+      userId = user.id;
     }
+    const user = { id: userId };
 
     let dryRun = false;
+    let attachReturns = false;
     try {
-      const body = (await req.json()) as { dryRun?: boolean };
+      const body = (await req.json()) as {
+        dryRun?: boolean;
+        attachReturns?: boolean;
+      };
       dryRun = body?.dryRun === true;
+      attachReturns = body?.attachReturns === true;
     } catch {
       // empty body = live run
     }
 
-    const credentials = await refreshEtsyToken(user.id, { supabase });
+    const credentials = await refreshEtsyToken(user.id, { supabase: db });
     if (!credentials) {
       return NextResponse.json(
         { ok: false, error: "Etsy shop not connected." },
@@ -83,7 +129,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: rows } = await supabase
+    const { data: rows } = await db
       .from(TABLES.LISTINGS)
       .select(
         "id, title, price, gumroad_product_id, product_generations ( structure )",
@@ -150,7 +196,7 @@ export async function POST(req: NextRequest) {
           if (!dryRun) {
             // Keep the internal price in sync for audits/review context.
             const minNew = Math.min(...changes.map((c) => c.newCents));
-            await supabase
+            await db
               .from(TABLES.LISTINGS)
               .update({ price: minNew / 100 })
               .eq("id", row.id)
@@ -187,9 +233,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ---- Phase 2: attach the returns policy on Etsy -----------------------
+    // OPT-IN since 2026-07-26 (quiet window): the policy is already attached
+    // shop-wide, and re-PATCHing 39 listings with the same policy id counts
+    // as 39 edits — exactly the re-index churn the freeze exists to stop.
     let returnsAttached = 0;
     let returnPolicyId: number | null = null;
-    if (!dryRun) {
+    if (!dryRun && attachReturns) {
       try {
         returnPolicyId = await etsy.ensureReturnPolicy(
           credentials.shop_id,
@@ -238,7 +287,7 @@ export async function POST(req: NextRequest) {
       failed,
       note: dryRun
         ? "Dry run: differences vs catalog targets reported, nothing written."
-        : "Prices normalized to absolute catalog targets (idempotent — safe to re-run); 30-day returns attached.",
+        : `Prices normalized to absolute catalog targets (idempotent — safe to re-run).${attachReturns ? " 30-day returns attached." : " Returns phase skipped (opt-in via attachReturns:true)."}`,
     });
   } catch (err) {
     console.error("[reprice-and-returns]", err);
