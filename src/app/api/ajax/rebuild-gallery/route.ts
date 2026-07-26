@@ -26,6 +26,7 @@ import {
   pickMockupImages,
 } from "@/lib/ajax/adapters/printify";
 import { createEtsyAdapter } from "@/lib/ajax/adapters/etsy";
+import { fetchImageBuffer } from "@/lib/ajax/adapters/image-generator";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
@@ -257,11 +258,13 @@ async function runRebuild(body: {
     const buffers = await Promise.all(
       uploadSet.map(async (srcUrl) => {
         try {
-          const imgRes = await fetch(srcUrl, {
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (!imgRes.ok) return null;
-          return Buffer.from(await imgRes.arrayBuffer());
+          // Shared with the personalization path (2026-07-25 audit, M8):
+          // this had the timeout but no size ceiling, and eight unbounded
+          // arrayBuffer() calls in parallel is exactly how a lambda dies of
+          // memory. Same helper both places — the sibling-copy divergence is
+          // the pattern this whole audit kept finding.
+          const { buffer } = await fetchImageBuffer(srcUrl, fetch);
+          return buffer;
         } catch {
           return null;
         }

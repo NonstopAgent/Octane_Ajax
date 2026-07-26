@@ -159,6 +159,68 @@ describe("order-types webhook extraction", () => {
     assert.equal(isValidCustomerPhotoUrl("not-a-url"), false);
   });
 
+  it("accepts the real shape of a buyer photo link", () => {
+    for (const url of [
+      "https://i.etsystatic.com/12345/r/il/abc/1234/il_1588xN.jpg",
+      "https://drive.google.com/uc?id=abc123",
+      "https://photos.example.com:443/pet.png",
+    ]) {
+      assert.equal(isValidCustomerPhotoUrl(url), true, `rejected ${url}`);
+    }
+  });
+
+  it("refuses to fetch our own network (the M8 SSRF)", () => {
+    for (const url of [
+      // The one that matters: cloud instance metadata.
+      "http://169.254.169.254/latest/meta-data/",
+      "https://169.254.169.254/latest/meta-data/iam/security-credentials/",
+      "https://[::ffff:169.254.169.254]/latest/meta-data/",
+      "https://127.0.0.1/",
+      "https://127.0.0.1:8000/admin",
+      "https://localhost/",
+      "https://api.localhost/",
+      "https://10.0.0.5/",
+      "https://172.16.4.4/",
+      "https://172.31.255.255/",
+      "https://192.168.1.1/",
+      "https://100.64.0.1/",
+      "https://0.0.0.0/",
+      "https://[::1]/",
+      "https://[fd00::1]/",
+      "https://[fe80::1]/",
+      "https://supabase.internal/",
+      "https://printer.local/",
+    ]) {
+      assert.equal(isValidCustomerPhotoUrl(url), false, `allowed ${url}`);
+    }
+  });
+
+  it("rejects non-https schemes, odd ports, and embedded credentials", () => {
+    for (const url of [
+      "http://example.com/pet.png", // plain http invites redirect games
+      "ftp://example.com/pet.png",
+      "file:///etc/passwd",
+      "gopher://example.com/",
+      "https://user:pass@example.com/pet.png",
+      "https://example.com:22/",
+      "https://example.com:6379/",
+    ]) {
+      assert.equal(isValidCustomerPhotoUrl(url), false, `allowed ${url}`);
+    }
+  });
+
+  it("still allows public addresses that merely look private-adjacent", () => {
+    for (const url of [
+      "https://172.32.0.1/pet.png", // just outside 172.16/12
+      "https://172.15.0.1/pet.png",
+      "https://11.0.0.1/pet.png",
+      "https://192.169.0.1/pet.png",
+      "https://100.63.0.1/pet.png",
+    ]) {
+      assert.equal(isValidCustomerPhotoUrl(url), true, `rejected ${url}`);
+    }
+  });
+
   it("extracts personalization from live Etsy receipt transaction variations", () => {
     const extracted = extractPersonalizationFromWebhook({
       receipt_id: 2847392011,

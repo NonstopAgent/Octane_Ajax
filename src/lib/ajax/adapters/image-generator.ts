@@ -242,17 +242,74 @@ function resolveTransparentModel(
   );
 }
 
-async function fetchImageBuffer(
+/** Ceiling for any image this server pulls into memory. */
+export const MAX_FETCHED_IMAGE_BYTES = 10 * 1024 * 1024;
+/** Wall-clock budget for one image download. */
+export const IMAGE_FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * Fetch an image with a timeout and a hard size ceiling.
+ *
+ * 2026-07-25 audit, M8. This was `fetchImpl(url)` then `arrayBuffer()`: no
+ * timeout, no cap. A buyer-supplied photo URL pointing at a 10GB file buffered
+ * straight into the lambda heap, and a URL that simply never responded held
+ * the function open until the platform killed it mid-order.
+ *
+ * The body is read incrementally rather than trusting Content-Length, because
+ * Content-Length is attacker-controlled — it can be absent, or a lie. The
+ * declared length is still checked first so an honest oversized response is
+ * rejected before a single byte is read.
+ */
+export async function fetchImageBuffer(
   url: string,
   fetchImpl: typeof fetch,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
-  const response = await fetchImpl(url);
+  const response = await fetchImpl(url, {
+    signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
+    redirect: "follow",
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch image (${response.status}).`);
   }
+
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_FETCHED_IMAGE_BYTES) {
+    throw new Error(
+      `Image too large: ${declared} bytes exceeds the ${MAX_FETCHED_IMAGE_BYTES}-byte limit.`,
+    );
+  }
+
   const mimeType = response.headers.get("content-type") ?? "image/png";
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return { buffer, mimeType };
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // No streaming body (some test doubles, and 204s). Fall back, but the
+    // declared-length check above has already run.
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > MAX_FETCHED_IMAGE_BYTES) {
+      throw new Error(
+        `Image too large: exceeded the ${MAX_FETCHED_IMAGE_BYTES}-byte limit.`,
+      );
+    }
+    return { buffer, mimeType };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_FETCHED_IMAGE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error(
+        `Image too large: exceeded the ${MAX_FETCHED_IMAGE_BYTES}-byte limit mid-download.`,
+      );
+    }
+    chunks.push(value);
+  }
+
+  return { buffer: Buffer.concat(chunks), mimeType };
 }
 
 export function createDemoImageGeneratorAdapter(

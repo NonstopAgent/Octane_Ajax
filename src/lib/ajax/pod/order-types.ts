@@ -175,13 +175,76 @@ export function sanitizeStylePrompt(rawStyle: string): StyleSanitizeResult {
   return { ok: true, prompt: genericPrompt, preset: null };
 }
 
+/**
+ * Hosts our own server must never be talked into fetching.
+ *
+ * 2026-07-25 audit, M8. This value comes from a buyer-controlled field on an
+ * Etsy order and is handed straight to `fetch()` server-side. The old check
+ * validated the SCHEME ONLY, so `http://169.254.169.254/latest/meta-data/`
+ * was a valid "customer photo": a server-side request to the cloud metadata
+ * endpoint. Blind, but the error text differs between a reachable and an
+ * unreachable host, and it lands in `order_queue.error_message` — an internal
+ * host/port oracle readable from the operator UI.
+ */
+function isBlockedHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host.endsWith(".local") || host.endsWith(".internal")) return true;
+
+  // IPv6 loopback / link-local / unique-local.
+  if (host === "::1" || host === "::") return true;
+  if (/^fe[89ab][0-9a-f]:/i.test(host)) return true;
+  if (/^f[cd][0-9a-f]{2}:/i.test(host)) return true;
+  // IPv4-mapped IPv6. `new URL()` normalizes `::ffff:169.254.169.254` to the
+  // hex form `::ffff:a9fe:a9fe`, so both spellings have to be unpacked back to
+  // the embedded v4 address before the range checks below can see it.
+  const mappedDotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(host);
+  const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(host);
+  const candidate = mappedDotted
+    ? mappedDotted[1]
+    : mappedHex
+      ? [
+          (parseInt(mappedHex[1], 16) >> 8) & 0xff,
+          parseInt(mappedHex[1], 16) & 0xff,
+          (parseInt(mappedHex[2], 16) >> 8) & 0xff,
+          parseInt(mappedHex[2], 16) & 0xff,
+        ].join(".")
+      : host;
+
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(candidate);
+  if (!v4) return false;
+  const [a, b] = v4.slice(1).map(Number);
+  if ([a, b].some((n) => Number.isNaN(n) || n > 255)) return true;
+  if (a === 0 || a === 127 || a === 10) return true; // this-host, loopback, private
+  if (a === 169 && b === 254) return true; // link-local — cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true; // private
+  if (a === 192 && b === 168) return true; // private
+  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+  if (a >= 224) return true; // multicast + reserved
+  return false;
+}
+
+/**
+ * Gate for buyer-supplied photo URLs before anything server-side fetches them.
+ *
+ * https only (an http URL for a photo on a real marketplace CDN does not
+ * exist, and http invites redirect-to-internal games), default port only, no
+ * embedded credentials, and no host that resolves to our own network from the
+ * literal alone. This is a filter, not a guarantee — a hostile DNS name can
+ * still resolve to a private address — so the fetcher enforces its own timeout
+ * and size ceiling regardless (see image-generator.ts).
+ */
 export function isValidCustomerPhotoUrl(url: string): boolean {
   const trimmed = url.trim();
   if (!trimmed) return false;
   if (trimmed.startsWith("demo://")) return true;
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.username || parsed.password) return false;
+    if (parsed.port && parsed.port !== "443") return false;
+    if (!parsed.hostname) return false;
+    return !isBlockedHost(parsed.hostname);
   } catch {
     return false;
   }
