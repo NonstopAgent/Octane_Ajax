@@ -34,7 +34,10 @@ export async function GET() {
       );
     }
     const summary = await runShopAutopilot(supabase, user.id);
-    return NextResponse.json({ ok: true, summary });
+    // `ok` mirrors the pass (2026-07-25 audit, M10c) — it used to be
+    // hardcoded true, so a manual run that failed on every listing still
+    // reported success to the operator who triggered it.
+    return NextResponse.json({ ok: summary.ok, summary });
   } catch (err) {
     console.error("[run-autopilot:get]", err);
     return NextResponse.json(

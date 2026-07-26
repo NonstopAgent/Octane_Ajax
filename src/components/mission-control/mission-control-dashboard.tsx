@@ -13,10 +13,22 @@ import { useCallback, useEffect, useState } from "react";
 import { CommandHeader } from "@/components/layout/command-header";
 import { Button, ButtonLink } from "@/components/ui/button";
 
+type SystemAlert = {
+  id: string;
+  kind: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string | null;
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
 type Snapshot = {
   ok: boolean;
   error?: string;
   generatedAt: string;
+  alerts: SystemAlert[];
   agents: {
     slug: string;
     name: string;
@@ -91,6 +103,64 @@ function Card({
   );
 }
 
+const ALERT_STYLES: Record<string, string> = {
+  critical: "border-red-500/40 bg-red-500/10 text-red-200",
+  warning: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  info: "border-sky-500/40 bg-sky-500/10 text-sky-200",
+};
+
+/**
+ * The failure surface (2026-07-25 audit, M10). This page is the operator's
+ * daily view and it was, by design, chore-free — which meant a cron that had
+ * been failing for a week showed up nowhere at all. Alerts are the one
+ * exception to "no chores": something is broken and nothing else will say so.
+ */
+function AlertBanner({
+  alerts,
+  onDismiss,
+}: {
+  alerts: SystemAlert[];
+  onDismiss: (kind: string) => void;
+}) {
+  if (alerts.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {alerts.map((alert) => (
+        <div
+          key={alert.id}
+          className={`rounded-lg border p-3 text-sm ${ALERT_STYLES[alert.severity] ?? ALERT_STYLES.warning}`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold">
+                {alert.severity === "critical" ? "⛔ " : "⚠️ "}
+                {alert.title}
+                {alert.occurrences > 1 ? ` · ${alert.occurrences}×` : ""}
+              </div>
+              {alert.detail && (
+                <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-xs opacity-80">
+                  {alert.detail}
+                </pre>
+              )}
+              <div className="mt-1 text-xs opacity-60">
+                first seen {timeAgo(alert.firstSeenAt)} · last{" "}
+                {timeAgo(alert.lastSeenAt)}
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={() => onDismiss(alert.kind)}
+              aria-label={`Dismiss ${alert.title}`}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -123,6 +193,29 @@ export function MissionControlDashboard() {
       setLoading(false);
     }
   }, []);
+
+  const dismissAlert = useCallback(
+    async (kind: string) => {
+      // Optimistic: the banner should disappear on click, not on round trip.
+      setSnap((prev) =>
+        prev
+          ? { ...prev, alerts: prev.alerts.filter((a) => a.kind !== kind) }
+          : prev,
+      );
+      try {
+        await fetch("/api/ajax/alerts", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind }),
+        });
+      } catch {
+        // Next poll re-surfaces it if the dismissal never landed.
+      }
+      void load();
+    },
+    [load],
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount + 60s poll; matches tiktok-queue-panel / event-feed. Server-side initialSnapshot is the real fix (audit L1).
@@ -158,6 +251,12 @@ export function MissionControlDashboard() {
 
       {snap && (
         <>
+          {/* Anything broken, first — above the healthy-machine panels. */}
+          <AlertBanner
+            alerts={snap.alerts ?? []}
+            onDismiss={(kind) => void dismissAlert(kind)}
+          />
+
           {/* Agent heartbeats */}
           <div className="grid gap-4 md:grid-cols-3">
             {snap.agents.map((agent) => (

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { safeNextPath } from "@/lib/auth/routes";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthMode = "signin" | "signup";
@@ -11,7 +12,9 @@ type AuthMode = "signin" | "signup";
 export function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/factory";
+  // Validated, not raw (2026-07-25 audit, M5): `/login?next=https://evil.com`
+  // pushed the operator off-site the instant their password was accepted.
+  const next = safeNextPath(searchParams.get("next"));
   const callbackError = searchParams.get("error");
 
   const [mode, setMode] = useState<AuthMode>("signin");

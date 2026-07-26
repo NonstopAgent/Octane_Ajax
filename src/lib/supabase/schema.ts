@@ -130,6 +130,8 @@ export const TABLES = {
   LLM_USAGE: "llm_usage_log",
   MARKET_KEYWORDS: "market_keywords",
   VIDEO_JOBS: "video_jobs",
+  AUTOPILOT_LOCKS: "autopilot_locks",
+  SYSTEM_ALERTS: "system_alerts",
   LISTING_PERFORMANCE: "listing_performance_snapshots",
   ETSY_OAUTH_SESSIONS: "etsy_oauth_sessions",
   GUIDES: "affiliate_guides",

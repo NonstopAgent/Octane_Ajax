@@ -56,7 +56,22 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await runShopAutopilot(supabase, operator.id);
-    return NextResponse.json(result, { status: 200 });
+
+    // Status policy (2026-07-25 audit, M10c). This route used to return 200
+    // unconditionally, so Vercel's cron dashboard showed a green check for a
+    // pass that errored on 13 of 25 listings — the operator's only monitoring
+    // surface was lying. But a 5xx is also what makes a platform re-invoke a
+    // job, and re-running this pass can cost a second paid image generation.
+    // So:
+    //   red (500)  → the loop is BROKEN: Etsy unreachable, or errors with
+    //                nothing accomplished. Worth re-running; must be visible.
+    //   200 + ok:false → partial failure. Surfaced by the system_alerts banner
+    //                in Mission Control instead of by an ambiguous red check.
+    const brokenLoop =
+      !result.skipped &&
+      (!result.etsyConnected ||
+        (result.errors.length > 0 && result.audited === 0));
+    return NextResponse.json(result, { status: brokenLoop ? 500 : 200 });
   } catch (err) {
     console.error("[cron/shop-autopilot] unexpected error", err);
     return NextResponse.json(

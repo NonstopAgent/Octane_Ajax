@@ -915,6 +915,78 @@ export interface Database {
         };
         Relationships: [];
       };
+      autopilot_locks: {
+        Row: {
+          user_id: string;
+          lock_key: string;
+          locked_until: string;
+          locked_at: string | null;
+          holder: string | null;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          lock_key: string;
+          locked_until?: string;
+          locked_at?: string | null;
+          holder?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          lock_key?: string;
+          locked_until?: string;
+          locked_at?: string | null;
+          holder?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      system_alerts: {
+        Row: {
+          id: string;
+          user_id: string;
+          kind: string;
+          severity: string;
+          title: string;
+          detail: string | null;
+          context: Json;
+          occurrences: number;
+          first_seen_at: string;
+          last_seen_at: string;
+          resolved_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          kind: string;
+          severity?: string;
+          title: string;
+          detail?: string | null;
+          context?: Json;
+          occurrences?: number;
+          first_seen_at?: string;
+          last_seen_at?: string;
+          resolved_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          kind?: string;
+          severity?: string;
+          title?: string;
+          detail?: string | null;
+          context?: Json;
+          occurrences?: number;
+          first_seen_at?: string;
+          last_seen_at?: string;
+          resolved_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       video_jobs: {
         Row: {
           id: string;

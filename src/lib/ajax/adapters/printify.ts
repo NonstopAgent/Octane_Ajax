@@ -504,6 +504,70 @@ async function parsePrintifyJson<T>(
   }
 }
 
+/**
+ * Close out a Printify publish and RELEASE THE LOCK.
+ *
+ * 2026-07-25 audit, M10b. `POST publish.json` sets `is_locked = true` on the
+ * Printify product; the lock is only cleared by `publishing_succeeded.json` or
+ * `publishing_failed.json`. All three publish paths in this file fired
+ * `publishing_succeeded` and never looked at the response — two of them with an
+ * explicit `.catch(() => undefined)`. So if that one POST 429'd, the product
+ * stayed locked FOREVER (no further edit, republish, or price change would be
+ * accepted) while this adapter returned "published" and the listing row was
+ * written as published. Neither `is_locked` nor `publishing_failed` appeared
+ * anywhere in src/.
+ *
+ * Now: check the response, and on failure tell Printify the publish failed so
+ * the product unlocks and is editable again, then throw. A locked product that
+ * reports as published is unrecoverable without a manual Printify visit; a
+ * thrown error is retried by the next pass.
+ */
+async function finalizePrintifyPublish(
+  fetchImpl: typeof fetch,
+  shopId: string,
+  productId: string,
+  headers: Record<string, string>,
+  label: string,
+): Promise<void> {
+  let res: Response | null = null;
+  let networkError: unknown = null;
+  try {
+    res = await fetchImpl(
+      `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+  } catch (err) {
+    networkError = err;
+  }
+
+  if (res?.ok) return;
+
+  const detail = networkError
+    ? networkError instanceof Error
+      ? networkError.message
+      : "network error"
+    : `HTTP ${res?.status}`;
+
+  // Release the lock so the product stays editable and the next pass can retry.
+  let released = false;
+  try {
+    const failRes = await fetchImpl(
+      `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_failed.json`,
+      { method: "POST", headers, body: JSON.stringify({ reason: detail }) },
+    );
+    released = failRes.ok;
+  } catch {
+    released = false;
+  }
+
+  throw new Error(
+    `${label}: Printify never acknowledged the publish (${detail}). ` +
+      (released
+        ? "The product lock was released — the next pass will retry."
+        : `The product may still be LOCKED in Printify — clear it at https://printify.com/app/products/${productId} before retrying.`),
+  );
+}
+
 function mapShippingAddress(
   address: PrintifyShippingAddress,
 ): Record<string, string> {
@@ -909,10 +973,13 @@ export function createLivePrintifyAdapter(
           `Printify variants publish failed (${pubRes.status}): ${body.slice(0, 160)} — Etsy may still show the old price.`,
         );
       }
-      await fetchImpl(
-        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
-        { method: "POST", headers, body: JSON.stringify({}) },
-      ).catch(() => undefined);
+      await finalizePrintifyPublish(
+        fetchImpl,
+        shopId,
+        productId,
+        headers,
+        "Variant price publish",
+      );
       return liveResult("Variant prices raised.", {
         productId,
         variants: changes,
@@ -1023,10 +1090,13 @@ export function createLivePrintifyAdapter(
           `Printify variants publish failed (${pubRes.status}): ${body.slice(0, 160)} — Etsy may still show the old price.`,
         );
       }
-      await fetchImpl(
-        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
-        { method: "POST", headers, body: JSON.stringify({}) },
-      ).catch(() => undefined);
+      await finalizePrintifyPublish(
+        fetchImpl,
+        shopId,
+        productId,
+        headers,
+        "Catalog price publish",
+      );
 
       return liveResult("Variant prices set to catalog targets.", {
         productId,
@@ -1437,9 +1507,12 @@ export function createLivePrintifyAdapter(
         );
       }
 
-      await fetchImpl(
-        `${PRINTIFY_API_BASE}/shops/${shopId}/products/${productId}/publishing_succeeded.json`,
-        { method: "POST", headers, body: JSON.stringify({}) },
+      await finalizePrintifyPublish(
+        fetchImpl,
+        shopId,
+        productId,
+        headers,
+        "Product publish",
       );
 
       return liveResult("Printify product published.", {

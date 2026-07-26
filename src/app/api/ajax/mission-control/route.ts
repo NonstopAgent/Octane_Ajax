@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchActiveAlerts } from "@/lib/ajax/alerts";
 import { createClient } from "@/lib/supabase/server";
 import { TABLES } from "@/lib/supabase/schema";
 
@@ -206,9 +207,15 @@ export async function GET() {
         }
       : null;
 
+    // The failure surface (2026-07-25 audit, M10). Fetched after the parallel
+    // block so a slow alert read can never delay the snapshot the operator
+    // actually opens this page for.
+    const alerts = await fetchActiveAlerts(supabase, userId);
+
     return NextResponse.json({
       ok: true,
       generatedAt: new Date().toISOString(),
+      alerts,
       agents,
       autopilot,
       production,

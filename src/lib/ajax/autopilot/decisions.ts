@@ -128,3 +128,29 @@ export function buildTagFill(
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
+
+/**
+ * Rotating window over a list too long to process in one pass.
+ *
+ * A fixed `slice(0, size)` is a silent-exclusion bug: once the shop grew past
+ * the per-pass cap, everything after index `size-1` stopped being audited
+ * FOREVER — no error, no log line, just listings that never got tags filled,
+ * shipping fixed, or the Medic run on them (2026-07-25 audit, M2; the heal
+ * batch hit the same bug and was fixed 400 lines away in the same file).
+ *
+ * The window advances by `size` each hour and wraps, so `ceil(len/size)`
+ * consecutive hours cover every item. Wrapping (rather than a short tail
+ * batch) keeps every pass the same width, so per-pass rate-limit budgeting
+ * stays predictable.
+ */
+export function rotatingBatch<T>(items: T[], size: number, hour: number): T[] {
+  if (size <= 0) return [];
+  if (items.length <= size) return [...items];
+  const batches = Math.ceil(items.length / size);
+  const offset = (((hour % batches) + batches) % batches) * size;
+  const out: T[] = [];
+  for (let i = 0; i < size; i += 1) {
+    out.push(items[(offset + i) % items.length]);
+  }
+  return out;
+}

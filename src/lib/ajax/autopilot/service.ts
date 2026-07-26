@@ -18,12 +18,15 @@ import {
   type EtsyListingDetails,
   type EtsyShippingProfileSummary,
 } from "@/lib/ajax/adapters/etsy";
+import { clearAlert, raiseAlert, sweepStuckWork } from "@/lib/ajax/alerts";
 import {
   auditListing,
   buildTagFill,
+  rotatingBatch,
   type AutopilotAction,
   type ListingAuditInput,
 } from "@/lib/ajax/autopilot/decisions";
+import { acquireAutopilotLease } from "@/lib/ajax/autopilot/lease";
 import { AGENT_SLUGS, ROOM_SLUGS } from "@/lib/ajax/constants";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { fetchOperatorKeywords } from "@/lib/ajax/nova/research";
@@ -80,6 +83,8 @@ const MAX_LISTINGS_PER_PASS = 25;
 export type AutopilotResult = {
   ok: boolean;
   skipped?: string;
+  /** False when the Etsy connection could not be established this pass. */
+  etsyConnected: boolean;
   audited: number;
   tagsFixed: number;
   shippingFixed: number;
@@ -91,12 +96,21 @@ export type AutopilotResult = {
   takenDown: number;
   /** Listings this pass left below the 2-photo minimum (Etsy flags these). */
   galleryThin: number;
+  /** Real failures. Any entry here means `ok: false` and raises an alert. */
   errors: string[];
+  /**
+   * Expected, operator-chosen conditions worth reporting (quiet window active,
+   * lock table degraded). Kept OUT of `errors` on purpose: the freeze pushed a
+   * line into `errors` every hour, which would have made a healthy frozen pass
+   * indistinguishable from a broken one the moment failures started mattering.
+   */
+  notices: string[];
 };
 
 function emptyResult(): AutopilotResult {
   return {
     ok: true,
+    etsyConnected: false,
     audited: 0,
     tagsFixed: 0,
     shippingFixed: 0,
@@ -108,6 +122,7 @@ function emptyResult(): AutopilotResult {
     takenDown: 0,
     galleryThin: 0,
     errors: [],
+    notices: [],
   };
 }
 
@@ -168,7 +183,45 @@ function minPriceCentsFor(row: InternalListingRow | undefined): number | null {
   return null;
 }
 
+/**
+ * Hourly shop pass, guarded by a real overlap lease.
+ *
+ * The lease lives outside the pass body (2026-07-25 audit, M3) so it can be
+ * released in a `finally` — the old events-table lock had no release path, so
+ * a 90-second pass blocked the next one for the remaining 6½ minutes, and a
+ * long pass was unprotected from minute 8 onward.
+ */
 export async function runShopAutopilot(
+  supabase: Supabase,
+  userId: string,
+): Promise<AutopilotResult> {
+  if (process.env.AUTOPILOT_DISABLED === "true") {
+    const skipped = emptyResult();
+    skipped.skipped = "disabled_via_env";
+    return skipped;
+  }
+
+  const lease = await acquireAutopilotLease(supabase, userId);
+  if (!lease.acquired) {
+    const skipped = emptyResult();
+    skipped.skipped = "overlapping_pass";
+    return skipped;
+  }
+
+  try {
+    const result = await runAutopilotPass(supabase, userId);
+    if (lease.degraded) {
+      result.notices.push(
+        `overlap-lease: unverified (${lease.reason ?? "lock unavailable"}) — pass ran unguarded`,
+      );
+    }
+    return result;
+  } finally {
+    await lease.release();
+  }
+}
+
+async function runAutopilotPass(
   supabase: Supabase,
   userId: string,
 ): Promise<AutopilotResult> {
@@ -180,56 +233,50 @@ export async function runShopAutopilot(
   const passStartedAt = Date.now();
   const passExpired = () => Date.now() - passStartedAt > 600_000;
 
-  if (process.env.AUTOPILOT_DISABLED === "true") {
-    result.skipped = "disabled_via_env";
-    return result;
-  }
-
   // QUIET WINDOW (2026-07-26 view collapse — see lib/ajax/listing-freeze.ts):
   // while frozen this pass runs READ-ONLY against listings. Orders, social,
   // and analytics continue; audit/medic/heal/galleries/videos/attributes/
   // production/self-approval all stand down so Etsy can re-index in peace.
   const listingFreeze = listingWritesFrozenUntil();
   if (listingFreeze) {
-    result.errors.push(
+    result.notices.push(
       `listing-freeze: automated listing writes paused until ${listingFreeze.toISOString().slice(0, 16)}Z (quiet window — set AUTOPILOT_LISTING_FREEZE_UNTIL="" to lift)`,
     );
   }
 
-  // ---- Overlap lock ----------------------------------------------------------
-  // When a pass runs long, Vercel's cron can retry it — two concurrent passes
-  // double every Etsy/Printify call (rate limits) and double-post promos.
-  // If another pass started in the last 8 minutes, stand down.
-  try {
-    const lockWindow = new Date(Date.now() - 8 * 60 * 1000).toISOString();
-    const { data: running } = await supabase
-      .from(TABLES.EVENTS)
-      .select("id")
-      .eq("user_id", userId)
-      .eq("event_type", "autopilot_started")
-      .gte("created_at", lockWindow)
-      .limit(1);
-    if ((running ?? []).length > 0) {
-      result.skipped = "overlapping_pass";
-      return result;
-    }
-    await logEvent(
-      supabase,
-      userId,
-      "autopilot_started",
-      "Autopilot pass started.",
-      {},
-    );
-  } catch {
-    // Lock is best-effort — never block the pass on it.
-  }
+  // Kept for the Mission Control "last pass" readout; the overlap guard is now
+  // the autopilot_locks lease in runShopAutopilot, not this row.
+  await logEvent(
+    supabase,
+    userId,
+    "autopilot_started",
+    "Autopilot pass started.",
+    {},
+  );
 
   // ---- Etsy access ---------------------------------------------------------
+  // A refresh failure used to be swallowed into `credentials = null` with
+  // NOTHING pushed to errors (2026-07-25 audit, M10a). Every Etsy phase is
+  // gated on `if (credentials)`, so the pass then did nothing and logged
+  // "shop is healthy, no action needed" — the single most likely way for the
+  // shop to break was also the way that produced the most reassuring line.
   let credentials;
   try {
     credentials = await refreshEtsyToken(userId, { supabase });
-  } catch {
+  } catch (err) {
     credentials = null;
+    result.errors.push(
+      `etsy-auth: ${err instanceof Error ? err.message : "token refresh failed"} — every Etsy phase was skipped this pass (reconnect the shop in Settings)`,
+    );
+  }
+  if (!credentials) {
+    if (result.errors.length === 0) {
+      result.errors.push(
+        "etsy-auth: no Etsy credentials on file — every Etsy phase was skipped this pass",
+      );
+    }
+  } else {
+    result.etsyConnected = true;
   }
 
   const adapter = createEtsyAdapter();
@@ -414,9 +461,21 @@ export async function runShopAutopilot(
   // Frozen → audit nothing: every branch of this loop can WRITE (tags,
   // shipping profile, attributes, personalization) and each write restarts
   // Etsy's re-index clock on that listing.
+  // Rotate the window (2026-07-25 audit, M2): a fixed slice(0, 25) over 35
+  // live listings meant ~10 of them were NEVER audited — no tag fill, no
+  // shipping fix, no Medic — for as long as the shop stayed above the cap.
+  // Sorted by listing id first so the window is deterministic even if Etsy
+  // returns the shop in a different order between passes.
+  const auditPool = [...liveListings].sort((a, b) =>
+    a.listingId.localeCompare(b.listingId),
+  );
   const auditBatch = listingFreeze
     ? []
-    : liveListings.slice(0, MAX_LISTINGS_PER_PASS);
+    : rotatingBatch(
+        auditPool,
+        MAX_LISTINGS_PER_PASS,
+        new Date().getUTCHours(),
+      );
   for (const live of auditBatch) {
     if (!credentials) break;
     // Pace the detail sweep — bursts of getListingDetails tripped Etsy's
@@ -1247,17 +1306,51 @@ export async function runShopAutopilot(
     result.reviewsCleared +
     result.takenDown +
     (result.cycleTriggered ? 1 : 0);
+  // "Shop is healthy" is only true when we actually reached Etsy. A dead
+  // connection produces the same zero counters as a clean shop, and the old
+  // wording claimed health either way (2026-07-25 audit, M10a).
+  const idleSummary = !result.etsyConnected
+    ? `Autopilot pass could not reach Etsy — no listings were audited and every Etsy phase was skipped. ${result.errors[0] ?? "Reconnect the shop in Settings."}`
+    : listingFreeze
+      ? `Autopilot pass: read-only during the quiet window (listing writes frozen until ${listingFreeze.toISOString().slice(0, 16)}Z) — nothing to fix.`
+      : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: AI review could not clear the gate)" : ""}.`;
   await logEvent(
     supabase,
     userId,
     "autopilot_summary",
     acted > 0 || result.galleryThin > 0
-      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.takenDown ? `, retired ${result.takenDown} underperforming listing(s)` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}${result.galleryThin > 0 ? ` ⚠️ ${result.galleryThin} listing(s) still below the 2-photo minimum` : ""}.`
-      : `Autopilot pass: audited ${result.audited} listing(s) — shop is healthy, no action needed${result.cycleBlocked ? " (new product blocked: AI review could not clear the gate)" : ""}.`,
+      ? `Autopilot pass: audited ${result.audited} listing(s) — fixed ${result.tagsFixed + result.shippingFixed}, queued ${result.recommended} recommendation(s), ${result.marketingQueued} promo(s)${result.reviewsCleared ? `, cleared ${result.reviewsCleared} review(s) through the AI gate` : ""}${result.takenDown ? `, retired ${result.takenDown} underperforming listing(s)` : ""}${result.cycleTriggered ? ", started a new product cycle" : ""}${result.cycleBlocked ? " (cycle blocked: review failed)" : ""}${result.galleryThin > 0 ? ` ⚠️ ${result.galleryThin} listing(s) still below the 2-photo minimum` : ""}${result.errors.length > 0 ? ` — ⚠️ ${result.errors.length} error(s)` : ""}.`
+      : idleSummary,
     { runId, ...result } as unknown as Json,
   );
 
   result.ok = result.errors.length === 0;
+
+  // One durable, queryable failure surface (2026-07-25 audit, M10). Before
+  // this, the only trace of a failed 3am pass was a factory_events row nobody
+  // reads and a Vercel log that ages out.
+  if (!result.ok) {
+    await raiseAlert(supabase, userId, {
+      kind: !result.etsyConnected ? "autopilot_etsy_down" : "autopilot_errors",
+      severity: !result.etsyConnected ? "critical" : "warning",
+      title: !result.etsyConnected
+        ? "Autopilot could not reach Etsy"
+        : `Autopilot pass finished with ${result.errors.length} error(s)`,
+      detail: result.errors.slice(0, 12).join("\n"),
+      context: { runId, audited: result.audited, acted },
+    });
+  } else {
+    // Self-clearing: an alert list that only grows is an alert list nobody
+    // reads. A clean pass retires the previous failures.
+    await clearAlert(supabase, userId, "autopilot_errors");
+    await clearAlert(supabase, userId, "autopilot_etsy_down");
+  }
+
+  // Work that is stuck rather than failing: paid orders past the reclaim
+  // window, discarded renders, dead generations. Runs even during the freeze —
+  // a customer waiting on a paid order is never part of a quiet window.
+  await sweepStuckWork(supabase, userId);
+
   return result;
 }
 

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isProtectedPath } from "@/lib/auth/routes";
+import { isProtectedPath, safeNextPath } from "@/lib/auth/routes";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
@@ -14,9 +14,8 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === "/login" && user) {
-    const next = request.nextUrl.searchParams.get("next");
-    const dest =
-      next && isProtectedPath(next) ? next : "/factory";
+    // Same helper as the callback and the form — one allowlist, three callers.
+    const dest = safeNextPath(request.nextUrl.searchParams.get("next"));
     return NextResponse.redirect(new URL(dest, request.url));
   }
 

@@ -4,6 +4,7 @@ import {
   auditListing,
   buildTagFill,
   ETSY_MAX_TAGS,
+  rotatingBatch,
   type ListingAuditInput,
 } from "@/lib/ajax/autopilot/decisions";
 import {
@@ -167,5 +168,62 @@ describe("selectTakedownCandidate", () => {
   it("holds at capacity when every listing is performing", () => {
     const strong = candidate({ views: 200, ageDays: 40 });
     assert.equal(selectTakedownCandidate([strong], { atCapacity: true }), null);
+  });
+});
+
+describe("rotatingBatch", () => {
+  const shop = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+  it("returns everything when the list fits in one pass", () => {
+    assert.deepEqual(rotatingBatch(shop(9), 25, 0), shop(9));
+    assert.deepEqual(rotatingBatch(shop(25), 25, 7), shop(25));
+  });
+
+  it("advances the window each hour instead of re-auditing the head", () => {
+    const first = rotatingBatch(shop(35), 25, 0);
+    const second = rotatingBatch(shop(35), 25, 1);
+    assert.equal(first[0], 0);
+    assert.equal(second[0], 25);
+    assert.notDeepEqual(first, second);
+  });
+
+  it("covers every listing across a full rotation (the M2 regression)", () => {
+    // 35 live listings, 25 per pass: the old slice(0, 25) never reached 25-34.
+    const seen = new Set<number>();
+    for (let hour = 0; hour < 24; hour += 1) {
+      for (const id of rotatingBatch(shop(35), 25, hour)) seen.add(id);
+    }
+    assert.equal(seen.size, 35);
+  });
+
+  it("covers every listing for shop sizes well past the cap", () => {
+    for (const size of [26, 30, 49, 50, 51, 100]) {
+      const seen = new Set<number>();
+      for (let hour = 0; hour < 24; hour += 1) {
+        for (const id of rotatingBatch(shop(size), 25, hour)) seen.add(id);
+      }
+      assert.equal(seen.size, size, `shop of ${size} left listings unaudited`);
+    }
+  });
+
+  it("keeps every pass the same width and never repeats within a pass", () => {
+    const batch = rotatingBatch(shop(30), 25, 1);
+    assert.equal(batch.length, 25);
+    assert.equal(new Set(batch).size, 25);
+  });
+
+  it("is stable for a given hour and tolerates a negative hour", () => {
+    assert.deepEqual(
+      rotatingBatch(shop(35), 25, 3),
+      rotatingBatch(shop(35), 25, 3),
+    );
+    assert.deepEqual(
+      rotatingBatch(shop(35), 25, -1),
+      rotatingBatch(shop(35), 25, 1),
+    );
+  });
+
+  it("returns nothing for a non-positive batch size", () => {
+    assert.deepEqual(rotatingBatch(shop(10), 0, 4), []);
   });
 });

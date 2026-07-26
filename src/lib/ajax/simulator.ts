@@ -947,18 +947,33 @@ export async function resetDemoData(
     deleted[table] = data?.length ?? 0;
   }
 
-  // Reseed agent rows (upsert by slug — never duplicates)
-  const { data: agents, error: agentError } = await supabase
-    .from(TABLES.AGENTS)
-    .upsert(
-      AGENT_SEED.map((row) => ({
-        ...row,
-        current_task_id: null,
-        last_heartbeat: new Date().toISOString(),
-      })),
-      { onConflict: "slug" },
-    )
-    .select("slug, status");
+  // Return the three seeded agents to their home rooms, idle.
+  //
+  // This used to upsert the whole AGENT_SEED row (name/slug/role included).
+  // It is now an operational-columns-only UPDATE against rows the init
+  // migration seeds: the 2026-07-25 audit (M6) found `ajax_agents` writable
+  // in full by ANY authenticated user, and a slug rename cascades through
+  // ajax_tasks + factory_events while `AGENT_SLUGS` keeps the originals —
+  // rewriting factory history and breaking every pipeline step. The fix
+  // revokes identity columns from the `authenticated` role, so an upsert
+  // (which writes slug/name/role) would now be rejected. Nothing here needs
+  // to write those columns anyway.
+  const agentReset = await Promise.all(
+    AGENT_SEED.map((row) =>
+      supabase
+        .from(TABLES.AGENTS)
+        .update({
+          status: row.status,
+          current_room: row.current_room,
+          current_task_id: null,
+          last_heartbeat: new Date().toISOString(),
+        })
+        .eq("slug", row.slug)
+        .select("slug, status"),
+    ),
+  );
+  const agentError = agentReset.find((r) => r.error)?.error ?? null;
+  const agents = agentReset.flatMap((r) => r.data ?? []);
 
   if (agentError) {
     throw new SimulatorError("Failed to reseed agents.", agentError);
