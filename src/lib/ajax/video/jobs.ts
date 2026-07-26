@@ -100,7 +100,10 @@ async function markJob(
       ...(videoUrl ? { video_url: videoUrl } : {}),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    // Only a still-pending job can be finalized — a driver that lost its
+    // claim can never overwrite another driver's terminal state (H13).
+    .eq("status", "pending");
 }
 
 async function completeEtsy(
@@ -206,6 +209,25 @@ export async function drainVideoJobs(
     .limit(10);
 
   for (const raw of (jobs ?? []) as unknown as VideoJobRow[]) {
+    // ATOMIC CLAIM (2026-07-25 audit, H13): three uncoordinated drivers run
+    // this drain — the 10-min cron, the Factory page's 30s poll, and the
+    // autopilot mid-pass. Without a claim they processed the SAME job: two
+    // video downloads, two Etsy uploads, two racing token refreshes. The
+    // conditional UPDATE is the lock; a claim older than 5 min is considered
+    // dead (crashed driver) and reclaimable.
+    const claimCutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+    const { data: claimed, error: claimError } = await supabase
+      .from(TABLES.VIDEO_JOBS)
+      .update({ claimed_at: new Date().toISOString() })
+      .eq("id", raw.id)
+      .eq("status", "pending")
+      .or(`claimed_at.is.null,claimed_at.lt.${claimCutoff}`)
+      .select("id");
+    if (claimError || (claimed?.length ?? 0) === 0) {
+      // Another driver holds it — not ours to touch this pass.
+      continue;
+    }
+
     summary.processed += 1;
     try {
       const r = await poll(raw.request_id);

@@ -30,6 +30,9 @@ function makeSupabase(state: State): Supabase {
       eq() {
         return b;
       },
+      or() {
+        return b;
+      },
       order() {
         return b;
       },
@@ -37,10 +40,12 @@ function makeSupabase(state: State): Supabase {
         return b;
       },
       then(resolve: (v: unknown) => void, reject?: (e: unknown) => void) {
+        // update-mode resolves with row stubs so the H13 claim (which does
+        // .update().eq().or().select() and checks row count) succeeds.
         const out =
           mode === "select"
             ? { data: state.jobs, error: null }
-            : { data: null, error: null };
+            : { data: state.jobs.map((j) => ({ id: j.id })), error: null };
         return Promise.resolve(out).then(resolve, reject);
       },
     };
@@ -214,6 +219,92 @@ describe("drainVideoJobs", () => {
     });
     assert.equal(summary.stillPending, 1);
     assert.equal(summary.done, 0);
-    assert.equal(state.updates[0]?.attempts, 3);
+    const bump = state.updates.find((u) => "attempts" in u);
+    assert.equal(bump?.attempts, 3);
+  });
+});
+
+describe("drainVideoJobs — atomic claim (H13)", () => {
+  const originalFreeze = process.env.AUTOPILOT_LISTING_FREEZE_UNTIL;
+  beforeEach(() => {
+    process.env.AUTOPILOT_LISTING_FREEZE_UNTIL = "";
+  });
+  afterEach(() => {
+    if (originalFreeze === undefined) {
+      delete process.env.AUTOPILOT_LISTING_FREEZE_UNTIL;
+    } else {
+      process.env.AUTOPILOT_LISTING_FREEZE_UNTIL = originalFreeze;
+    }
+  });
+
+  it("skips a job another driver already claimed — never polls or marks it", async () => {
+    // Supabase mock where the claim UPDATE matches ZERO rows (fresh claim by
+    // a competing driver), while the pending SELECT still returns the job.
+    const marks: unknown[] = [];
+    const supabase = {
+      from() {
+        let mode: "select" | "update" = "select";
+        const b: Record<string, unknown> = {
+          select() {
+            return b;
+          },
+          update(patch: Record<string, unknown>) {
+            mode = "update";
+            marks.push(patch);
+            return b;
+          },
+          eq() {
+            return b;
+          },
+          or() {
+            return b;
+          },
+          order() {
+            return b;
+          },
+          limit() {
+            return b;
+          },
+          then(resolve: (v: unknown) => void) {
+            const out =
+              mode === "select"
+                ? {
+                    data: [
+                      {
+                        id: "contested",
+                        kind: "etsy_listing",
+                        request_id: "req-x",
+                        etsy_listing_id: "L1",
+                        post_text: null,
+                        platforms: null,
+                        attempts: 0,
+                      },
+                    ],
+                    error: null,
+                  }
+                : { data: [], error: null }; // claim misses
+            return Promise.resolve(out).then(resolve);
+          },
+        };
+        return b;
+      },
+    } as never;
+
+    let polled = 0;
+    const summary = await drainVideoJobs(supabase, "u1", {
+      poll: (async () => {
+        polled += 1;
+        return { ok: true, status: "completed" as const, videoUrl: "u", model: "m" };
+      }) as never,
+    });
+
+    assert.equal(polled, 0, "a lost claim must never reach fal");
+    assert.equal(summary.processed, 0);
+    assert.equal(summary.done, 0);
+    // The only write attempted was the claim itself — no status marks.
+    assert.equal(
+      marks.filter((m) => (m as Record<string, unknown>).status).length,
+      0,
+    );
   });
 });

@@ -6,6 +6,7 @@
  */
 
 import { listingPriceToCents } from "@/lib/ajax/adapters/gumroad";
+import { withHttpDiscipline } from "@/lib/ajax/adapters/http";
 
 // Etsy v3 resource endpoints are served from openapi.etsy.com (api.etsy.com only
 // hosts the OAuth token endpoint). Using api.etsy.com here causes a misleading
@@ -264,7 +265,8 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
     options.sharedSecret ?? process.env.ETSY_CLIENT_SECRET?.trim();
   // Etsy v3 requires x-api-key = "keystring:shared_secret" (colon-separated).
   const apiKeyHeader = sharedSecret ? `${clientId}:${sharedSecret}` : clientId;
-  const fetchImpl = options.fetchImpl ?? fetch;
+  // Timeouts + bounded GET retry on every call (2026-07-25 audit, H11).
+  const fetchImpl = withHttpDiscipline(options.fetchImpl ?? fetch);
 
   return {
     async createDraftListing(

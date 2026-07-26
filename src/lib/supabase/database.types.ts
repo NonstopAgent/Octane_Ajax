@@ -918,6 +918,7 @@ export interface Database {
       video_jobs: {
         Row: {
           id: string;
+          claimed_at: string | null;
           user_id: string;
           business_id: string | null;
           kind: string;
@@ -934,6 +935,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          claimed_at?: string | null;
           user_id: string;
           business_id?: string | null;
           kind: string;
@@ -950,6 +952,7 @@ export interface Database {
         };
         Update: {
           id?: string;
+          claimed_at?: string | null;
           user_id?: string;
           business_id?: string | null;
           kind?: string;

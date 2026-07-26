@@ -11,6 +11,10 @@ import {
   liveResult,
 } from "@/lib/ajax/adapters/types";
 import {
+  assertBodySize,
+  withHttpDiscipline,
+} from "@/lib/ajax/adapters/http";
+import {
   fitScale,
   getPlaceholderDims,
   type Placement,
@@ -518,14 +522,22 @@ function mapShippingAddress(
   return payload;
 }
 
+/** Artwork downloads can be large but not unbounded (H11/M8). */
+const MAX_ARTWORK_BYTES = 30 * 1024 * 1024;
+
 async function fetchImageAsBase64(
   imageUrl: string,
   fetchImpl: typeof fetch,
 ): Promise<string> {
-  const response = await fetchImpl(imageUrl);
+  // Own generous timeout — the adapter-wide 20s GET budget is for API calls;
+  // a full-resolution artwork file may take longer on a slow CDN.
+  const response = await fetchImpl(imageUrl, {
+    signal: AbortSignal.timeout(120_000),
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch artwork (${response.status}).`);
   }
+  assertBodySize(response, MAX_ARTWORK_BYTES, "Artwork file");
   const buffer = Buffer.from(await response.arrayBuffer());
   return buffer.toString("base64");
 }
@@ -664,7 +676,10 @@ export function createDemoPrintifyAdapter(
 export function createLivePrintifyAdapter(
   options?: PrintifyAdapterOptions,
 ): PrintifyAdapter {
-  const fetchImpl = options?.fetchImpl ?? fetch;
+  // Timeouts + bounded GET retry on every call (2026-07-25 audit, H11) —
+  // injected test fetches are wrapped too (harmless: stubs ignore signals,
+  // and only 429/5xx GETs retry).
+  const fetchImpl = withHttpDiscipline(options?.fetchImpl ?? fetch);
   const { token, shopId } = getCredentials(options);
 
   const headers = {
