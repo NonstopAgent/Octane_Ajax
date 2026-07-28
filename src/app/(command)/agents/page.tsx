@@ -1,19 +1,13 @@
 import { AgentsDashboard } from "@/components/agents/agents-dashboard";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import {
   buildAllAgentMemories,
   fetchAgentFeedback,
 } from "@/lib/ajax/agent-memory";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function AgentsPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let initialAgents = buildAllAgentMemories([]);
 

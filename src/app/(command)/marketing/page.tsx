@@ -1,16 +1,10 @@
 import { MarketingDashboard } from "@/components/marketing/marketing-dashboard";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { fetchMarketingContentJobs } from "@/lib/ajax/pixel/queries";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function MarketingPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let jobs: Awaited<ReturnType<typeof fetchMarketingContentJobs>> = [];
 

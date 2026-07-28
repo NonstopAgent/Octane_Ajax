@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { redirect } from "next/navigation";
 import { AgentCard } from "@/components/ui/agent-card";
 import { ButtonLink } from "@/components/ui/button";
@@ -6,16 +7,9 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AGENTS, FACTORY_STATIONS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function HomePage() {
   // Logged-in operators land straight on the living ecosystem floor.
-  if (configReady()) {
+  if (isSupabaseConfigured()) {
     let authed = false;
     try {
       const supabase = await createClient();

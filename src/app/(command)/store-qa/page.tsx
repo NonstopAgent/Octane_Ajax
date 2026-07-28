@@ -1,13 +1,7 @@
 import { auditStore, type StoreQaReport } from "@/lib/ajax/store-qa/audit";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { fetchStoreListingsForQa } from "@/lib/ajax/store-qa/queries";
 import { createClient } from "@/lib/supabase/server";
-
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
 
 const SEV_CLASS: Record<string, string> = {
   critical: "border-red-500/40 bg-red-500/10 text-red-200",
@@ -22,7 +16,7 @@ function scoreColor(score: number): string {
 }
 
 export default async function StoreQaPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let authed = false;
   let report: StoreQaReport | null = null;
 

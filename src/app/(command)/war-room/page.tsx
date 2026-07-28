@@ -1,4 +1,5 @@
 import { WarRoomDashboard } from "@/components/warroom/war-room-dashboard";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import {
   fetchStrategyRecommendations,
   fetchWarRoomSignals,
@@ -6,15 +7,8 @@ import {
 } from "@/lib/ajax/warroom/service";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function WarRoomPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let initialRecommendations: Awaited<
     ReturnType<typeof fetchStrategyRecommendations>

@@ -8,9 +8,8 @@ import { ReviewExternalLinksPanel } from "@/components/review/review-external-li
 import type { ProductListing } from "@/lib/ajax/types";
 import {
   ToastBanner,
-  type ToastState,
-  type ToastTone,
 } from "@/components/factory/toast-banner";
+import { useToast } from "@/hooks/useToast";
 import { hasComplianceRisk, resolveApproveApiError } from "@/lib/review/display";
 import type { PendingReviewDetail } from "@/lib/review/types";
 import type { GenerationStatus } from "@/lib/supabase/schema";
@@ -37,17 +36,13 @@ export function ReviewDashboard({
   const [rejectTarget, setRejectTarget] = useState<PendingReviewDetail | null>(
     null,
   );
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast } = useToast();
   const [approveErrors, setApproveErrors] = useState<Record<string, string>>(
     {},
   );
   const [aiResults, setAiResults] = useState<Record<string, AiReviewResult>>({});
   const [aiBusy, setAiBusy] = useState<string | null>(null);
 
-  const showToast = useCallback((tone: ToastTone, message: string) => {
-    setToast({ tone, message });
-    window.setTimeout(() => setToast(null), 6000);
-  }, []);
 
   const patchReviewGeneration = useCallback(
     (

@@ -7,9 +7,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   ToastBanner,
-  type ToastState,
-  type ToastTone,
 } from "@/components/factory/toast-banner";
+import { useToast } from "@/hooks/useToast";
 
 type RecCategory = "niche" | "channel" | "pricing" | "cut" | "other";
 type RecStatus = "proposed" | "accepted" | "dismissed" | "actioned";
@@ -122,12 +121,8 @@ export function WarRoomDashboard({
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast } = useToast();
 
-  const showToast = (tone: ToastTone, message: string) => {
-    setToast({ tone, message });
-    window.setTimeout(() => setToast(null), 6000);
-  };
 
   const runWarRoom = async () => {
     setRunning(true);

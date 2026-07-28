@@ -7,9 +7,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ButtonLink } from "@/components/ui/button";
 import {
   ToastBanner,
-  type ToastState,
-  type ToastTone,
 } from "@/components/factory/toast-banner";
+import { useToast } from "@/hooks/useToast";
 import type { Business } from "@/lib/businesses/types";
 
 type Props = {
@@ -30,7 +29,7 @@ export function BusinessesDashboard({
   const [niche, setNiche] = useState("");
   const [creating, setCreating] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast } = useToast();
 
   const activate = async (businessId: string) => {
     setActivatingId(businessId);
@@ -58,10 +57,6 @@ export function BusinessesDashboard({
     }
   };
 
-  const showToast = (tone: ToastTone, message: string) => {
-    setToast({ tone, message });
-    window.setTimeout(() => setToast(null), 6000);
-  };
 
   const create = async () => {
     if (!name.trim() || creating) return;

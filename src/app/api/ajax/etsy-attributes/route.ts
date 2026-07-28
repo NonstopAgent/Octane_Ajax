@@ -14,26 +14,19 @@
 export const maxDuration = 120;
 
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveCronOperator } from "@/lib/auth/cron";
 import {
   applyListingAttributes,
   listShopListingSummaries,
 } from "@/lib/ajax/adapters/etsy-attributes";
 import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
-import { createServiceClient } from "@/lib/supabase/server";
 
 async function run(req: NextRequest) {
-  // FAIL CLOSED (2026-07-25): this was the seventh copy of the cron guard —
-  // the 2026-07-24 sweep fixed the six under /api/cron/* and this one,
-  // living under /api/ajax/, kept the old fail-open shape (unset CRON_SECRET
-  // meant NO auth at all on a route that writes to Etsy under your token).
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401 },
-    );
-  }
+  // FAIL CLOSED (2026-07-25): this was the seventh copy of the cron guard;
+  // it now shares the single fail-closed preamble in lib/auth/cron (M11).
+  const cron = await resolveCronOperator(req);
+  if (!cron.ok) return cron.response;
+  const { supabase, userId } = cron;
 
   // QUIET WINDOW (2026-07-26): attribute writes are listing edits — skip the
   // daily pass while the freeze holds so Etsy can re-index undisturbed.
@@ -46,14 +39,6 @@ async function run(req: NextRequest) {
       ok: true,
       skipped: `listing freeze until ${freezeUntil.toISOString()}`,
     });
-  }
-
-  const operatorEmail = process.env.OPERATOR_EMAIL;
-  if (!operatorEmail) {
-    return NextResponse.json(
-      { ok: false, error: "OPERATOR_EMAIL env var not set." },
-      { status: 500 },
-    );
   }
 
   let listingIds: string[] | undefined;
@@ -69,26 +54,7 @@ async function run(req: NextRequest) {
   }
 
   try {
-    const supabase = createServiceClient();
-    const { data: userList, error: listError } =
-      await supabase.auth.admin.listUsers();
-    if (listError) {
-      return NextResponse.json(
-        { ok: false, error: `Failed to list users: ${listError.message}` },
-        { status: 500 },
-      );
-    }
-    const operator = userList.users.find(
-      (u) => u.email?.toLowerCase() === operatorEmail.toLowerCase(),
-    );
-    if (!operator) {
-      return NextResponse.json(
-        { ok: false, error: `No user found with email ${operatorEmail}.` },
-        { status: 404 },
-      );
-    }
-
-    const creds = await refreshEtsyToken(operator.id, { supabase });
+    const creds = await refreshEtsyToken(userId, { supabase });
     if (!creds) {
       return NextResponse.json(
         { ok: false, error: "Etsy is not connected for the operator." },

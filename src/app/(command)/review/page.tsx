@@ -1,17 +1,11 @@
 import { ReviewDashboard } from "@/components/review/review-dashboard";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { fetchListingsAwaitingGumroad } from "@/lib/review/publish-queries";
 import { fetchPendingReviews } from "@/lib/review/queries";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function ReviewPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let initialReviews: Awaited<ReturnType<typeof fetchPendingReviews>> = [];
   let publishReadyListings: Awaited<

@@ -14,9 +14,8 @@ import type { AgentSlug } from "@/lib/ajax/types";
 import Link from "next/link";
 import {
   ToastBanner,
-  type ToastState,
-  type ToastTone,
 } from "@/components/factory/toast-banner";
+import { useToast } from "@/hooks/useToast";
 import { useAjaxRealtime } from "@/hooks/useAjaxRealtime";
 import { createClient } from "@/lib/supabase/client";
 import { mapAgentFromDb, mapEventFromDb } from "@/lib/ajax/mappers";
@@ -90,7 +89,7 @@ export function FactorySweatshop({
       return false;
     }
   });
-  const [toast, setToast] = useState<ToastState>(null);
+  const { toast, showToast } = useToast();
   const [lastEventMsg, setLastEventMsg] = useState<string | undefined>(
     initialEvents[0] ? String(initialEvents[0].message ?? "") : undefined,
   );
@@ -104,10 +103,6 @@ export function FactorySweatshop({
     }
   }, [autopilot]);
 
-  const showToast = useCallback((tone: ToastTone, message: string) => {
-    setToast({ tone, message });
-    window.setTimeout(() => setToast(null), 6000);
-  }, []);
 
   const refreshAgentsAndMetrics = useCallback(async () => {
     const supabase = createClient();

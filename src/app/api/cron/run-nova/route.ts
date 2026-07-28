@@ -10,54 +10,16 @@
 export const maxDuration = 300;
 
 import { NextResponse, type NextRequest } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { resolveCronOperator } from "@/lib/auth/cron";
 import { runNovaStep, runForgeStep, CycleBlockedError, SimulatorError } from "@/lib/ajax/simulator";
 import { runGenerationPodJob } from "@/lib/product/generation-pod-runner";
 
 export async function GET(req: NextRequest) {
-  // Validate Vercel cron secret
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const operatorEmail = process.env.OPERATOR_EMAIL;
-  if (!operatorEmail) {
-    return NextResponse.json(
-      { ok: false, error: "OPERATOR_EMAIL env var not set. Add your login email to Vercel env vars." },
-      { status: 500 },
-    );
-  }
+  const cron = await resolveCronOperator(req);
+  if (!cron.ok) return cron.response;
+  const { supabase, userId } = cron;
 
   try {
-    // Cron has no user session — use the service-role client (required for
-    // auth.admin.listUsers and for acting on the operator's rows under RLS).
-    const supabase = createServiceClient();
-
-    // Resolve the operator's user ID from their email
-    const { data: userList, error: listError } = await supabase.auth.admin.listUsers();
-    if (listError) {
-      return NextResponse.json(
-        { ok: false, error: `Failed to list users: ${listError.message}` },
-        { status: 500 },
-      );
-    }
-
-    const operator = userList.users.find(
-      (u) => u.email?.toLowerCase() === operatorEmail.toLowerCase(),
-    );
-
-    if (!operator) {
-      return NextResponse.json(
-        { ok: false, error: `No user found with email ${operatorEmail}. Sign up first.` },
-        { status: 404 },
-      );
-    }
-
-    const userId = operator.id;
-
     // Run Nova
     const novaSummary = await runNovaStep(supabase, userId);
 

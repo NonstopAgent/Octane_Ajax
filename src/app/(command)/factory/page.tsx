@@ -1,16 +1,10 @@
 import { FactorySweatshop } from "@/components/factory/factory-sweatshop";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
 import { fetchBusinesses } from "@/lib/businesses/queries";
 import { getActiveBusiness } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
 import type { VisMetrics } from "@/components/factory/vis-types";
-
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
 
 const EMPTY_METRICS: VisMetrics = {
   productIdeas: 0,
@@ -20,7 +14,7 @@ const EMPTY_METRICS: VisMetrics = {
 };
 
 export default async function FactoryPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let snapshot: Awaited<ReturnType<typeof fetchSweatshopSnapshot>> | null = null;
   let businessLabel = "BUSINESS 01 · GOTCHADAYGOODS";

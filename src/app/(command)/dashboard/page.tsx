@@ -1,4 +1,5 @@
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import {
   fetchDashboardAgents,
   fetchRecentDashboardEvents,
@@ -29,15 +30,8 @@ const EMPTY_DASHBOARD: RevenueDashboardData = {
   recentEvents: [],
 };
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function DashboardPage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let dashboard = EMPTY_DASHBOARD;
 

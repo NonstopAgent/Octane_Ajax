@@ -1,16 +1,10 @@
 import { StoreDashboard } from "@/components/store/store-dashboard";
+import { isSupabaseConfigured } from "@/lib/auth/env";
 import { fetchStoreListings } from "@/lib/store/queries";
 import { createClient } from "@/lib/supabase/server";
 
-function configReady() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-}
-
 export default async function OperatorStorePage() {
-  const ready = configReady();
+  const ready = isSupabaseConfigured();
   let isAuthenticated = false;
   let listings: Awaited<ReturnType<typeof fetchStoreListings>> = [];
 

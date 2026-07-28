@@ -162,6 +162,18 @@ hands-off flow. Revisit later as a separate made-to-order product line if we wan
 (hourly once the `CRON_SECRET` repo secret is added — Agent 2 task).
 
 ## 11. Change log (recent)
+- **2026-07-28 — structural cleanup (M11/M14/M15):** ~5,400 lines of dead weight deleted.
+  The retired PDF/Gumroad publish line is now STRUCTURALLY gone, not just dormant — routes,
+  adapters (Gumroad + Lemon Squeezy), the on-approve publisher, the operator-store publish
+  button, and `pdf-lib` itself are deleted, and a repo test pins all ten paths deleted so the
+  line cannot quietly return (AGENTS.md rule, enforced). Also gone: the abandoned v1
+  product-brain + factory dashboard, dead barrels, the unreachable SVG factory map. The 3D
+  factory floor (three.js, 571KB) now lazy-loads after hydration instead of blocking /factory
+  first paint. One cron preamble (`resolveCronOperator`) replaces 7 drifted copies —
+  fail-closed CRON_SECRET + operator resolution single-sourced; 12 page-level `configReady`
+  copies collapsed into `isSupabaseConfigured`; one `useToast` hook replaces 4 copies and
+  fixes the never-cancelled 6s timer. No behavior change intended anywhere; 454/454 tests,
+  lint, both tsc configs, production build verified. (Shop untouched — quiet window holds.)
 - **2026-07-26 — view-collapse response (quiet window + traction price reset):** Daily views
   fell 53 → 1/3/5 starting Jul 23, the day the heavy edit wave landed. Diagnosis: (1)
   deactivate/reactivate cycles dropped listings out of search and Etsy Ads; (2) buyer price
