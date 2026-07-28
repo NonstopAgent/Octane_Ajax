@@ -3,12 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { GenerationStatus } from "@/lib/supabase/schema";
-import type { PdfAssetPlaceholders, ProductStructure } from "@/lib/product/domain";
-import {
-  buildProductMockupDownloadHref,
-  buildProductPdfDownloadHref,
-  getReviewPdfUiState,
-} from "@/lib/review/display";
+import { buildProductMockupDownloadHref } from "@/lib/review/display";
 import {
   pdfPreviewIcon,
   pdfPreviewSlot,
@@ -18,10 +13,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 
 type ReviewPdfPanelProps = {
   generationId: string | null;
-  pdf: PdfAssetPlaceholders;
   mockupStoragePath?: string | null;
   generationStatus: GenerationStatus;
-  structure?: ProductStructure | null;
   mockMode?: boolean;
   onGenerationChange?: (patch: {
     generationStatus: GenerationStatus;
@@ -57,12 +50,9 @@ function statusTone(
  * Product asset panel — shows the generated artwork/mockup and POD
  * fulfillment status. Artwork + Printify draft creation run automatically
  * after Forge; there is no manual generate action.
- *
- * (Legacy PDF downloads remain available for old digital-download listings.)
  */
 export function ReviewPdfPanel({
   generationId,
-  pdf,
   mockupStoragePath = null,
   generationStatus,
   mockMode = false,
@@ -119,18 +109,6 @@ export function ReviewPdfPanel({
       if (timer) clearTimeout(timer);
     };
   }, [generationId, generationStatus, mockMode, onGenerationChange, router]);
-
-  const uiState = getReviewPdfUiState({
-    generationStatus,
-    storagePath: pdf.storagePath,
-    mockMode,
-  });
-
-  // Legacy digital-download listings only — POD listings have no PDF.
-  const legacyPdfHref =
-    generationId && uiState === "download" && pdf.storagePath?.trim()
-      ? buildProductPdfDownloadHref(generationId)
-      : null;
 
   const mockupHref =
     generationId && mockupStoragePath?.trim()
@@ -199,17 +177,6 @@ export function ReviewPdfPanel({
             ) : null}
           </>
         )}
-
-        {legacyPdfHref ? (
-          <a
-            href={legacyPdfHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center justify-center rounded-md border border-[var(--accent-blue)]/50 bg-[var(--accent-blue)]/10 px-4 py-2 text-sm font-semibold text-[var(--accent-blue)] hover:bg-[var(--accent-blue)]/20"
-          >
-            Download legacy PDF
-          </a>
-        ) : null}
       </div>
     </section>
   );

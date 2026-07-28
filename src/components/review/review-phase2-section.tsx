@@ -178,15 +178,8 @@ export function ReviewPhase2Section({
           {showAssetPanel ? (
             <ReviewPdfPanel
               generationId={generation?.id ?? null}
-              pdf={
-                generation?.pdf ?? {
-                  storagePath: null,
-                  publicUrl: null,
-                }
-              }
               mockupStoragePath={generation?.mockupStoragePath ?? null}
               generationStatus={sellabilityInput.generationStatus}
-              structure={null}
               mockMode={podMockMode}
               onGenerationChange={onGenerationChange}
             />

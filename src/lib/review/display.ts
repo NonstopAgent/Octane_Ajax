@@ -1,6 +1,5 @@
 import type { ProductBrainVerdict } from "@/lib/ajax/product-brain/types";
 import type { ComplianceFlag, ProductBrainScore } from "@/lib/product/domain";
-import type { GenerationStatus } from "@/lib/supabase/schema";
 import type { SellabilityChecklist } from "@/lib/review/sellability";
 
 export function formatBrainVerdictLabel(verdict: ProductBrainVerdict): string {
@@ -215,28 +214,6 @@ export function getReviewApproveUi(
     blockedCheckLabels: [],
     complianceBlockMessage: null,
   };
-}
-
-export type ReviewPdfUiState = "download" | "placeholder" | "failed";
-
-export function getReviewPdfUiState(input: {
-  generationStatus: GenerationStatus;
-  storagePath: string | null | undefined;
-  mockMode?: boolean;
-}): ReviewPdfUiState {
-  if (input.mockMode) return "placeholder";
-  if (input.generationStatus === "failed") return "failed";
-  if (
-    input.generationStatus === "ready" &&
-    Boolean(input.storagePath?.trim())
-  ) {
-    return "download";
-  }
-  return "placeholder";
-}
-
-export function buildProductPdfDownloadHref(generationId: string): string {
-  return `/api/ajax/product-generations/${generationId}/pdf-download`;
 }
 
 export function buildProductMockupDownloadHref(generationId: string): string {

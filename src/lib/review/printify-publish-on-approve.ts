@@ -24,9 +24,28 @@ import { refreshEtsyToken } from "@/lib/ajax/etsy-auth";
 import { mapListingFromDb } from "@/lib/ajax/mappers";
 import type { ProductListing } from "@/lib/ajax/types";
 import type { ProductGeneration } from "@/lib/product/domain";
-import { insertGumroadEvent } from "@/lib/review/gumroad-on-approve";
+import type { Json } from "@/lib/supabase/database.types";
 import type { Supabase } from "@/lib/supabase/helpers";
 import { TABLES } from "@/lib/supabase/schema";
+
+
+/** Insert a factory event for the publish path (moved from the retired gumroad-on-approve). */
+async function insertPublishEvent(
+  supabase: Supabase,
+  userId: string,
+  eventType: string,
+  message: string,
+  metadata?: Json,
+) {
+  await supabase.from(TABLES.EVENTS).insert({
+    user_id: userId,
+    event_type: eventType,
+    message,
+    agent_slug: null,
+    room: null,
+    metadata: metadata ?? {},
+  });
+}
 
 export type PrintifyPublishContext = {
   supabase: Supabase;
@@ -86,7 +105,7 @@ export async function enrichEtsyListingAfterPublish(
     reason: string,
     extra: Record<string, unknown> = {},
   ): Promise<null> => {
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_gallery_skipped",
@@ -148,7 +167,7 @@ export async function enrichEtsyListingAfterPublish(
               galleryUrls = siblingUrls;
               gallerySource = `donor ${donor.productId}`;
             } else {
-              await insertGumroadEvent(
+              await insertPublishEvent(
                 supabase,
                 userId,
                 "etsy_gallery_skipped",
@@ -199,7 +218,7 @@ export async function enrichEtsyListingAfterPublish(
       product.data.externalId &&
       product.data.externalId !== etsyListingId
     ) {
-      await insertGumroadEvent(
+      await insertPublishEvent(
         supabase,
         userId,
         "listing_binding_mismatch",
@@ -290,7 +309,7 @@ export async function enrichEtsyListingAfterPublish(
         );
       }
     } catch (partnerErr) {
-      await insertGumroadEvent(
+      await insertPublishEvent(
         supabase,
         userId,
         "production_partner_attach_failed",
@@ -380,7 +399,7 @@ export async function enrichEtsyListingAfterPublish(
         added += 1;
       }
       if (added > 0) {
-        await insertGumroadEvent(
+        await insertPublishEvent(
           supabase,
           userId,
           "etsy_gallery_filled",
@@ -419,7 +438,7 @@ export async function enrichEtsyListingAfterPublish(
               galleryCount + 1,
             );
             galleryCount += 1;
-            await insertGumroadEvent(
+            await insertPublishEvent(
               supabase,
               userId,
               "etsy_gallery_filled",
@@ -442,7 +461,7 @@ export async function enrichEtsyListingAfterPublish(
     // the exact failure mode that kept "healthy" passes shipping thin
     // listings. Emit the reason so the next debugging session starts here.
     if (galleryCount < 2) {
-      await insertGumroadEvent(
+      await insertPublishEvent(
         supabase,
         userId,
         "etsy_gallery_stalled",
@@ -487,7 +506,7 @@ export async function enrichEtsyListingAfterPublish(
             listingUrl: `https://www.etsy.com/listing/${etsyListingId}`,
           });
           if (queued.etsy) {
-            await insertGumroadEvent(
+            await insertPublishEvent(
               supabase,
               userId,
               "video_render_queued",
@@ -503,7 +522,7 @@ export async function enrichEtsyListingAfterPublish(
               },
             );
           } else {
-            await insertGumroadEvent(
+            await insertPublishEvent(
               supabase,
               userId,
               "video_enqueue_skipped",
@@ -512,7 +531,7 @@ export async function enrichEtsyListingAfterPublish(
             );
           }
         } else {
-          await insertGumroadEvent(
+          await insertPublishEvent(
             supabase,
             userId,
             "video_enqueue_skipped",
@@ -527,7 +546,7 @@ export async function enrichEtsyListingAfterPublish(
 
     return { galleryCount, added };
   } catch (err) {
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_gallery_failed",
@@ -545,7 +564,7 @@ export async function publishListingViaPrintify(
 
   const printifyProductId = generation?.fulfillment?.printifyProductId?.trim();
   if (!printifyProductId) {
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_publish_failed",
@@ -556,7 +575,7 @@ export async function publishListingViaPrintify(
   }
 
   if (!isPrintifyConfigured()) {
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_skipped",
@@ -585,7 +604,7 @@ export async function publishListingViaPrintify(
       .single();
 
     if (error || !updated) {
-      await insertGumroadEvent(
+      await insertPublishEvent(
         supabase,
         userId,
         "etsy_publish_failed",
@@ -595,7 +614,7 @@ export async function publishListingViaPrintify(
       return null;
     }
 
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_published",
@@ -618,7 +637,7 @@ export async function publishListingViaPrintify(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Unknown Printify publish error.";
-    await insertGumroadEvent(
+    await insertPublishEvent(
       supabase,
       userId,
       "etsy_publish_failed",

@@ -1,12 +1,6 @@
 import Link from "next/link";
 import { getStatusLabel } from "@/lib/ajax/status";
-import {
-  formatStorePrice,
-  getStorePdfDownloadHref,
-  pdfStatusLabel,
-  pdfStatusTone,
-} from "@/lib/store/display";
-import { GumroadPublishAction } from "@/components/store/gumroad-publish-action";
+import { formatStorePrice } from "@/lib/store/display";
 import type { StoreListingDetail } from "@/lib/store/types";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -14,23 +8,12 @@ type StoreListingCardProps = {
   item: StoreListingDetail;
 };
 
-function isSimulatedDemo(item: StoreListingDetail): boolean {
-  return item.idea?.rawPayload?.simulated === true;
-}
-
 export function StoreListingCard({ item }: StoreListingCardProps) {
-  const { listing, idea, brain, generation, tags, displayStatus } = item;
+  const { listing, idea, brain, tags, displayStatus } = item;
   const title = listing.title ?? idea?.title ?? "Untitled product";
   const niche = idea?.niche ?? "—";
   const description =
     listing.description ?? idea?.description ?? "No description provided.";
-  const generationStatus = generation?.generationStatus ?? "pending";
-  const downloadHref = getStorePdfDownloadHref({
-    generationId: generation?.id ?? null,
-    generationStatus,
-    pdf: generation?.pdf ?? { storagePath: null, publicUrl: null },
-    mockMode: isSimulatedDemo(item),
-  });
 
   return (
     <article className="factory-panel flex h-full flex-col">
@@ -44,10 +27,6 @@ export function StoreListingCard({ item }: StoreListingCardProps) {
                 tone="blue"
               />
             ) : null}
-            <StatusBadge
-              label={pdfStatusLabel(generationStatus)}
-              tone={pdfStatusTone(generationStatus)}
-            />
           </div>
           <h2 className="mt-2 text-lg font-bold text-[var(--foreground)]">
             <Link
@@ -93,23 +72,7 @@ export function StoreListingCard({ item }: StoreListingCardProps) {
           >
             View details
           </Link>
-          {downloadHref ? (
-            <a
-              href={downloadHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-[var(--text-muted)] hover:text-[var(--foreground)]"
-            >
-              Download PDF
-            </a>
-          ) : null}
         </div>
-        <GumroadPublishAction
-          listingId={listing.id}
-          status={displayStatus}
-          gumroadUrl={listing.gumroadUrl}
-          gumroadProductId={listing.gumroadProductId}
-        />
       </footer>
     </article>
   );

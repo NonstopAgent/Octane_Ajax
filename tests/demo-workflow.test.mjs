@@ -16,7 +16,6 @@ describe("demo workflow wiring", () => {
     "src/app/api/ajax/review/approve/route.ts",
     "src/app/api/ajax/run-pixel/route.ts",
     "src/app/api/ajax/factory-snapshot/route.ts",
-    "src/app/api/ajax/product-generations/[id]/pdf-download/route.ts",
   ];
 
   for (const route of routes) {
@@ -175,25 +174,26 @@ describe("demo workflow wiring", () => {
     assert.doesNotMatch(simulator, /runPixel|pixel-simulator/i);
   });
 
-  it("PDF generation pipeline is fully retired", () => {
-    assert.throws(() =>
-      readFileSync(
-        join(
-          ROOT,
-          "src/app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
-        ),
-        "utf8",
-      ),
-    );
-    assert.throws(() =>
-      readFileSync(
-        join(ROOT, "src/lib/product/generation-pdf-runner.ts"),
-        "utf8",
-      ),
-    );
-    assert.throws(() =>
-      readFileSync(join(ROOT, "src/lib/product/pdf-service.ts"), "utf8"),
-    );
+  it("PDF + Gumroad publish pipeline is fully retired", () => {
+    const retired = [
+      "src/app/api/ajax/product-generations/[id]/generate-pdf/route.ts",
+      "src/app/api/ajax/product-generations/[id]/pdf-download/route.ts",
+      "src/app/api/ajax/listings/[id]/publish-gumroad/route.ts",
+      "src/lib/product/generation-pdf-runner.ts",
+      "src/lib/product/pdf-service.ts",
+      "src/lib/review/gumroad-on-approve.ts",
+      "src/lib/store/publish-gumroad-route.ts",
+      "src/lib/ajax/adapters/gumroad.ts",
+      "src/lib/ajax/adapters/lemonsqueezy.ts",
+      "src/components/store/gumroad-publish-action.tsx",
+    ];
+    for (const path of retired) {
+      assert.throws(
+        () => readFileSync(join(ROOT, path), "utf8"),
+        undefined,
+        `${path} should stay deleted`,
+      );
+    }
   });
 
   it("review asset panel is POD-first with no manual PDF generation", () => {

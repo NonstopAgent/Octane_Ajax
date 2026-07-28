@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AI_DISCLOSURE_FLAG_CODE,
-  buildProductPdfDownloadHref,
   collectComplianceMessages,
   COMPLIANCE_APPROVAL_BLOCK_MESSAGE,
   filterComplianceFlags,
   getFailedSellabilityCheckLabels,
   getReviewApproveUi,
-  getReviewPdfUiState,
   hasComplianceRisk,
   hasComplianceSellabilityBlock,
   isFulfillmentOnlySellabilityBlock,
@@ -203,30 +201,6 @@ describe("review display helpers", () => {
     );
     assert.equal(resolveApproveApiError(403, {}), "Approval blocked.");
     assert.equal(resolveApproveApiError(500, {}), "Approval failed.");
-  });
-
-  it("exposes download UI only when PDF is ready with a storage path", () => {
-    assert.equal(
-      getReviewPdfUiState({
-        generationStatus: "ready",
-        storagePath: "user-id/gen-id.pdf",
-      }),
-      "download",
-    );
-    assert.equal(
-      getReviewPdfUiState({
-        generationStatus: "ready",
-        storagePath: null,
-      }),
-      "placeholder",
-    );
-  });
-
-  it("builds server download route for generation id", () => {
-    assert.match(
-      buildProductPdfDownloadHref("abc"),
-      /product-generations\/abc\/pdf-download/,
-    );
   });
 
 });
