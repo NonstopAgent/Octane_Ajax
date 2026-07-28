@@ -6,6 +6,10 @@
  */
 
 import { listingPriceToCents } from "@/lib/ajax/adapters/types";
+import type {
+  EtsyListingInventory,
+  InventoryPricePayload,
+} from "@/lib/ajax/adapters/etsy-inventory-price";
 import { withHttpDiscipline } from "@/lib/ajax/adapters/http";
 
 // Etsy v3 resource endpoints are served from openapi.etsy.com (api.etsy.com only
@@ -703,6 +707,42 @@ export function createEtsyAdapter(options: EtsyAdapterOptions = {}) {
           favorites: Number(r.num_favorers ?? 0),
         }))
         .filter((r) => r.listingId);
+    },
+
+    /** Raw variation/price matrix for one listing (Etsy-side price fixes). */
+    async getListingInventory(
+      listingId: string,
+      accessToken: string,
+    ): Promise<EtsyListingInventory> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/listings/${listingId}/inventory`,
+        { headers: authHeaders(apiKeyHeader, accessToken) },
+      );
+      return parseEtsyJson<EtsyListingInventory>(response);
+    },
+
+    /**
+     * FULL-REPLACE write of a listing's variation matrix. Build the payload
+     * with buildInventoryPricePlan (etsy-inventory-price.ts) so read-only
+     * fields are stripped and only offering prices move.
+     */
+    async updateListingInventory(
+      listingId: string,
+      accessToken: string,
+      payload: InventoryPricePayload,
+    ): Promise<void> {
+      const response = await fetchImpl(
+        `${ETSY_API_BASE}/listings/${listingId}/inventory`,
+        {
+          method: "PUT",
+          headers: {
+            ...authHeaders(apiKeyHeader, accessToken),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      await parseEtsyJson<Record<string, unknown>>(response);
     },
 
     /**
