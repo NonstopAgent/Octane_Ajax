@@ -9,12 +9,14 @@ function offering(cents: number, quantity = 999): {
   offering_id: number;
   quantity: number;
   is_enabled: boolean;
+  readiness_state_id: number;
   price: { amount: number; divisor: number; currency_code: string };
 } {
   return {
     offering_id: Math.floor(cents * 7 + quantity),
     quantity,
     is_enabled: true,
+    readiness_state_id: 7777,
     price: { amount: cents, divisor: 100, currency_code: "USD" },
   };
 }
@@ -77,9 +79,13 @@ describe("buildInventoryPricePlan", () => {
     for (const product of plan.payload.products) {
       assert.equal(product.offerings[0]?.price, 39.99);
     }
-    // quantity + enablement pass through untouched
+    // quantity + enablement + readiness profile pass through untouched
     assert.equal(plan.payload.products[1]?.offerings[0]?.quantity, 500);
     assert.equal(plan.payload.products[0]?.offerings[0]?.is_enabled, true);
+    assert.equal(
+      plan.payload.products[0]?.offerings[0]?.readiness_state_id,
+      7777,
+    );
     // existing price_on_property preserved
     assert.deepEqual(plan.payload.price_on_property, [100]);
   });

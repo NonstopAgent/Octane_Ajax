@@ -35,8 +35,9 @@ try {
     foreach ($c in @($r.changes)) {
       Write-Output ("    " + $c.variation + " : " + ($c.from -join ',') + " -> " + $c.to)
     }
-    if ($r.reason) { Write-Output ("    reason: " + $r.reason) }
-    if ($r.error) { Write-Output ("    error: " + $r.error) }
+    if ($r.status -eq 'failed' -or $r.status -eq 'skipped') {
+      Write-Output ($r | ConvertTo-Json -Depth 4)
+    }
   }
 } catch {
   $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }

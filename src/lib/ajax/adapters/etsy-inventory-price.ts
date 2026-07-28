@@ -19,6 +19,8 @@ export type EtsyInventoryOffering = {
   quantity?: number;
   is_enabled?: boolean;
   is_deleted?: boolean;
+  /** Etsy processing/readiness profile — required on write since 2024. */
+  readiness_state_id?: number;
   price?: { amount?: number; divisor?: number; currency_code?: string };
 };
 
@@ -63,7 +65,12 @@ export type InventoryPricePayload = {
       scale_id?: number;
       values: string[];
     }[];
-    offerings: { price: number; quantity: number; is_enabled: boolean }[];
+    offerings: {
+      price: number;
+      quantity: number;
+      is_enabled: boolean;
+      readiness_state_id?: number;
+    }[];
   }[];
   price_on_property: number[];
   quantity_on_property: number[];
@@ -188,6 +195,10 @@ export function buildInventoryPricePlan(
           price: Number((targetCents / 100).toFixed(2)),
           quantity: typeof o.quantity === "number" ? o.quantity : 999,
           is_enabled: o.is_enabled !== false,
+          // "All offerings need readiness state" (HTTP 400) without this.
+          ...(typeof o.readiness_state_id === "number"
+            ? { readiness_state_id: o.readiness_state_id }
+            : {}),
         })),
       };
     });
