@@ -11,7 +11,7 @@
  * transform is deliberately conservative: it only changes `price`, passes
  * quantity/is_enabled/sku/property_values through, strips the read-only
  * fields Etsy rejects on write (product_id, offering_id, is_deleted,
- * property_name, scale_name), and preserves the *_on_property arrays.
+ * scale_name) while keeping property_name, which the PUT validator requires, and preserves the *_on_property arrays.
  */
 
 export type EtsyInventoryOffering = {
@@ -58,6 +58,7 @@ export type InventoryPricePayload = {
     sku?: string;
     property_values: {
       property_id: number;
+      property_name?: string;
       value_ids: number[];
       scale_id?: number;
       values: string[];
@@ -172,6 +173,11 @@ export function buildInventoryPricePlan(
           .filter((pv) => typeof pv.property_id === "number")
           .map((pv) => ({
             property_id: pv.property_id as number,
+            // Etsy's PUT validator rejects NULL property_name ("Expected
+            // string value for 'property_name'"), so pass it through.
+            ...(typeof pv.property_name === "string" && pv.property_name
+              ? { property_name: pv.property_name }
+              : {}),
             value_ids: pv.value_ids ?? [],
             ...(typeof pv.scale_id === "number"
               ? { scale_id: pv.scale_id }

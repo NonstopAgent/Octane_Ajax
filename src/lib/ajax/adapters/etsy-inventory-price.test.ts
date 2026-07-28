@@ -68,7 +68,12 @@ describe("buildInventoryPricePlan", () => {
     assert.equal(plan.unchanged, false);
     assert.equal(plan.offeringCount, 2);
     const json = JSON.stringify(plan.payload);
-    assert.doesNotMatch(json, /product_id|offering_id|is_deleted|property_name|scale_name|amount|divisor/);
+    assert.doesNotMatch(json, /product_id|offering_id|is_deleted|scale_name|amount|divisor/);
+    // Etsy's PUT validator requires property_name — it must survive.
+    assert.equal(
+      plan.payload.products[0]?.property_values[0]?.property_name,
+      "Size",
+    );
     for (const product of plan.payload.products) {
       assert.equal(product.offerings[0]?.price, 39.99);
     }
