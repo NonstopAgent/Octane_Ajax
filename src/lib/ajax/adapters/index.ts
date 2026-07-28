@@ -7,7 +7,5 @@
 export * from "@/lib/ajax/adapters/types";
 export * from "@/lib/ajax/adapters/etsy";
 export * from "@/lib/ajax/adapters/printify";
-export * from "@/lib/ajax/adapters/tiktok";
 export * from "@/lib/ajax/adapters/image-generator";
-export * from "@/lib/ajax/adapters/gumroad";
 export * from "@/lib/ajax/adapters/lemonsqueezy";

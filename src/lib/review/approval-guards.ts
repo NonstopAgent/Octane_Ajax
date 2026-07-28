@@ -49,19 +49,6 @@ export function assertFulfillmentReadyForApproval(input: {
 /** Alias for POD pipeline approval gate. */
 export const assertPodReadyForApproval = assertFulfillmentReadyForApproval;
 
-/** @deprecated Use assertFulfillmentReadyForApproval for POD pipeline. */
-export function assertPdfReadyForApproval(input: {
-  isDemo: boolean;
-  generationStatus: GenerationStatus | null | undefined;
-  pdfStoragePath: string | null | undefined;
-}): void {
-  assertFulfillmentReadyForApproval({
-    isDemo: input.isDemo,
-    generationStatus: input.generationStatus,
-    printifyProductId: input.pdfStoragePath,
-  });
-}
-
 export function assertSellabilityForApproval(
   sellabilityInput: SellabilityInput,
   isDemo: boolean,

@@ -115,9 +115,6 @@ export function isFulfillmentOnlySellabilityBlock(
   return failed.length === 1 && failed[0]?.id === "fulfillment_ready";
 }
 
-/** @deprecated Use isFulfillmentOnlySellabilityBlock */
-export const isPdfOnlySellabilityBlock = isFulfillmentOnlySellabilityBlock;
-
 export function hasComplianceSellabilityBlock(
   checklist: SellabilityChecklist,
 ): boolean {

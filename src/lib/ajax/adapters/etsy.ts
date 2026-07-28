@@ -5,7 +5,7 @@
  * Never import from Client Components.
  */
 
-import { listingPriceToCents } from "@/lib/ajax/adapters/gumroad";
+import { listingPriceToCents } from "@/lib/ajax/adapters/types";
 import { withHttpDiscipline } from "@/lib/ajax/adapters/http";
 
 // Etsy v3 resource endpoints are served from openapi.etsy.com (api.etsy.com only

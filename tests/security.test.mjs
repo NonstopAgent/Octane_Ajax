@@ -209,15 +209,12 @@ describe("migrations RLS", () => {
   });
 });
 
-describe("supabase browser barrel", () => {
-  it("does not export service role client from client entrypoints", () => {
+describe("supabase browser client", () => {
+  it("does not export service role client from the client entrypoint", () => {
     const client = readFileSync(join(ROOT, "lib/supabase/client.ts"), "utf8");
-    const index = readFileSync(join(ROOT, "lib/supabase/index.ts"), "utf8");
 
     assert.doesNotMatch(client, /createServiceClient/);
     assert.doesNotMatch(client, /SERVICE_ROLE/);
-    assert.doesNotMatch(index, /createServiceClient/);
-    assert.match(index, /createBrowserClient|createClient/);
   });
 });
 

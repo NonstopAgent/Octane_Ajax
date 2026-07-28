@@ -245,25 +245,24 @@ describe("demo workflow wiring", () => {
     assert.match(simulator, /No Forge-ready ideas found/);
   });
 
-  it("factory dashboard runs staged nova then forge", () => {
-    const dashboard = readFileSync(
-      join(ROOT, "src/components/factory/factory-dashboard.tsx"),
+  it("factory shell runs staged nova then forge (v1 dashboard deleted)", () => {
+    const shell = readFileSync(
+      join(ROOT, "src/components/factory/factory-sweatshop.tsx"),
       "utf8",
     );
-    const controls = readFileSync(
-      join(ROOT, "src/components/factory/control-panel.tsx"),
-      "utf8",
+    assert.match(shell, /\/api\/ajax\/run-nova/);
+    assert.match(shell, /\/api\/ajax\/run-forge/);
+    assert.match(shell, /cyclePhase/);
+    assert.doesNotMatch(shell, /\/api\/ajax\/run-cycle/);
+    assert.match(shell, /novaData\.error|forgeData\.error/);
+    assert.doesNotMatch(shell, /queuePdfGeneration/);
+    // The retired v1 dashboard must stay deleted.
+    assert.throws(() =>
+      readFileSync(
+        join(ROOT, "src/components/factory/factory-dashboard.tsx"),
+        "utf8",
+      ),
     );
-    assert.match(dashboard, /\/api\/ajax\/run-nova/);
-    assert.match(dashboard, /\/api\/ajax\/run-forge/);
-    assert.match(dashboard, /cyclePhase/);
-    assert.match(controls, /Running Nova|cyclePhase === "nova"/);
-    assert.match(controls, /Running Forge|cyclePhase === "forge"/);
-    assert.match(dashboard, /Review Gate/);
-    assert.doesNotMatch(dashboard, /\/api\/ajax\/run-cycle/);
-    assert.match(dashboard, /data\.error|novaData\.error|forgeData\.error/);
-    assert.match(dashboard, /Request failed or timed out/);
-    assert.doesNotMatch(dashboard, /queuePdfGeneration/);
   });
 
   it("pixel simulator schedules content", () => {

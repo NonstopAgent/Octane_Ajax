@@ -3,7 +3,7 @@ import { fetchSweatshopSnapshot } from "@/lib/factory/queries";
 import { fetchBusinesses } from "@/lib/businesses/queries";
 import { getActiveBusiness } from "@/lib/businesses/active";
 import { createClient } from "@/lib/supabase/server";
-import type { VisMetrics } from "@/components/factory/factory-vis-map";
+import type { VisMetrics } from "@/components/factory/vis-types";
 
 function configReady() {
   return Boolean(

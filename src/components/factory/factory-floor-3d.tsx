@@ -3,8 +3,7 @@
 /**
  * FactoryFloor3D — cinematic 3D (WebGL / three.js) command center.
  *
- * Drop-in replacement for <FactoryVisMap>: identical prop interface, so it wires
- * straight into the existing live Supabase data in FactorySweatshop. No backend,
+ * Wires straight into the existing live Supabase data in FactorySweatshop. No backend,
  * realtime, or review-gate logic is touched — this is purely a visual layer.
  *
  * The 3D scene is built once and reads live state through a ref so realtime
@@ -16,7 +15,7 @@ import Link from "next/link";
 import * as THREE from "three";
 import type { AgentSlug } from "@/lib/ajax/types";
 import type { AgentStatus } from "@/lib/ajax/status";
-import type { VisAgent, VisMetrics } from "@/components/factory/factory-vis-map";
+import type { VisAgent, VisMetrics } from "@/components/factory/vis-types";
 
 type Props = {
   agents: VisAgent[];
@@ -775,7 +774,7 @@ const ROOM_META: Record<RoomId, { title: string; sub: string; hex: string; agent
 
 const ASSIGN: Record<RoomId, string> = {
   research: "Scans trends, demand signals, and niche gaps, then queues structured product ideas.",
-  forge: "Turns each idea into listing copy, a mockup, and a print-ready PDF — quality over volume.",
+  forge: "Turns each idea into listing copy, artwork, and a Printify draft product — quality over volume.",
   review: "Mandatory human checkpoint. Logan approves or rejects every draft before anything ships.",
   pixel: "Creates and schedules short-form promo content once a listing is approved.",
   store: "Approved drafts staged as listings — draft-only until you publish.",

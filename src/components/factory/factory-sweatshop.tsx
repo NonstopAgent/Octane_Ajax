@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EventFeed } from "@/components/factory/event-feed";
 import { RoomStation } from "@/components/factory/room-station";
 import { TikTokQueuePanel } from "@/components/factory/tiktok-queue-panel";
-import { type VisAgent, type VisMetrics } from "@/components/factory/factory-vis-map";
-import { FactoryFloor3D } from "@/components/factory/factory-floor-3d";
+import { type VisAgent, type VisMetrics } from "@/components/factory/vis-types";
+import dynamic from "next/dynamic";
 import type { AjaxAgent, FactoryEvent } from "@/lib/ajax/types";
 import type { TikTokQueueRow } from "@/lib/ajax/tiktok/types";
 import type { OrderQueueRow } from "@/lib/ajax/pod/order-types";
@@ -21,6 +21,24 @@ import { useAjaxRealtime } from "@/hooks/useAjaxRealtime";
 import { createClient } from "@/lib/supabase/client";
 import { mapAgentFromDb, mapEventFromDb } from "@/lib/ajax/mappers";
 import { TABLES } from "@/lib/supabase/schema";
+
+// M15: three.js is ~66% of this route's client JS. Load the 3D floor lazily
+// and client-only (it renders nothing server-side), so the control panels and
+// event feed hydrate without waiting on the WebGL bundle.
+const FactoryFloor3D = dynamic(
+  () =>
+    import("@/components/factory/factory-floor-3d").then(
+      (m) => m.FactoryFloor3D,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="ff3d-wrap" aria-busy="true">
+        <div className="ff3d-canvas" />
+      </div>
+    ),
+  },
+);
 
 type FactorySweatshopProps = {
   isAuthenticated: boolean;

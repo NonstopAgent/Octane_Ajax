@@ -58,3 +58,11 @@ export function liveResult<T>(message: string, data: T): AdapterResult<T> {
 export type AdapterConfig = {
   mode?: AdapterMode;
 };
+
+/** Map listing.price (USD decimal) to integer cents; defaults to $7.99. */
+export function listingPriceToCents(price: number | null | undefined): number {
+  if (price == null || !Number.isFinite(price) || price <= 0) {
+    return 799;
+  }
+  return Math.max(100, Math.round(price * 100));
+}

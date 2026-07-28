@@ -5,7 +5,7 @@
  * Never import from Client Components.
  */
 
-import { listingPriceToCents } from "@/lib/ajax/adapters/gumroad";
+import { listingPriceToCents } from "@/lib/ajax/adapters/types";
 
 const LEMONSQUEEZY_API_BASE = "https://api.lemonsqueezy.com/v1";
 
